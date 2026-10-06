@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+venv/
+ENV/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Sensitive Session & Credentials
+data/session_cookie.txt
+
+# Temporary Match Artifacts & Screenshots
+scratch/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

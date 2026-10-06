@@ -1,0 +1,1352 @@
+{
+  "source": "GeoGuessr Official Client Bundles & Learning Hub",
+  "total_countries": 114,
+  "countries": {
+    "SE": {
+      "code": "SE",
+      "capital": "Stockholm",
+      "currency": "Swedish Krona (SEK)",
+      "driving_side": "right",
+      "domain": ".se",
+      "calling_code": "+46",
+      "languages": [
+        "swedish"
+      ]
+    },
+    "JP": {
+      "code": "JP",
+      "capital": "Tokyo",
+      "currency": "Japanese Yen (JPY)",
+      "driving_side": "left",
+      "domain": ".jp",
+      "calling_code": "+81",
+      "languages": [
+        "japanese"
+      ]
+    },
+    "US": {
+      "code": "US",
+      "capital": "Washington, D.C.",
+      "currency": "US Dollar (USD)",
+      "driving_side": "right",
+      "domain": ".us",
+      "calling_code": "+1",
+      "languages": [
+        "english"
+      ]
+    },
+    "DE": {
+      "code": "DE",
+      "capital": "Berlin",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".de",
+      "calling_code": "+49",
+      "languages": [
+        "german"
+      ]
+    },
+    "FR": {
+      "code": "FR",
+      "capital": "Paris",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".fr",
+      "calling_code": "+33",
+      "languages": [
+        "french"
+      ]
+    },
+    "IT": {
+      "code": "IT",
+      "capital": "Rome",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".it",
+      "calling_code": "+39",
+      "languages": [
+        "italian"
+      ]
+    },
+    "ES": {
+      "code": "ES",
+      "capital": "Madrid",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".es",
+      "calling_code": "+34",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "GB": {
+      "code": "GB",
+      "capital": "London",
+      "currency": "Pound Sterling (GBP)",
+      "driving_side": "left",
+      "domain": ".uk",
+      "calling_code": "+44",
+      "languages": [
+        "english"
+      ]
+    },
+    "BR": {
+      "code": "BR",
+      "capital": "Bras\\xedlia",
+      "currency": "Brazilian Real (BRL)",
+      "driving_side": "right",
+      "domain": ".br",
+      "calling_code": "+55",
+      "languages": [
+        "portuguese"
+      ]
+    },
+    "IN": {
+      "code": "IN",
+      "capital": "New Delhi",
+      "currency": "Indian Rupee (INR)",
+      "driving_side": "left",
+      "domain": ".in",
+      "calling_code": "+91",
+      "languages": [
+        "hindi",
+        "english"
+      ]
+    },
+    "AU": {
+      "code": "AU",
+      "capital": "Canberra",
+      "currency": "Australian Dollar (AUD)",
+      "driving_side": "left",
+      "domain": ".au",
+      "calling_code": "+61",
+      "languages": [
+        "english"
+      ]
+    },
+    "MX": {
+      "code": "MX",
+      "capital": "Mexico City",
+      "currency": "Mexican Peso (MXN)",
+      "driving_side": "right",
+      "domain": ".mx",
+      "calling_code": "+52",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "CA": {
+      "code": "CA",
+      "capital": "Ottawa",
+      "currency": "Canadian Dollar (CAD)",
+      "driving_side": "right",
+      "domain": ".ca",
+      "calling_code": "+1",
+      "languages": [
+        "english",
+        "french"
+      ]
+    },
+    "PL": {
+      "code": "PL",
+      "capital": "Warsaw",
+      "currency": "Polish Zloty (PLN)",
+      "driving_side": "right",
+      "domain": ".pl",
+      "calling_code": "+48",
+      "languages": [
+        "polish"
+      ]
+    },
+    "TR": {
+      "code": "TR",
+      "capital": "Ankara",
+      "currency": "Turkish Lira (TRY)",
+      "driving_side": "right",
+      "domain": ".tr",
+      "calling_code": "+90",
+      "languages": [
+        "turkish"
+      ]
+    },
+    "RU": {
+      "code": "RU",
+      "capital": "Moscow",
+      "currency": "Russian Ruble (RUB)",
+      "driving_side": "right",
+      "domain": ".ru",
+      "calling_code": "+7",
+      "languages": [
+        "russian"
+      ]
+    },
+    "NL": {
+      "code": "NL",
+      "capital": "Amsterdam",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".nl",
+      "calling_code": "+31",
+      "languages": [
+        "dutch"
+      ]
+    },
+    "ID": {
+      "code": "ID",
+      "capital": "Jakarta",
+      "currency": "Indonesian Rupiah (IDR)",
+      "driving_side": "left",
+      "domain": ".id",
+      "calling_code": "+62",
+      "languages": [
+        "indonesian"
+      ]
+    },
+    "CH": {
+      "code": "CH",
+      "capital": "Bern",
+      "currency": "Swiss Franc (CHF)",
+      "driving_side": "right",
+      "domain": ".ch",
+      "calling_code": "+41",
+      "languages": [
+        "german",
+        "french",
+        "italian",
+        "romansh"
+      ]
+    },
+    "NO": {
+      "code": "NO",
+      "capital": "Oslo",
+      "currency": "Norwegian Krone (NOK)",
+      "driving_side": "right",
+      "domain": ".no",
+      "calling_code": "+47",
+      "languages": [
+        "norwegian"
+      ]
+    },
+    "UA": {
+      "code": "UA",
+      "capital": "Kyiv",
+      "currency": "Ukrainian Hryvnia (UAH)",
+      "driving_side": "right",
+      "domain": ".ua",
+      "calling_code": "+380",
+      "languages": [
+        "ukrainian"
+      ]
+    },
+    "AR": {
+      "code": "AR",
+      "capital": "Buenos Aires",
+      "currency": "Argentine Peso (ARS)",
+      "driving_side": "right",
+      "domain": ".ar",
+      "calling_code": "+54",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "FI": {
+      "code": "FI",
+      "capital": "Helsinki",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".fi",
+      "calling_code": "+358",
+      "languages": [
+        "finnish",
+        "swedish"
+      ]
+    },
+    "NZ": {
+      "code": "NZ",
+      "capital": "Wellington",
+      "currency": "New Zealand Dollar (NZD)",
+      "driving_side": "left",
+      "domain": ".nz",
+      "calling_code": "+64",
+      "languages": [
+        "english",
+        "maori"
+      ]
+    },
+    "PT": {
+      "code": "PT",
+      "capital": "Lisbon",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".pt",
+      "calling_code": "+351",
+      "languages": [
+        "portuguese"
+      ]
+    },
+    "DK": {
+      "code": "DK",
+      "capital": "Copenhagen",
+      "currency": "Danish Krone (DKK)",
+      "driving_side": "right",
+      "domain": ".dk",
+      "calling_code": "+45",
+      "languages": [
+        "danish"
+      ]
+    },
+    "IE": {
+      "code": "IE",
+      "capital": "Dublin",
+      "currency": "Euro (EUR)",
+      "driving_side": "left",
+      "domain": ".ie",
+      "calling_code": "+353",
+      "languages": [
+        "irish",
+        "english"
+      ]
+    },
+    "GR": {
+      "code": "GR",
+      "capital": "Athens",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".gr",
+      "calling_code": "+30",
+      "languages": [
+        "greek"
+      ]
+    },
+    "RO": {
+      "code": "RO",
+      "capital": "Bucharest",
+      "currency": "Romanian Leu (RON)",
+      "driving_side": "right",
+      "domain": ".ro",
+      "calling_code": "+40",
+      "languages": [
+        "romanian"
+      ]
+    },
+    "RS": {
+      "code": "RS",
+      "capital": "Belgrade",
+      "currency": "Serbian Dinar (RSD)",
+      "driving_side": "right",
+      "domain": ".rs",
+      "calling_code": "+381",
+      "languages": [
+        "serbian"
+      ]
+    },
+    "BE": {
+      "code": "BE",
+      "capital": "Brussels",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".be",
+      "calling_code": "+32",
+      "languages": [
+        "dutch",
+        "french",
+        "german"
+      ]
+    },
+    "IL": {
+      "code": "IL",
+      "capital": "Jerusalem",
+      "currency": "Israeli New Shekel (ILS)",
+      "driving_side": "right",
+      "domain": ".il",
+      "calling_code": "+972",
+      "languages": [
+        "hebrew",
+        "arabic"
+      ]
+    },
+    "HR": {
+      "code": "HR",
+      "capital": "Zagreb",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".hr",
+      "calling_code": "+385",
+      "languages": [
+        "croatian"
+      ]
+    },
+    "TH": {
+      "code": "TH",
+      "capital": "Bangkok",
+      "currency": "Thai Baht (THB)",
+      "driving_side": "left",
+      "domain": ".th",
+      "calling_code": "+66",
+      "languages": [
+        "thai"
+      ]
+    },
+    "HU": {
+      "code": "HU",
+      "capital": "Budapest",
+      "currency": "Hungarian Forint (HUF)",
+      "driving_side": "right",
+      "domain": ".hu",
+      "calling_code": "+36",
+      "languages": [
+        "hungarian"
+      ]
+    },
+    "CL": {
+      "code": "CL",
+      "capital": "Santiago",
+      "currency": "Chilean Peso (CLP)",
+      "driving_side": "right",
+      "domain": ".cl",
+      "calling_code": "+56",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "AT": {
+      "code": "AT",
+      "capital": "Vienna",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".at",
+      "calling_code": "+43",
+      "languages": [
+        "german"
+      ]
+    },
+    "BG": {
+      "code": "BG",
+      "capital": "Sofia",
+      "currency": "Bulgarian Lev (BGN)",
+      "driving_side": "right",
+      "domain": ".bg",
+      "calling_code": "+359",
+      "languages": [
+        "bulgarian"
+      ]
+    },
+    "CZ": {
+      "code": "CZ",
+      "capital": "Prague",
+      "currency": "Czech Koruna (CZK)",
+      "driving_side": "right",
+      "domain": ".cz",
+      "calling_code": "+420",
+      "languages": [
+        "czech"
+      ]
+    },
+    "TW": {
+      "code": "TW",
+      "capital": "Taipei",
+      "currency": "New Taiwan Dollar (TWD)",
+      "driving_side": "right",
+      "domain": ".tw",
+      "calling_code": "+886",
+      "languages": [
+        "mandarin-chinese"
+      ]
+    },
+    "CO": {
+      "code": "CO",
+      "capital": "Bogot\\xe1",
+      "currency": "Colombian Peso (COP)",
+      "driving_side": "right",
+      "domain": ".co",
+      "calling_code": "+57",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "KR": {
+      "code": "KR",
+      "capital": "Seoul",
+      "currency": "South Korean Won (KRW)",
+      "driving_side": "right",
+      "domain": ".kr",
+      "calling_code": "+82",
+      "languages": [
+        "korean"
+      ]
+    },
+    "SG": {
+      "code": "SG",
+      "capital": "Singapore",
+      "currency": "Singapore Dollar (SGD)",
+      "driving_side": "left",
+      "domain": ".sg",
+      "calling_code": "+65",
+      "languages": [
+        "english",
+        "malay",
+        "mandarin",
+        "tamil"
+      ]
+    },
+    "MY": {
+      "code": "MY",
+      "capital": "Kuala Lumpur",
+      "currency": "Malaysian Ringgit (MYR)",
+      "driving_side": "left",
+      "domain": ".my",
+      "calling_code": "+60",
+      "languages": [
+        "malay"
+      ]
+    },
+    "PH": {
+      "code": "PH",
+      "capital": "Manila",
+      "currency": "Philippine Peso (PHP)",
+      "driving_side": "right",
+      "domain": ".ph",
+      "calling_code": "+63",
+      "languages": [
+        "filipino",
+        "english"
+      ]
+    },
+    "SK": {
+      "code": "SK",
+      "capital": "Bratislava",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".sk",
+      "calling_code": "+421",
+      "languages": [
+        "slovak"
+      ]
+    },
+    "QA": {
+      "code": "QA",
+      "capital": "Doha",
+      "currency": "Qatari Riyal (QAR)",
+      "driving_side": "right",
+      "domain": ".qa",
+      "calling_code": "+974",
+      "languages": [
+        "arabic"
+      ]
+    },
+    "ZA": {
+      "code": "ZA",
+      "capital": "Pretoria",
+      "currency": "South African Rand (ZAR)",
+      "driving_side": "left",
+      "domain": ".za",
+      "calling_code": "+27",
+      "languages": [
+        "afrikaans",
+        "english",
+        "zulu"
+      ]
+    },
+    "LT": {
+      "code": "LT",
+      "capital": "Vilnius",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".lt",
+      "calling_code": "+370",
+      "languages": [
+        "lithuanian"
+      ]
+    },
+    "HK": {
+      "code": "HK",
+      "capital": "Hong Kong",
+      "currency": "Hong Kong Dollar (HKD)",
+      "driving_side": "left",
+      "domain": ".hk",
+      "calling_code": "+852",
+      "languages": [
+        "cantonese",
+        "english"
+      ]
+    },
+    "IS": {
+      "code": "IS",
+      "capital": "Reykjavik",
+      "currency": "Icelandic Kr\\xf3na (ISK)",
+      "driving_side": "right",
+      "domain": ".is",
+      "calling_code": "+354",
+      "languages": [
+        "icelandic"
+      ]
+    },
+    "SI": {
+      "code": "SI",
+      "capital": "Ljubljana",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".si",
+      "calling_code": "+386",
+      "languages": [
+        "slovenian"
+      ]
+    },
+    "EE": {
+      "code": "EE",
+      "capital": "Tallinn",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".ee",
+      "calling_code": "+372",
+      "languages": [
+        "estonian"
+      ]
+    },
+    "LV": {
+      "code": "LV",
+      "capital": "Riga",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".lv",
+      "calling_code": "+371",
+      "languages": [
+        "latvian"
+      ]
+    },
+    "PE": {
+      "code": "PE",
+      "capital": "Lima",
+      "currency": "Peruvian Sol (PEN)",
+      "driving_side": "right",
+      "domain": ".pe",
+      "calling_code": "+51",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "MG": {
+      "code": "MG",
+      "capital": "Antananarivo",
+      "currency": "Malagasy Ariary (MGA)",
+      "driving_side": "right",
+      "domain": ".mg",
+      "calling_code": "+261",
+      "languages": [
+        "malagasy",
+        "french"
+      ]
+    },
+    "UY": {
+      "code": "UY",
+      "capital": "Montevideo",
+      "currency": "Uruguayan Peso (UYU)",
+      "driving_side": "right",
+      "domain": ".uy",
+      "calling_code": "+598",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "EC": {
+      "code": "EC",
+      "capital": "Quito",
+      "currency": "US Dollar (USD)",
+      "driving_side": "right",
+      "domain": ".ec",
+      "calling_code": "+593",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "AL": {
+      "code": "AL",
+      "capital": "Tirana",
+      "currency": "Albanian Lek (ALL)",
+      "driving_side": "right",
+      "domain": ".al",
+      "calling_code": "+355",
+      "languages": [
+        "albanian"
+      ]
+    },
+    "GL": {
+      "code": "GL",
+      "capital": "Nuuk",
+      "currency": "Danish Krone (DKK)",
+      "driving_side": "right",
+      "domain": ".gl",
+      "calling_code": "+299",
+      "languages": [
+        "greenlandic",
+        "danish"
+      ]
+    },
+    "LU": {
+      "code": "LU",
+      "capital": "Luxembourg City",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".lu",
+      "calling_code": "+352",
+      "languages": [
+        "luxembourgish",
+        "french",
+        "german"
+      ]
+    },
+    "PR": {
+      "code": "PR",
+      "capital": "San Juan",
+      "currency": "US Dollar (USD)",
+      "driving_side": "right",
+      "domain": ".pr",
+      "calling_code": "+1",
+      "languages": [
+        "spanish",
+        "english"
+      ]
+    },
+    "MN": {
+      "code": "MN",
+      "capital": "Ulaanbaatar",
+      "currency": "Mongolian T\\xf6gr\\xf6g (MNT)",
+      "driving_side": "right",
+      "domain": ".mn",
+      "calling_code": "+976",
+      "languages": [
+        "mongolian"
+      ]
+    },
+    "MK": {
+      "code": "MK",
+      "capital": "Skopje",
+      "currency": "Macedonian Denar (MKD)",
+      "driving_side": "right",
+      "domain": ".mk",
+      "calling_code": "+389",
+      "languages": [
+        "macedonian"
+      ]
+    },
+    "MC": {
+      "code": "MC",
+      "capital": "Monaco",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".mc",
+      "calling_code": "+377",
+      "languages": [
+        "french"
+      ]
+    },
+    "TN": {
+      "code": "TN",
+      "capital": "Tunis",
+      "currency": "Tunisian Dinar (TND)",
+      "driving_side": "right",
+      "domain": ".tn",
+      "calling_code": "+216",
+      "languages": [
+        "arabic",
+        "french"
+      ]
+    },
+    "ME": {
+      "code": "ME",
+      "capital": "Podgorica",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".me",
+      "calling_code": "+382",
+      "languages": [
+        "montenegrin"
+      ]
+    },
+    "AE": {
+      "code": "AE",
+      "capital": "Abu Dhabi",
+      "currency": "UAE Dirham (AED)",
+      "driving_side": "right",
+      "domain": ".ae",
+      "calling_code": "+971",
+      "languages": [
+        "arabic"
+      ]
+    },
+    "GT": {
+      "code": "GT",
+      "capital": "Guatemala City",
+      "currency": "Guatemalan Quetzal (GTQ)",
+      "driving_side": "right",
+      "domain": ".gt",
+      "calling_code": "+502",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "MT": {
+      "code": "MT",
+      "capital": "Valletta",
+      "currency": "Euro (EUR)",
+      "driving_side": "left",
+      "domain": ".mt",
+      "calling_code": "+356",
+      "languages": [
+        "maltese",
+        "english"
+      ]
+    },
+    "FO": {
+      "code": "FO",
+      "capital": "T\\xf3rshavn",
+      "currency": "Danish Krone (DKK)",
+      "driving_side": "right",
+      "domain": ".fo",
+      "calling_code": "+298",
+      "languages": [
+        "faroese",
+        "danish"
+      ]
+    },
+    "BD": {
+      "code": "BD",
+      "capital": "Dhaka",
+      "currency": "Bangladeshi Taka (BDT)",
+      "driving_side": "left",
+      "domain": ".bd",
+      "calling_code": "+880",
+      "languages": [
+        "bengali"
+      ]
+    },
+    "NG": {
+      "code": "NG",
+      "capital": "Abuja",
+      "currency": "Nigerian Naira (NGN)",
+      "driving_side": "right",
+      "domain": ".ng",
+      "calling_code": "+234",
+      "languages": [
+        "english"
+      ]
+    },
+    "BO": {
+      "code": "BO",
+      "capital": "Sucre",
+      "currency": "Bolivian Boliviano (BOB)",
+      "driving_side": "right",
+      "domain": ".bo",
+      "calling_code": "+591",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "DO": {
+      "code": "DO",
+      "capital": "Santo Domingo",
+      "currency": "Dominican Peso (DOP)",
+      "driving_side": "right",
+      "domain": ".do",
+      "calling_code": "+1",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "BW": {
+      "code": "BW",
+      "capital": "Gaborone",
+      "currency": "Botswana Pula (BWP)",
+      "driving_side": "left",
+      "domain": ".bw",
+      "calling_code": "+267",
+      "languages": [
+        "english",
+        "setswana"
+      ]
+    },
+    "KZ": {
+      "code": "KZ",
+      "capital": "Astana",
+      "currency": "Kazakhstani Tenge (KZT)",
+      "driving_side": "right",
+      "domain": ".kz",
+      "calling_code": "+7",
+      "languages": [
+        "kazakh",
+        "russian"
+      ]
+    },
+    "KG": {
+      "code": "KG",
+      "capital": "Bishkek",
+      "currency": "Kyrgyzstani Som (KGS)",
+      "driving_side": "right",
+      "domain": ".kg",
+      "calling_code": "+996",
+      "languages": [
+        "kyrgyz",
+        "russian"
+      ]
+    },
+    "IM": {
+      "code": "IM",
+      "capital": "Douglas",
+      "currency": "Pound Sterling (GBP)",
+      "driving_side": "left",
+      "domain": ".im",
+      "calling_code": "+44",
+      "languages": [
+        "english",
+        "manx"
+      ]
+    },
+    "LK": {
+      "code": "LK",
+      "capital": "Sri Jayawardenepura Kotte",
+      "currency": "Sri Lankan Rupee (LKR)",
+      "driving_side": "left",
+      "domain": ".lk",
+      "calling_code": "+94",
+      "languages": [
+        "sinhala",
+        "tamil"
+      ]
+    },
+    "VN": {
+      "code": "VN",
+      "capital": "Hanoi",
+      "currency": "Vietnamese Đồng (VND)",
+      "driving_side": "right",
+      "domain": ".vn",
+      "calling_code": "+84",
+      "languages": [
+        "vietnamese"
+      ]
+    },
+    "GU": {
+      "code": "GU",
+      "capital": "Hag\\xe5t\\xf1a",
+      "currency": "US Dollar (USD)",
+      "driving_side": "right",
+      "domain": ".gu",
+      "calling_code": "+1",
+      "languages": [
+        "english",
+        "chamorro"
+      ]
+    },
+    "JO": {
+      "code": "JO",
+      "capital": "Amman",
+      "currency": "Jordanian Dinar (JOD)",
+      "driving_side": "right",
+      "domain": ".jo",
+      "calling_code": "+962",
+      "languages": [
+        "arabic"
+      ]
+    },
+    "KE": {
+      "code": "KE",
+      "capital": "Nairobi",
+      "currency": "Kenyan Shilling (KES)",
+      "driving_side": "left",
+      "domain": ".ke",
+      "calling_code": "+254",
+      "languages": [
+        "swahili",
+        "english"
+      ]
+    },
+    "AD": {
+      "code": "AD",
+      "capital": "Andorra la Vella",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".ad",
+      "calling_code": "+376",
+      "languages": [
+        "catalan"
+      ]
+    },
+    "KH": {
+      "code": "KH",
+      "capital": "Phnom Penh",
+      "currency": "Cambodian Riel (KHR)",
+      "driving_side": "right",
+      "domain": ".kh",
+      "calling_code": "+855",
+      "languages": [
+        "khmer"
+      ]
+    },
+    "CX": {
+      "code": "CX",
+      "capital": "Flying Fish Cove",
+      "currency": "Australian Dollar (AUD)",
+      "driving_side": "left",
+      "domain": ".cx",
+      "calling_code": "+61",
+      "languages": [
+        "english"
+      ]
+    },
+    "SN": {
+      "code": "SN",
+      "capital": "Dakar",
+      "currency": "West African CFA Franc (XOF)",
+      "driving_side": "right",
+      "domain": ".sn",
+      "calling_code": "+221",
+      "languages": [
+        "french"
+      ]
+    },
+    "JE": {
+      "code": "JE",
+      "capital": "Saint Helier",
+      "currency": "Pound Sterling (GBP)",
+      "driving_side": "left",
+      "domain": ".je",
+      "calling_code": "+44",
+      "languages": [
+        "english",
+        "french"
+      ]
+    },
+    "SM": {
+      "code": "SM",
+      "capital": "San Marino",
+      "currency": "Euro (EUR)",
+      "driving_side": "right",
+      "domain": ".sm",
+      "calling_code": "+378",
+      "languages": [
+        "italian"
+      ]
+    },
+    "LA": {
+      "code": "LA",
+      "capital": "Vientiane",
+      "currency": "Lao Kip (LAK)",
+      "driving_side": "right",
+      "domain": ".la",
+      "calling_code": "+856",
+      "languages": [
+        "lao"
+      ]
+    },
+    "UG": {
+      "code": "UG",
+      "capital": "Kampala",
+      "currency": "Ugandan Shilling (UGX)",
+      "driving_side": "left",
+      "domain": ".ug",
+      "calling_code": "+256",
+      "languages": [
+        "english",
+        "swahili"
+      ]
+    },
+    "GI": {
+      "code": "GI",
+      "capital": "Gibraltar",
+      "currency": "Gibraltar Pound (GIP)",
+      "driving_side": "right",
+      "domain": ".gi",
+      "calling_code": "+350",
+      "languages": [
+        "english"
+      ]
+    },
+    "GH": {
+      "code": "GH",
+      "capital": "Accra",
+      "currency": "Ghanaian Cedi (GHS)",
+      "driving_side": "right",
+      "domain": ".gh",
+      "calling_code": "+233",
+      "languages": [
+        "english"
+      ]
+    },
+    "PA": {
+      "code": "PA",
+      "capital": "Panama City",
+      "currency": "US Dollar (USD)",
+      "driving_side": "right",
+      "domain": ".pa",
+      "calling_code": "+507",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "LI": {
+      "code": "LI",
+      "capital": "Vaduz",
+      "currency": "Swiss Franc (CHF)",
+      "driving_side": "right",
+      "domain": ".li",
+      "calling_code": "+423",
+      "languages": [
+        "german"
+      ]
+    },
+    "CW": {
+      "code": "CW",
+      "capital": "Willemstad",
+      "currency": "Netherlands Antillean Guilder (ANG)",
+      "driving_side": "right",
+      "domain": ".cw",
+      "calling_code": "+599",
+      "languages": [
+        "dutch",
+        "papiamentu"
+      ]
+    },
+    "LB": {
+      "code": "LB",
+      "capital": "Beirut",
+      "currency": "Lebanese Pound (LBP)",
+      "driving_side": "right",
+      "domain": ".lb",
+      "calling_code": "+961",
+      "languages": [
+        "arabic"
+      ]
+    },
+    "LS": {
+      "code": "LS",
+      "capital": "Maseru",
+      "currency": "Lesotho Loti (LSL)",
+      "driving_side": "left",
+      "domain": ".ls",
+      "calling_code": "+266",
+      "languages": [
+        "sesotho",
+        "english"
+      ]
+    },
+    "RW": {
+      "code": "RW",
+      "capital": "Kigali",
+      "currency": "Rwandan Franc (RWF)",
+      "driving_side": "right",
+      "domain": ".rw",
+      "calling_code": "+250",
+      "languages": [
+        "kinyarwanda",
+        "french",
+        "english"
+      ]
+    },
+    "BT": {
+      "code": "BT",
+      "capital": "Thimphu",
+      "currency": "Bhutanese Ngultrum (BTN)",
+      "driving_side": "left",
+      "domain": ".bt",
+      "calling_code": "+975",
+      "languages": [
+        "dzongkha"
+      ]
+    },
+    "AS": {
+      "code": "AS",
+      "capital": "Pago Pago",
+      "currency": "US Dollar (USD)",
+      "driving_side": "right",
+      "domain": ".as",
+      "calling_code": "+1",
+      "languages": [
+        "samoan",
+        "english"
+      ]
+    },
+    "SZ": {
+      "code": "SZ",
+      "capital": "Mbabane",
+      "currency": "Swazi Lilangeni (SZL)",
+      "driving_side": "left",
+      "domain": ".sz",
+      "calling_code": "+268",
+      "languages": [
+        "swazi",
+        "english"
+      ]
+    },
+    "VI": {
+      "code": "VI",
+      "capital": "Charlotte Amalie",
+      "currency": "US Dollar (USD)",
+      "driving_side": "left",
+      "domain": ".vi",
+      "calling_code": "+1",
+      "languages": [
+        "english"
+      ]
+    },
+    "MP": {
+      "code": "MP",
+      "capital": "Saipan",
+      "currency": "US Dollar (USD)",
+      "driving_side": "right",
+      "domain": ".mp",
+      "calling_code": "+1",
+      "languages": [
+        "english",
+        "chamorro",
+        "carolinian"
+      ]
+    },
+    "ST": {
+      "code": "ST",
+      "capital": "S\\xe3o Tom\\xe9",
+      "currency": "S\\xe3o Tom\\xe9 and Pr\\xedncipe Dobra (STN)",
+      "driving_side": "right",
+      "domain": ".st",
+      "calling_code": "+239",
+      "languages": [
+        "portuguese"
+      ]
+    },
+    "NA": {
+      "code": "NA",
+      "capital": "Windhoek",
+      "currency": "Namibian Dollar (NAD)",
+      "driving_side": "left",
+      "domain": ".na",
+      "calling_code": "+264",
+      "languages": [
+        "english"
+      ]
+    },
+    "OM": {
+      "code": "OM",
+      "capital": "Muscat",
+      "currency": "Omani Rial (OMR)",
+      "driving_side": "right",
+      "domain": ".om",
+      "calling_code": "+968",
+      "languages": [
+        "arabic"
+      ]
+    },
+    "NP": {
+      "code": "NP",
+      "capital": "Kathmandu",
+      "currency": "Nepalese Rupee (NPR)",
+      "driving_side": "left",
+      "domain": ".np",
+      "calling_code": "+977",
+      "languages": [
+        "nepali"
+      ]
+    },
+    "BA": {
+      "code": "BA",
+      "capital": "Sarajevo",
+      "currency": "Convertible Mark (BAM)",
+      "driving_side": "right",
+      "domain": ".ba",
+      "calling_code": "+387",
+      "languages": [
+        "bosnian",
+        "croatian",
+        "serbian"
+      ]
+    },
+    "CR": {
+      "code": "CR",
+      "capital": "San Jos\\xe9",
+      "currency": "Costa Rican Col\\xf3n (CRC)",
+      "driving_side": "right",
+      "domain": ".cr",
+      "calling_code": "+506",
+      "languages": [
+        "spanish"
+      ]
+    },
+    "PY": {
+      "code": "PY",
+      "capital": "Asunci\\xf3n",
+      "currency": "Paraguayan Guaran\\xed (PYG)",
+      "driving_side": "right",
+      "domain": ".py",
+      "calling_code": "+595",
+      "languages": [
+        "spanish",
+        "guarani"
+      ]
+    },
+    "CY": {
+      "code": "CY",
+      "capital": "Nicosia",
+      "currency": "Euro (EUR)",
+      "driving_side": "left",
+      "domain": ".cy",
+      "calling_code": "+357",
+      "languages": [
+        "greek",
+        "turkish"
+      ]
+    },
+    "GE": {
+      "code": "GE",
+      "capital": "Tbilisi",
+      "currency": "Georgian Lari (GEL)",
+      "driving_side": "right",
+      "domain": ".ge",
+      "calling_code": "+995",
+      "languages": [
+        "georgian"
+      ]
+    }
+  },
+  "tutorial_lessons": [
+    {
+      "stepNumber": 1,
+      "titleKey": "onboarding.tip-driving-side-title",
+      "bodyKey": "onboarding.tip-driving-side-body",
+      "location": {
+        "lat": 50.3913656,
+        "lng": -4.1432554,
+        "heading": 147.31,
+        "pitch": 11.33,
+        "zoom": 0,
+        "panoId": "h8RS8nFddeRullojofVFXQ"
+      },
+      "lesson_name": "Driving Side Identification"
+    },
+    {
+      "stepNumber": 2,
+      "titleKey": "onboarding.tip-script-language-title",
+      "bodyKey": "onboarding.tip-script-language-body",
+      "location": {
+        "lat": 10.7974119,
+        "lng": 106.7029884,
+        "heading": 206.81,
+        "pitch": 1.74,
+        "zoom": 0,
+        "panoId": "pJBNVdvpD29oJDmQyTq1Ww"
+      },
+      "lesson_name": "Alphabet & Script Clues"
+    },
+    {
+      "stepNumber": 3,
+      "titleKey": "onboarding.tip-hemisphere-title",
+      "bodyKey": "onboarding.tip-hemisphere-body",
+      "location": {
+        "lat": -37.6791744,
+        "lng": 177.7370528,
+        "heading": 16.05,
+        "pitch": 10.18,
+        "zoom": 0,
+        "panoId": "Xzz69C9fkC9BvPAmijM6LQ"
+      },
+      "showCompass": true,
+      "lesson_name": "Sun Position & Hemisphere Detection"
+    }
+  ]
+}

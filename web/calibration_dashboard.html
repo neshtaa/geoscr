@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoScript — Deterministic Clue Calibration & Diagnostic Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --panel: #111827;
+      --card: #1f2937;
+      --accent: #10b981;
+      --accent-glow: rgba(16, 185, 129, 0.25);
+      --cyan: #06b6d4;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --border: #374151;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; padding: 18px 24px; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .logo-group h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #fff;
+    }
+    .logo-group h1 span { color: var(--accent); }
+    .badge {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .subtitle { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn {
+      background: var(--accent);
+      color: #000;
+      font-weight: 800;
+      font-size: 0.85rem;
+      padding: 10px 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn:hover { background: #059669; color: #fff; box-shadow: 0 0 15px var(--accent-glow); }
+    .btn-secondary {
+      background: #374151;
+      color: #fff;
+    }
+    .btn-secondary:hover { background: #4b5563; }
+
+    /* Progress bar */
+    .progress-container {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .progress-track {
+      height: 10px;
+      background: #1f2937;
+      border-radius: 5px;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #06b6d4);
+      width: 0%;
+      transition: width 0.4s ease;
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    /* Grid Layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 420px 1fr 380px;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 1200px) {
+      .dashboard-grid { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .panel-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding-bottom: 8px;
+    }
+    .panel-title span.tag {
+      font-size: 0.75rem;
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Panoramas */
+    .pano-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .pano-header {
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--muted);
+      background: rgba(0,0,0,0.3);
+      display: flex;
+      justify-content: space-between;
+    }
+    .pano-img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      display: block;
+      background: #000;
+    }
+
+    /* Diagnostic Feature Rows */
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .feature-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .feature-value {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .feature-detail {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1.3;
+    }
+
+    /* Matches List */
+    .clue-chip {
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      color: #38bdf8;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    /* Prediction Card */
+    .top-candidate-card {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.1));
+      border: 2px solid var(--accent);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .cand-name {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: #fff;
+    }
+    .cand-conf {
+      background: var(--accent);
+      color: #000;
+      font-weight: 900;
+      font-size: 0.85rem;
+      padding: 2px 8px;
+      border-radius: 6px;
+      float: right;
+    }
+    .cand-coords {
+      font-size: 0.75rem;
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 4px;
+    }
+
+    /* Result Comparison */
+    .eval-box {
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .eval-box.exact {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #34d399;
+    }
+    .eval-box.neighbor {
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid #06b6d4;
+      color: #38bdf8;
+    }
+    .eval-box.miss {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid #ef4444;
+      color: #f87171;
+    }
+
+    /* Table */
+    .table-container {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 0.75rem; text-transform: uppercase; }
+    td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    tr:hover { background: rgba(255,255,255,0.02); }
+    .badge-exact { background: #065f46; color: #6ee7b7; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; }
+    .badge-neighbor { background: #164e63; color: #67e8f9; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; }
+    .badge-miss { background: #7f1d1d; color: #fca5a5; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-group">
+      <h1><span>⚙️ GeoScript</span> Deterministic Calibration Engine</h1>
+      <p class="subtitle">100% Local Pure Mathematical Computer Vision & Clue Database Matching (Zero AI/LLM)</p>
+    </div>
+    <div class="header-controls">
+      <span class="badge" id="calibration-status">IDLE</span>
+      <button class="btn btn-secondary" onclick="stepPrevious()">⏮️ Prev</button>
+      <button class="btn btn-secondary" onclick="stepNext()">⏭️ Next</button>
+      <button class="btn" id="run-all-btn" onclick="runCalibrationBenchmark()">▶️ Run Full Calibration Benchmark</button>
+    </div>
+  </header>
+
+  <!-- Progress bar -->
+  <div class="progress-container">
+    <div class="progress-info">
+      <span id="progress-label">Benchmark Progress: Ready to calibrate</span>
+      <span id="progress-stats" style="font-family: 'JetBrains Mono', monospace;">0 / 10 Rounds Verified</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-bar"></div>
+    </div>
+  </div>
+
+  <!-- Main 3-Column Diagnostic Workspace -->
+  <div class="dashboard-grid">
+    
+    <!-- Col 1: Visual Panoramas -->
+    <div class="panel">
+      <div class="panel-title">
+        <span>📸 Dual Perspective Street View</span>
+        <span class="tag" id="current-round-tag">Round 1 / 10</span>
+      </div>
+
+      <div class="pano-card">
+        <div class="pano-header">
+          <span>COMPASS: DUE NORTH [0°]</span>
+          <span id="north-lum-metric">Lum: --</span>
+        </div>
+        <img id="img-north" class="pano-img" src="" alt="North View">
+      </div>
+
+      <div class="pano-card">
+        <div class="pano-header">
+          <span>COMPASS: DUE SOUTH [180°]</span>
+          <span id="south-lum-metric">Lum: --</span>
+        </div>
+        <img id="img-south" class="pano-img" src="" alt="South View">
+      </div>
+
+      <div class="feature-card" style="margin-top: auto;">
+        <div class="feature-head"><span>LOCATION METADATA</span></div>
+        <div class="feature-value" id="gt-location-name">Loading...</div>
+        <div class="feature-detail" id="gt-coords">Lat: --, Lng: --</div>
+      </div>
+    </div>
+
+    <!-- Col 2: Extracted Physical Signatures -->
+    <div class="panel">
+      <div class="panel-title">
+        <span>🔬 Factual Physical Feature Extraction</span>
+        <span class="tag">NumPy & Mathematical Vision</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-head">
+          <span>☀️ SOLAR RADIAL GRADIENT & HEMISPHERE</span>
+          <span id="sun-status-pill" class="badge">--</span>
+        </div>
+        <div class="feature-value" id="hemi-value">Analyzing solar bloom...</div>
+        <div class="feature-detail" id="hemi-detail">Grad North: -- | Grad South: --</div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-head">
+          <span>🚗 ROAD PERSPECTIVE & DRIVING SIDE</span>
+          <span id="drv-status-pill" class="badge">--</span>
+        </div>
+        <div class="feature-value" id="drv-value">Analyzing oncoming traffic...</div>
+        <div class="feature-detail" id="drv-detail">Verge alignment: --</div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-head">
+          <span>🛣️ ROAD SURFACE & LINE MARKING GEOMETRY</span>
+          <span id="road-status-pill" class="badge">--</span>
+        </div>
+        <div class="feature-value" id="road-value">Analyzing asphalt & paint...</div>
+        <div class="feature-detail" id="road-detail">Center: -- | Edge: -- | Surface: --</div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-head">
+          <span>🌿 SOIL GEOMORPHOLOGY & BIOME</span>
+          <span id="biome-status-pill" class="badge">--</span>
+        </div>
+        <div class="feature-value" id="biome-value">Analyzing soil & flora...</div>
+        <div class="feature-detail" id="biome-detail">Red soil: -- | Sand: -- | Limestone: --</div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-head">
+          <span>🚙 HARDWARE & INFRASTRUCTURE FINGERPRINT</span>
+        </div>
+        <div class="feature-value" id="hw-value">Scanning for camera meta...</div>
+        <div class="feature-detail" id="hw-detail">Snorkel, roof bars, bollards, signs</div>
+      </div>
+    </div>
+
+    <!-- Col 3: Clue DB Matches & Candidate Rankings -->
+    <div class="panel">
+      <div class="panel-title">
+        <span>📚 Database Clue Intersections</span>
+        <span class="tag">GeoGuessr KB</span>
+      </div>
+
+      <div class="top-candidate-card">
+        <div class="cand-conf" id="top-conf">0%</div>
+        <div style="font-size: 0.75rem; color: #a7f3d0; font-weight: 700; text-transform: uppercase;">Top Prediction</div>
+        <div class="cand-name" id="top-country">Analyzing...</div>
+        <div class="cand-coords" id="top-coords">Lat: 0.0, Lng: 0.0</div>
+      </div>
+
+      <div id="eval-result-box" class="eval-box">
+        <div style="font-weight: 800;" id="eval-title">Ground Truth Verification</div>
+        <div id="eval-detail">Running analysis...</div>
+      </div>
+
+      <div style="font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-top: 6px;">
+        Matched Official Database Signatures
+      </div>
+      <div id="clues-chips-container" style="max-height: 180px; overflow-y: auto;">
+        <!-- Chips inserted dynamically -->
+      </div>
+
+      <div style="font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-top: 6px;">
+        Alternative Candidates
+      </div>
+      <div id="alts-container">
+        <!-- Alternatives inserted dynamically -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom Table: Full Verification Log -->
+  <div class="table-container">
+    <div class="panel-title" style="margin-bottom: 12px;">
+      <span>📊 Full Real-Condition Calibration Verification Table</span>
+      <span id="accuracy-counter" style="font-weight: 800; color: var(--accent); font-family: 'JetBrains Mono', monospace;">Accuracy: 0%</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Round</th>
+          <th>True Country</th>
+          <th>Predicted Country</th>
+          <th>Confidence</th>
+          <th>Distance Error</th>
+          <th>Result Status</th>
+          <th>Matching Signatures</th>
+        </tr>
+      </thead>
+      <tbody id="benchmark-table-body">
+        <!-- Rows inserted dynamically -->
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    let roundsData = [];
+    let currentRoundIndex = 0;
+    let benchmarkResults = [];
+
+    async function init() {
+      try {
+        const resp = await fetch('/api/calibration/rounds');
+        roundsData = await resp.json();
+        if (roundsData.length > 0) {
+          loadRound(0);
+        }
+      } catch (e) {
+        console.error("Error loading rounds:", e);
+      }
+    }
+
+    async function loadRound(idx) {
+      if (idx < 0 || idx >= roundsData.length) return;
+      currentRoundIndex = idx;
+      const r = roundsData[idx];
+
+      document.getElementById('current-round-tag').innerText = `Round ${r.round} / ${roundsData.length}`;
+      document.getElementById('img-north').src = r.north_image;
+      document.getElementById('img-south').src = r.south_image;
+      document.getElementById('gt-location-name').innerText = `${r.true_country} (${r.true_code})`;
+      document.getElementById('gt-coords').innerText = `Lat: ${r.lat.toFixed(4)}, Lng: ${r.lng.toFixed(4)}`;
+
+      // Execute deterministic calibration analysis
+      document.getElementById('calibration-status').innerText = 'ANALYZING';
+      const analyzeResp = await fetch('/api/calibration/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ round_id: r.round })
+      });
+      const data = await analyzeResp.json();
+      renderAnalysis(r, data);
+      document.getElementById('calibration-status').innerText = 'VERIFIED';
+      return data;
+    }
+
+    function renderAnalysis(roundMeta, data) {
+      const p = data.detected_parameters || {};
+      const m = p.metrics || {};
+      const top = data.top_prediction || {};
+      const evalRes = data.evaluation || {};
+
+      // 1. Solar
+      document.getElementById('hemi-value').innerText = p.hemisphere === 'NORTHERN' ? '☀️ Northern Hemisphere (Sun in South)' : (p.hemisphere === 'SOUTHERN' ? '☀️ Southern Hemisphere (Sun in North)' : '☁️ Overcast / Neutral Hemisphere');
+      document.getElementById('hemi-detail').innerText = `Radial Dropoff: N=${m.sun_grad_north || 0} | S=${m.sun_grad_south || 0}`;
+      document.getElementById('sun-status-pill').innerText = p.hemisphere;
+
+      // 2. Driving Side
+      document.getElementById('drv-value').innerText = p.driving_side === 'LEFT' ? '🚗 Left-Hand Traffic (LHT)' : (p.driving_side === 'RIGHT' ? '🚗 Right-Hand Traffic (RHT)' : '❓ Unknown Traffic Orientation');
+      document.getElementById('drv-status-pill').innerText = p.driving_side;
+
+      // 3. Road & Paint
+      document.getElementById('road-value').innerText = `${p.road_type === 'unpaved_dirt' ? '🟤 Unpaved Dirt / Gravel' : '🛣️ Paved Asphalt'} [Lines: ${p.road_lines}]`;
+      document.getElementById('road-detail').innerText = `Road brightness: ${m.mean_road_brightness} | Dirt index: ${m.dirt_pct}%`;
+      document.getElementById('road-status-pill').innerText = p.road_type;
+
+      // 4. Biome & Soil
+      document.getElementById('biome-value').innerText = `🌿 ${p.biome || 'Temperate'} (Soil: ${p.soil || 'Standard'})`;
+      document.getElementById('biome-detail').innerText = `Veg: ${m.vegetation_pct}% | Red Soil: ${m.red_soil_pct}% | Sand: ${m.sahel_sand_pct || 0}% | Lime: ${m.limestone_pct || 0}%`;
+      document.getElementById('biome-status-pill').innerText = p.biome;
+
+      // 5. Hardware
+      document.getElementById('hw-value').innerText = (p.hardware_meta && p.hardware_meta.length > 0) ? `🚙 ${p.hardware_meta.join(', ')}` : (p.architecture !== 'none' ? `🏛️ ${p.architecture}` : 'Standard Google Camera Car');
+
+      // Top candidate
+      document.getElementById('top-conf').innerText = `${top.confidence_percent}%`;
+      document.getElementById('top-country').innerText = `${top.country} (${top.country_code})`;
+      document.getElementById('top-coords').innerText = `Est GPS: ${top.gps_estimate.lat}, ${top.gps_estimate.lng}`;
+
+      // Eval box
+      const evalBox = document.getElementById('eval-result-box');
+      evalBox.className = 'eval-box ' + (evalRes.is_exact ? 'exact' : (evalRes.is_neighbor ? 'neighbor' : 'miss'));
+      document.getElementById('eval-title').innerText = evalRes.is_exact ? '✅ EXACT COUNTRY MATCH' : (evalRes.is_neighbor ? '🔷 IMMEDIATE NEIGHBOR MATCH' : '❌ INCORRECT REGION');
+      document.getElementById('eval-detail').innerText = `True: ${roundMeta.true_country} (${roundMeta.true_code}) | Error: ${evalRes.distance_km} km | Status: ${evalRes.match_type}`;
+
+      // Chips
+      const chipsEl = document.getElementById('clues-chips-container');
+      chipsEl.innerHTML = (data.identified_clues || []).map(c => `
+        <div class="clue-chip">🔍 ${c}</div>
+      `).join('');
+
+      // Alternatives
+      const altsEl = document.getElementById('alts-container');
+      altsEl.innerHTML = (data.alternative_candidates || []).slice(0, 3).map(a => `
+        <div style="font-size: 0.8rem; display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+          <span>${a.country} (${a.country_code})</span>
+          <span style="font-weight: 700; color: var(--accent);">${a.confidence_percent}%</span>
+        </div>
+      `).join('');
+    }
+
+    function stepPrevious() {
+      if (currentRoundIndex > 0) loadRound(currentRoundIndex - 1);
+    }
+    function stepNext() {
+      if (currentRoundIndex < roundsData.length - 1) loadRound(currentRoundIndex + 1);
+    }
+
+    async function runCalibrationBenchmark() {
+      const btn = document.getElementById('run-all-btn');
+      btn.disabled = true;
+      btn.innerText = '⏳ Calibrating...';
+      benchmarkResults = [];
+
+      const tbody = document.getElementById('benchmark-table-body');
+      tbody.innerHTML = '';
+
+      for (let i = 0; i < roundsData.length; i++) {
+        const d = await loadRound(i);
+        const r = roundsData[i];
+        const ev = d.evaluation || {};
+        const top = d.top_prediction || {};
+
+        benchmarkResults.push(ev);
+
+        const badgeClass = ev.is_exact ? 'badge-exact' : (ev.is_neighbor ? 'badge-neighbor' : 'badge-miss');
+        const badgeText = ev.is_exact ? 'EXACT MATCH' : (ev.is_neighbor ? 'NEIGHBOR' : 'MISS');
+
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>Round ${r.round}</strong></td>
+            <td>${r.true_country} (${r.true_code})</td>
+            <td><strong>${top.country} (${top.country_code})</strong></td>
+            <td>${top.confidence_percent}%</td>
+            <td>${ev.distance_km} km</td>
+            <td><span class="${badgeClass}">${badgeText}</span></td>
+            <td style="font-size: 0.75rem; color: var(--muted);">${(d.identified_clues || []).slice(0, 2).join('; ')}</td>
+          </tr>
+        `;
+
+        const pct = Math.round(((i + 1) / roundsData.length) * 100);
+        document.getElementById('progress-bar').style.width = `${pct}%`;
+        document.getElementById('progress-label').innerText = `Benchmark Progress: Calibrated Round ${i + 1} of ${roundsData.length}`;
+
+        const verifiedCount = benchmarkResults.filter(b => b.is_exact || b.is_neighbor).length;
+        const accuracyPct = Math.round((verifiedCount / benchmarkResults.length) * 100);
+        document.getElementById('progress-stats').innerText = `${verifiedCount} / ${benchmarkResults.length} Verified (${accuracyPct}%)`;
+        document.getElementById('accuracy-counter').innerText = `Accuracy: ${accuracyPct}% (${verifiedCount}/${benchmarkResults.length})`;
+
+        await new Promise(res => setTimeout(res, 800));
+      }
+
+      btn.disabled = false;
+      btn.innerText = '✅ Calibration Benchmark Complete';
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
