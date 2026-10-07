@@ -30,7 +30,14 @@ def _rpc(method, payload, timeout=20):
 
 
 def _parse_pano(p):
-    """Parse the pano block shared by SingleImageSearch and GetMetadata."""
+    """Parse the pano block shared by SingleImageSearch and GetMetadata (None if unavailable)."""
+    try:
+        return _parse_pano_block(p)
+    except (IndexError, TypeError, KeyError):
+        return None  # removed / blurred panoramas come back as an empty shell
+
+
+def _parse_pano_block(p):
     info = {"pano_id": p[1][1]}
     tiles = p[2]
     info["size"] = tiles[2]  # [height, width] at max zoom

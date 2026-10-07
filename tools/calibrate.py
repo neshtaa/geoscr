@@ -95,10 +95,18 @@ def _init(names):
     _WORK_MODS = [features.load(n) for n in names]
 
 
+def hide_car_axis(pano_id):
+    """Half of the panoramas are processed as in live play, where the screenshots give the
+    true heading (compass) but not the car's driving axis, so the model sees both regimes."""
+    return int(hashlib.md5(pano_id.encode()).hexdigest(), 16) % 2 == 1
+
+
 def _extract_one(args):
     path, heading = args
     from engine.panorama import SphericalImage
     sph = SphericalImage.from_equirect(path, heading=heading)
+    if hide_car_axis(os.path.basename(path)[:-4]):
+        sph.car_heading = None
     out = []
     for m in _WORK_MODS:
         try:
@@ -164,15 +172,15 @@ def load_features(names, recs=None):
     cols, fnames = [], []
     for n in names:
         z = np.load(os.path.join(FEAT_DIR, n + ".npz"), allow_pickle=True)
+        Xz, names = z["X"], list(z["names"])
         idx = {pid: i for i, pid in enumerate(z["ids"])}
-        d = z["X"].shape[1]
-        M = np.full((len(recs), d), np.nan, np.float32)
+        M = np.full((len(recs), Xz.shape[1]), np.nan, np.float32)
         for i, r in enumerate(recs):
             j = idx.get(r["pano_id"])
             if j is not None:
-                M[i] = z["X"][j]
+                M[i] = Xz[j]
         cols.append(M)
-        fnames += [f"{n}.{f}" for f in z["names"]]
+        fnames += [f"{n}.{f}" for f in names]
     return np.concatenate(cols, axis=1), fnames, recs
 
 

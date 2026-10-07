@@ -28,6 +28,7 @@ import numpy as np
 
 from .geo import WORLD_SCORE_SCALE_KM, haversine_km
 
+SUN_LAT_GRID = np.arange(-60.0, 80.1, 1.0)
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "model")
 
 
@@ -132,6 +133,47 @@ class GroupGaussian:
         return g
 
 
+class SoftmaxGLM:
+    """Multinomial logit (a generalised linear model) on the robust-standardised features of
+    all groups plus missing-value indicators, ridge penalty, class-balanced likelihood (so its
+    output acts as a likelihood ratio and the prior is applied separately).  Fitted by
+    full-batch Nesterov gradient descent on the convex penalised log-likelihood."""
+
+    def __init__(self, lam=3e-3, iters=400, lr=0.5):
+        self.lam, self.iters, self.lr = lam, iters, lr
+
+    def design(self, Z):
+        M = np.isnan(Z)
+        return np.hstack([np.clip(np.where(M, 0.0, Z), -5, 5), M[:, self.mcols].astype(float), np.ones((len(Z), 1))])
+
+    def fit(self, Z, yi, n_classes):
+        self.mcols = np.isnan(Z).mean(0) > 0.02
+        F = self.design(Z)
+        n, d = F.shape
+        cnt = np.bincount(yi, minlength=n_classes).astype(float)
+        ws = 1.0 / cnt[yi]
+        ws /= ws.sum()
+        Y = np.zeros((n, n_classes))
+        Y[np.arange(n), yi] = 1.0
+        W = np.zeros((d, n_classes))
+        V = np.zeros_like(W)
+        for _ in range(self.iters):
+            Wn = W + 0.9 * V
+            A = F @ Wn
+            A -= A.max(1, keepdims=True)
+            P = np.exp(A)
+            P /= P.sum(1, keepdims=True)
+            g = F.T @ ((P - Y) * ws[:, None]) + self.lam * Wn
+            V = 0.9 * V - self.lr * g
+            W = W + V
+        self.W = W
+        return self
+
+    def loglik(self, Z):
+        A = self.design(Z) @ self.W
+        return A - A.max(1, keepdims=True)
+
+
 class GeoModel:
     def __init__(self):
         self.groups = []
@@ -154,15 +196,25 @@ class GeoModel:
         self.ref_yi = yi
         self.ref_lat, self.ref_lng = np.asarray(lat)[keep], np.asarray(lng)[keep]
         self.ref_emb = self._embed({g: X_by_group[g][keep] for g in self.groups})
+        self.glm = SoftmaxGLM().fit(self._glm_input({g: X_by_group[g][keep] for g in self.groups}), yi, len(classes))
         world = np.asarray(is_world)[keep]
         cw = np.bincount(yi[world], minlength=len(classes)).astype(float)
         self.prior_world = (cw + 0.5) / (cw + 0.5).sum()
         self.prior_uniform = np.full(len(classes), 1.0 / len(classes))
         self.train_freq = np.bincount(yi, minlength=len(classes)).astype(float)
         self.knn_k = knn_k
+        # latitude histogram of each country's reference panoramas (for the analytic sun term)
+        H = np.zeros((len(classes), len(SUN_LAT_GRID)))
+        b = np.clip(np.round(self.ref_lat - SUN_LAT_GRID[0]).astype(int), 0, len(SUN_LAT_GRID) - 1)
+        np.add.at(H, (yi, b), 1.0)
+        H = np.apply_along_axis(lambda h: np.convolve(h, np.ones(5) / 5.0, mode="same"), 1, H) + 1e-3
+        self.lat_hist = H / H.sum(1, keepdims=True)
         self.weights = {g: 0.3 for g in self.groups}
-        self.weights.update({"knn": 0.5, "sun": 0.0, "temp_knn": 1.0})
+        self.weights.update({"knn": 0.5, "glm": 0.7, "sun": 0.0})
         return self
+
+    def _glm_input(self, X_by_group):
+        return np.concatenate([self.gauss[g].transform(X_by_group[g]) for g in self.groups], axis=1)
 
     def _embed(self, X_by_group):
         parts = []
@@ -173,21 +225,42 @@ class GeoModel:
         return np.concatenate(parts, axis=1)
 
     # ---------------------------------------------------------------- evidence
+    def sun_loglik(self, Xsolar):
+        """Analytic sun term log E_{lat ~ country}[ conf * L(lat | sun) + (1 - conf) ] from the
+        solar features (true azimuth from sun_az_cos/sin, elevation, detector confidence)."""
+        from .features import solar
+        n = solar.FEATURE_NAMES
+        out = np.zeros((len(Xsolar), len(self.classes)))
+        for i, x in enumerate(Xsolar):
+            c, s_, el, conf = x[n.index("sun_az_cos")], x[n.index("sun_az_sin")], x[n.index("sun_el")], x[n.index("sun_conf")]
+            if not (np.isfinite(c) and np.isfinite(s_) and np.isfinite(el) and np.isfinite(conf)):
+                continue
+            az = math.degrees(math.atan2(s_, c)) % 360.0
+            L = np.asarray(solar.latitude_likelihood(az, el, SUN_LAT_GRID), float)
+            L = L / max(L.mean(), 1e-12)
+            mix = conf * L + (1.0 - conf)
+            out[i] = np.log(self.lat_hist @ mix + 1e-9)
+        return out
+
     def evidence(self, X_by_group, sun_ll=None):
         """Per-source (n, C) log-likelihood matrices (before weighting)."""
         ev = {}
+        if sun_ll is None and "solar" in X_by_group and hasattr(self, "lat_hist"):
+            sun_ll = self.sun_loglik(X_by_group["solar"])
         for g in self.groups:
             ll = self.gauss[g].loglik(X_by_group[g])
             ev[g] = ll - ll.max(1, keepdims=True)
         emb = self._embed(X_by_group)
         ev["knn"], ev["_d2"] = self._knn_loglr(emb)
+        if getattr(self, "glm", None) is not None:
+            ev["glm"] = self.glm.loglik(self._glm_input(X_by_group))
         if sun_ll is not None:
             ev["sun"] = sun_ll
         return ev
 
     def _knn_loglr(self, emb, exclude=None):
-        d2 = ((emb[:, None, :] - self.ref_emb[None, :, :]) ** 2).sum(-1) if len(emb) * len(self.ref_emb) < 4e7 else \
-            np.stack([((e[None, :] - self.ref_emb) ** 2).sum(-1) for e in emb])
+        d2 = np.maximum((emb ** 2).sum(1)[:, None] + (self.ref_emb ** 2).sum(1)[None, :]
+                        - 2.0 * emb @ self.ref_emb.T, 0.0)
         if exclude is not None:
             d2[exclude] = np.inf
         k = min(self.knn_k, d2.shape[1] - 1)
@@ -214,13 +287,15 @@ class GeoModel:
         for g in self.groups:
             lp = lp + w.get(g, 0.0) * ev[g]
         lp = lp + w.get("knn", 0.0) * ev["knn"]
+        if "glm" in ev:
+            lp = lp + w.get("glm", 0.0) * ev["glm"]
         if "sun" in ev and ev["sun"] is not None:
             lp = lp + w.get("sun", 0.0) * np.nan_to_num(ev["sun"])
         return lp - _logsumexp(lp)[:, None]
 
     def calibrate(self, ev, yi, iters=4):
         """Coordinate ascent on the mean log-likelihood of the true class (calib split)."""
-        keys = self.groups + ["knn"] + (["sun"] if "sun" in ev else [])
+        keys = self.groups + ["knn"] + [k for k in ("glm", "sun") if k in ev]
         w = dict(self.weights)
         pm = self.prior_mix
 
@@ -275,7 +350,9 @@ class GeoModel:
         os.makedirs(path, exist_ok=True)
         arrays = {"ref_yi": self.ref_yi, "ref_lat": self.ref_lat, "ref_lng": self.ref_lng,
                   "ref_emb": self.ref_emb.astype(np.float32), "prior_world": self.prior_world,
-                  "prior_uniform": self.prior_uniform, "train_freq": self.train_freq}
+                  "prior_uniform": self.prior_uniform, "train_freq": self.train_freq, "lat_hist": self.lat_hist}
+        arrays["glm.W"] = self.glm.W
+        arrays["glm.mcols"] = self.glm.mcols
         for g in self.groups:
             for k, v in self.gauss[g].to_dict().items():
                 arrays[f"g.{g}.{k}"] = v
@@ -291,9 +368,13 @@ class GeoModel:
         z = np.load(os.path.join(path, "model.npz"))
         m.groups, m.classes, m.weights = meta["groups"], meta["classes"], meta["weights"]
         m.prior_mix, m.knn_k = meta["prior_mix"], meta["knn_k"]
-        for k in ("ref_yi", "ref_lat", "ref_lng", "ref_emb", "prior_world", "prior_uniform", "train_freq"):
+        for k in ("ref_yi", "ref_lat", "ref_lng", "ref_emb", "prior_world", "prior_uniform", "train_freq", "lat_hist"):
             setattr(m, k, z[k])
         m.ref_emb = m.ref_emb.astype(np.float64)
+        m.glm = None
+        if "glm.W" in z.files:
+            m.glm = SoftmaxGLM()
+            m.glm.W, m.glm.mcols = z["glm.W"], z["glm.mcols"].astype(bool)
         m.gauss = {}
         for g in m.groups:
             m.gauss[g] = GroupGaussian.from_dict({k.split(".", 2)[2]: z[k] for k in z.files if k.startswith(f"g.{g}.")})

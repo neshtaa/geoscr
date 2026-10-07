@@ -1,0 +1,11 @@
+{
+ "split": "test",
+ "mode": "12 rendered views, car axis unknown",
+ "n": 530,
+ "top1": 0.16037735849056603,
+ "top3": 0.2962264150943396,
+ "top5": 0.41509433962264153,
+ "mean_score": 1477.4056858460308,
+ "median_km": 2597.7686107100635,
+ "analysis_ms": 1521.5
+}

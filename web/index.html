@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoGuessr локатор</title>
+<style>
+  :root { --bg: #f6f7f9; --fg: #1d2330; --muted: #5f6b7d; --card: #fff; --line: #dde2ea; --acc: #2f6fde; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14171c; --fg: #e6e9ef; --muted: #98a2b3; --card: #1d2229; --line: #2e3540; --acc: #6b9cff; } }
+  body { margin: 0; font: 15px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 8px 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 12px 0; }
+  label { display: block; margin: 6px 0; color: var(--muted); }
+  input[type=number], input[type=text] { width: 140px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+  button { padding: 8px 16px; border: 0; border-radius: 6px; background: var(--acc); color: #fff; font-weight: 600; cursor: pointer; }
+  .bar { height: 8px; background: var(--acc); border-radius: 4px; }
+  .row { display: grid; grid-template-columns: minmax(120px, 220px) 1fr 60px; gap: 8px; align-items: center; margin: 4px 0; }
+  .clue { margin: 6px 0; } .clue b { color: var(--acc); } .m { color: var(--muted); font-size: 13px; }
+  img.prev { max-width: 100%; border-radius: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>GeoGuessr локатор</h1>
+  <p class="sub">Чисто математичне розпізнавання (без нейромереж): сонце, дорога, ландшафт, авто камери, забудова + підказки з GeoGuessr і Plonk It.</p>
+  <div class="card">
+    <label>Панорама (2:1) або скріншот <input id="file" type="file" accept="image/*"></label>
+    <label>Курс центру зображення, град (необов'язково) <input id="heading" type="number" step="any"></label>
+    <label>Або pano_id / «lat,lng» Street View <input id="pano" type="text" style="width:260px"></label>
+    <button id="go">Розпізнати</button> <span id="status" class="m"></span>
+  </div>
+  <div id="out"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+function render(r) {
+  if (r.error) { $("#out").innerHTML = `<div class="card">Помилка: ${esc(r.error)}</div>`; return; }
+  let h = `<div class="card"><b>Країни</b>`;
+  for (const c of r.countries) h += `<div class="row"><span>${esc(c.name)} (${esc(c.code)})</span><div class="bar" style="width:${Math.max(1, c.probability * 100)}%"></div><span>${(c.probability * 100).toFixed(1)}%</span></div>`;
+  const g = r.guess;
+  h += `<p>Здогадка: <a target="_blank" href="https://www.google.com/maps?q=${g.lat},${g.lng}">${g.lat}, ${g.lng}</a> · очікувано ~${g.expected_score} балів</p>`;
+  if (r.check) h += `<p class="m">Перевірка: справжня країна ${esc(r.check.true_country)}, похибка ${r.check.distance_km} км, ${r.check.points} балів</p>`;
+  h += `</div><div class="card"><b>Що видно</b><ul>` + r.observations.map(o => `<li>${esc(o.text)} <span class="m">${Math.round(o.strength * 100)}%</span></li>`).join("") + `</ul></div>`;
+  for (const c of r.hints) {
+    h += `<div class="card"><b>${esc(c.country)} (${esc(c.country_code)}) — ${(c.probability * 100).toFixed(1)}%</b>`;
+    if (c.driving_side) h += `<div class="m">Рух: ${c.driving_side === "left" ? "лівосторонній" : "правосторонній"}${c.driving_side_consistent === false ? " — не збігається з побаченим" : ""}</div>`;
+    for (const k of c.geoguessr) h += `<div class="clue"><b>GeoGuessr:</b> ${esc(k.title)} — ${esc(k.text)} ${k.matched.length ? `<span class="m">(${esc(k.matched.join(", "))})</span>` : ""}</div>`;
+    for (const k of c.plonkit) h += `<div class="clue"><b>Plonk It:</b> ${esc(k.text)} ${k.matched.length ? `<span class="m">(${esc(k.matched.join(", "))})</span>` : ""}</div>`;
+    h += `</div>`;
+  }
+  $("#out").innerHTML = h;
+}
+$("#go").onclick = async () => {
+  const body = {};
+  const p = $("#pano").value.trim();
+  if (p) {
+    const m = p.match(/^\s*(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)\s*$/);
+    if (m) { body.lat = +m[1]; body.lng = +m[3]; } else body.pano_id = p;
+  } else {
+    const f = $("#file").files[0];
+    if (!f) { $("#status").textContent = "Оберіть файл"; return; }
+    body.image_b64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
+    if ($("#heading").value !== "") body.heading = +$("#heading").value;
+  }
+  $("#status").textContent = "Аналіз…";
+  try {
+    const r = await (await fetch("/api/predict", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)})).json();
+    render(r); $("#status").textContent = r.timing_ms ? `${r.timing_ms.total} мс` : "";
+  } catch (e) { $("#status").textContent = "Помилка: " + e; }
+};
+</script>
+</body>
+</html>

@@ -26,48 +26,16 @@ from engine.model import GeoModel  # noqa: E402
 
 def group_matrix(name, recs):
     z = np.load(os.path.join(FEAT_DIR, name + ".npz"), allow_pickle=True)
+    Xz = z["X"]
     idx = {pid: i for i, pid in enumerate(z["ids"])}
-    M = np.full((len(recs), z["X"].shape[1]), np.nan, np.float64)
+    M = np.full((len(recs), Xz.shape[1]), np.nan, np.float64)
     have = np.zeros(len(recs), bool)
     for i, r in enumerate(recs):
         j = idx.get(r["pano_id"])
         if j is not None:
-            M[i] = z["X"][j]
+            M[i] = Xz[j]
             have[i] = True
     return M, have
-
-
-def sun_evidence(model, recs, Xsolar, solar_names):
-    """Analytic sun term: log mean_{ref pano of country} L(lat_ref | sun observation)."""
-    try:
-        from engine.features import solar
-    except Exception:
-        return None
-    if not hasattr(solar, "latitude_likelihood"):
-        return None
-    names = list(solar_names)
-    try:
-        ia = names.index("sun_az_true")
-        ie = names.index("sun_el")
-    except ValueError:
-        return None
-    grid = np.arange(-60.0, 80.1, 1.0)
-    C = len(model.classes)
-    # country latitude histograms from reference panoramas
-    H = np.zeros((C, len(grid)))
-    bins = np.clip(np.round(model.ref_lat - grid[0]).astype(int), 0, len(grid) - 1)
-    np.add.at(H, (model.ref_yi, bins), 1.0)
-    H = (H + 1e-3) / (H + 1e-3).sum(1, keepdims=True)
-    out = np.zeros((len(recs), C))
-    for i in range(len(recs)):
-        az, el = Xsolar[i, ia], Xsolar[i, ie]
-        if not (np.isfinite(az) and np.isfinite(el)):
-            continue
-        L = np.asarray(solar.latitude_likelihood(az, el, grid), float)
-        L = L / (L.max() + 1e-12)
-        out[i] = np.log(H @ L + 1e-6)
-        out[i] -= out[i].max()
-    return out
 
 
 def evaluate(model, ev, recs, rows, label, verbose=True):
@@ -120,13 +88,7 @@ def main():
     print(f"fit {time.time() - t0:.1f}s, classes={len(model.classes)}")
 
     def ev_for(rows):
-        ev = model.evidence({g: mats[g][rows] for g in groups})
-        if "solar" in groups:
-            z = np.load(os.path.join(FEAT_DIR, "solar.npz"), allow_pickle=True)
-            s = sun_evidence(model, [recs[i] for i in rows], mats["solar"][rows], z["names"])
-            if s is not None:
-                ev["sun"] = s
-        return ev
+        return model.evidence({g: mats[g][rows] for g in groups})
 
     ev_ca, ev_te = ev_for(ca), ev_for(te)
     cls = {c: i for i, c in enumerate(model.classes)}

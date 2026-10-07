@@ -12,7 +12,7 @@ closed-form image mathematics (colour spaces, gradients, projections, geometry).
 
 import importlib
 
-MODULES = ["solar", "road", "landscape", "vehicle", "structure"]
+MODULES = ["solar", "road", "landscape", "vehicle", "structure", "texture"]
 
 
 def load(name):

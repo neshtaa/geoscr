@@ -66,7 +66,9 @@ need the true orientation of the canvas are NaN when ``sph.heading`` is None.
    texture.
 """
 
+import json
 import math
+import os
 
 import numpy as np
 
@@ -632,13 +634,53 @@ def _sky_features(P, sk, g, F):
         F["sky_grad_b"] = float(lab[..., 2][zen].mean() - lab[..., 2][low].mean())
 
 
-def _disk_candidates(sph, P, g, Ysh):
+_DET = None
+
+
+def _detector():
+    """Logistic sun-disk classifier (tools/calibrate_sun.py): candidate statistics -> P(real sun).
+
+    Fitted on Street View panoramas whose capture month, latitude and true heading
+    tell where the sun can be: a candidate is labelled real when it lies within
+    3 deg of a solar position possible at that place and month."""
+    global _DET
+    if _DET is None:
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                            "data", "model", "sun_detector.json")
+        _DET = json.load(open(path)) if os.path.exists(path) else {}
+    return _DET
+
+
+_LOG_KEYS = {"req": 0.3, "rmax": 0.3, "area_share": 1e-3}
+
+
+def detector_row(st):
+    return [float(st[k]) if st.get(k) is not None and np.isfinite(st[k]) else np.nan for k in _detector()["features"]]
+
+
+def _disk_prob(st):
+    det = _detector()
+    if not det:
+        return _disk_score(st)
+    x = np.array(detector_row(st), np.float64)
+    for k, off in _LOG_KEYS.items():
+        if k in det["features"]:
+            i = det["features"].index(k)
+            x[i] = math.log(x[i] + off) if np.isfinite(x[i]) else np.nan
+    z = np.clip(np.nan_to_num((x - np.array(det["median"])) / np.array(det["std"])), -5, 5)
+    f = np.concatenate([[1.0], z, z * z])
+    return _sigmoid(float(f @ np.array(det["w"])))
+
+
+def _disk_candidates(sph, P, g, Ysh, F):
     cands = _sun_disk(P, g)
     for c in cands:
-        c["score"] = _disk_score(c)
         ap = c["phi"] + 180.0 if c["phi"] < 0 else c["phi"] - 180.0
         sc, sp, se = _shadow_contrast(Ysh, ap, -c["el"])
         c["shadow"] = sc
+        c["sky_sat_frac"] = F.get("sky_sat_frac", np.nan)
+        c["sky_clear"] = F.get("sky_clear_frac", np.nan)
+        c["score"] = _disk_prob(c)
     cands.sort(key=lambda s: -s["score"])
     return cands
 
@@ -658,7 +700,7 @@ def extract(sph):
     _sky_features(P, sk, g, F)
 
     # ---------------------------------------------------------- sun disk
-    cands = _disk_candidates(sph, P, g, Ysh)
+    cands = _disk_candidates(sph, P, g, Ysh, F)
     best = cands[0] if cands else None
     upper_valid = P["valid"][: int(np.searchsorted(-g["el"], 0.0))]
     measurable = upper_valid.mean() > 0.02

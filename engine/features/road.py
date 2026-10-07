@@ -18,6 +18,7 @@ FEATURE_NAMES = [
     "yellow_any", "double_center", "dashed_center", "dashed_edge", "center_off_m",
     "lane_width_m", "n_lines", "right_hand_traffic",
     "curb", "sidewalk", "verge_a", "verge_b", "verge_green",
+    "side_asym", "side_centre",
 ]
 
 H_CAM = 2.5           # Street View camera height above the road (m)
@@ -189,6 +190,46 @@ def _structure_axis(L, V):
     grad_dir = 0.5 * math.degrees(math.atan2(s2, c2))    # gradient orientation (x -> y)
     axis = (grad_dir + 90.0 + 90.0) % 180.0 - 90.0        # features run perpendicular to gradients
     return axis, coh
+
+
+_AXIS_ANG = np.arange(0.0, 360.0, 1.0)
+_AXIS_R = np.linspace(4.0, 16.0, 25)
+
+
+def estimate_axis(sph):
+    """Road axis (relative longitude, deg, mod 180) when the car heading is unknown.
+
+    Ground points on a polar grid (distance 4-16 m, 1 deg azimuth) are binned by their
+    lateral offset from a candidate axis; the axis that maximises the correlation
+    ratio (between-bin / total variance) of L* and b* across the lateral bins is the
+    one along which edges, verges and paint run.  Returns (axis, sharpness)."""
+    s = sph.resized(1024)
+    A, R = np.meshgrid(_AXIS_ANG, _AXIS_R, indexing="ij")
+    el = -np.degrees(np.arctan2(H_CAM, R))
+    px = (((A + 180.0) % 360.0) / 360.0 * s.w).astype(np.int64) % s.w
+    py = np.clip(((90.0 - el) / 180.0 * s.h).astype(np.int64), 0, s.h - 1)
+    ok = s.mask[py, px]
+    if ok.mean() < 0.4:
+        return None, 0.0
+    lab = _lab_from_linear(_LIN[s.rgb[py, px]])
+    vals = [lab[..., 0][ok], 2.0 * lab[..., 2][ok]]
+    a, r = np.radians(A[ok]), R[ok]
+    best, best_ax = -1.0, None
+    nb = 40
+    for ax in np.arange(0.0, 180.0, 2.0):
+        d = a - math.radians(ax)
+        y, x = r * np.sin(d), r * np.cos(d)
+        sel = np.abs(x) > 2.5
+        yb = np.clip(((y[sel] + 10.0) / 20.0 * nb).astype(np.int64), 0, nb - 1)
+        cnt = np.bincount(yb, minlength=nb).astype(np.float64)
+        sc = 0.0
+        for v in vals:
+            vv = v[sel]
+            m = np.bincount(yb, weights=vv, minlength=nb) / np.maximum(cnt, 1)
+            sc += float(np.sum(cnt * (m - vv.mean()) ** 2) / (np.sum((vv - vv.mean()) ** 2) + 1e-6))
+        if sc > best:
+            best, best_ax = sc, float(ax)
+    return best_ax, best
 
 
 # ---------------------------------------------------------------- lines
@@ -376,13 +417,13 @@ def extract(sph, debug=False):
     car_known = sph.car_heading is not None
     car = float(sph.car_heading) if car_known else 0.0
     lin, V = build_ipm(sph, car)
-    if not car_known and V.sum() > 2000:
-        ax, coh = _structure_axis(_lab_from_linear(lin)[..., 0], V)
+    if not car_known:
+        ax, coh = estimate_axis(sph)
         if ax is not None:
-            car = car - ax        # rotate the grid so that +x runs along the road axis
+            car = ax              # rotate the grid so that +x runs along the road axis
             lin, V = build_ipm(sph, car)
             ev["axis_estimated"] = {"rel_longitude": round((car + 180.0) % 360.0 - 180.0, 1),
-                                    "coherence": round(coh, 2)}
+                                    "sharpness": round(coh, 2)}
     out["ipm_valid"] = float(V.mean())
     if V.sum() < 1500:
         ev["road"] = "ground not visible"
@@ -589,7 +630,7 @@ def extract(sph, debug=False):
     yr = float(np.median(ers)) if ers else np.nan
     if np.isfinite(yl) and np.isfinite(yr):
         out["road_width_m"] = yl - yr
-        out["road_center_off_m"] = 0.5 * (yl + yr)
+        out["road_center_off_m"] = abs(0.5 * (yl + yr))   # sign = driving side (side_* features)
     else:
         out["road_width_m"] = 2 * YR       # an edge out of range: wide surface
 
@@ -623,7 +664,7 @@ def extract(sph, debug=False):
         out["yellow_center"] = c * centre["yellow"]
         out["white_center"] = c * (1 - centre["yellow"])
         out["dashed_center"] = centre["dashed"]
-        out["center_off_m"] = centre["y0"]
+        out["center_off_m"] = abs(centre["y0"])
         dbl, sep = _double_profile(centre, Lc, bc, V, centre["yellow"] > 0.5)
         d1 = _sig((dbl - 0.35) / 0.08)
         d2 = 1.0 if (len(centre["members"]) >= 2 and 0.17 <= centre["sep"] <= 0.55) else 0.0
@@ -666,6 +707,9 @@ def extract(sph, debug=False):
             dsd["asym_w"] = (1.0 if len(asy) == 2 else 0.6) if agree else 0.25
         if centre is not None and 0.8 < abs(centre["y0"]) < 4.5:
             dsd["centre"] = math.copysign(1.0, centre["y0"]) * centre["conf"]
+        if "asym" in dsd:
+            out["side_asym"] = dsd["asym"] * dsd["asym_w"]
+        out["side_centre"] = dsd.get("centre", 0.0)
         if dsd:
             z = 10.0 * dsd.get("asym", 0.0) * dsd.get("asym_w", 0.0) + 1.5 * dsd.get("centre", 0.0)
             out["right_hand_traffic"] = _sig(z)

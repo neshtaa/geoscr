@@ -1,74 +1,103 @@
 #!/usr/bin/env python3
 """
-Test suite for GeoGuessr Locator and Plonk It Knowledge Base
+Tests for the pure-math locator:  python3 -m unittest test_locator -v
 """
-
-import unittest
-import json
+import math
 import os
-from engine.rules_matcher import GeoKnowledgeBase
-from engine.offline_engine import OfflineGeoLocator
+import unittest
 
-class TestGeoLocator(unittest.TestCase):
+import numpy as np
+from PIL import Image
+
+from engine import features
+from engine.geo import country_at, geoguessr_score, haversine_km
+from engine.hints import build_hints, observations
+from engine.panorama import SphericalImage
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
+PANO = os.path.join(ROOT, "test_japan_pano.jpg")
+HAVE_MODEL = os.path.exists(os.path.join(ROOT, "data", "model", "model.json"))
+
+
+class TestGeometry(unittest.TestCase):
+    def test_country_lookup(self):
+        self.assertEqual(country_at(50.45, 30.52), "UA")
+        self.assertEqual(country_at(35.68, 139.69), "JP")
+        self.assertEqual(country_at(-23.55, -46.63), "BR")
+
+    def test_score_curve(self):
+        self.assertAlmostEqual(float(geoguessr_score(0)), 5000.0)
+        d = float(haversine_km(50.45, 30.52, 52.23, 21.01))
+        self.assertTrue(680 < d < 700)
+
+    def test_views_roundtrip(self):
+        img = Image.open(PANO).convert("RGB").resize((1024, 512))
+        sph = SphericalImage.from_equirect(img, heading=0.0, width=1024)
+        views = [{"image": sph.render_view(y, p, 120.0, (640, 400)), "yaw": y, "pitch": p, "hfov": 120.0}
+                 for p in (-55, 0, 55) for y in (0, 90, 180, 270)]
+        rec = SphericalImage.from_views(views, width=1024)
+        self.assertGreater(rec.coverage(), 0.98)
+        band = slice(rec.row_of(40), rec.row_of(-40))
+        err = np.abs(rec.rgb[band].astype(float) - sph.rgb[band].astype(float))[rec.mask[band]].mean()
+        self.assertLess(err, 12.0)
+
+
+class TestSolar(unittest.TestCase):
+    def test_latitude_likelihood_hemisphere(self):
+        from engine.features.solar import latitude_likelihood
+        grid = np.arange(-60.0, 75.0, 1.0)
+        # sun due north at 40 deg elevation: only possible in the southern hemisphere / tropics
+        L = latitude_likelihood(0.0, 40.0, grid)
+        self.assertGreater(L[grid < 0].sum(), 0.8)
+        L = latitude_likelihood(180.0, 30.0, grid)
+        self.assertGreater(L[grid > 0].sum(), 0.8)
+        self.assertAlmostEqual(float(L.sum()), 1.0, places=5)
+
+
+class TestFeatures(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.kb = GeoKnowledgeBase()
-        cls.locator = OfflineGeoLocator()
+        cls.sph = SphericalImage.from_equirect(PANO, heading=90.0)
 
-    def test_kb_loaded(self):
-        self.assertGreater(len(self.kb.kb), 50, "Knowledge base should have at least 50 countries")
+    def test_modules(self):
+        for m in features.available():
+            r = m.extract(self.sph)
+            self.assertEqual(len(r["x"]), len(m.FEATURE_NAMES), m.NAME)
+            self.assertIsInstance(r["evidence"], dict)
 
-    def test_ukraine_query(self):
-        ua = self.kb.get_country("UA")
-        self.assertIsNotNone(ua, "Ukraine (UA) must be present in KB")
-        self.assertEqual(ua["title"], "Ukraine")
-        
-        # Check that red car is mentioned in Ukraine tips
-        all_text = " ".join([c["text"] for c in ua["all_clues"]]).lower()
-        self.assertIn("red google car", all_text)
+    def test_unknown_heading_and_partial_view(self):
+        sph = SphericalImage.from_screenshot(Image.open(PANO).crop((0, 100, 800, 500)), hfov=100.0)
+        for m in features.available():
+            r = m.extract(sph)
+            self.assertEqual(len(r["x"]), len(m.FEATURE_NAMES), m.NAME)
 
-    def test_kenya_prediction(self):
-        # Clues: snorkel, pickup truck
-        res = self.locator.predict_from_features(driving_side="left", clues_list=["snorkel", "pickup truck"])
-        top = res["top_prediction"]
-        self.assertIsNotNone(top)
-        self.assertEqual(top["country_code"], "KE")
 
-    def test_ghana_tape_meta(self):
-        res = self.locator.predict_from_features(clues_list=["black tape", "roof rack"])
-        top = res["top_prediction"]
-        self.assertIsNotNone(top)
-        self.assertEqual(top["country_code"], "GH")
+class TestHints(unittest.TestCase):
+    def test_observations_and_cards(self):
+        F = {"road.right_hand_traffic": 0.05, "road.yellow_center": 0.0, "road.paved": 0.2, "road.markings": 0.0,
+             "landscape.soil_red": 0.3}
+        tags = [t for t, _ in observations(F)]
+        self.assertIn("drive_left", tags)
+        self.assertIn("unpaved", tags)
+        self.assertIn("red_soil", tags)
+        h = build_hints(F, [("KE", 0.6), ("ZA", 0.2)], 2)
+        self.assertEqual(h["countries"][0]["country_code"], "KE")
+        self.assertTrue(h["countries"][0]["driving_side_consistent"])
+        self.assertTrue(h["countries"][0]["geoguessr"] or h["countries"][0]["plonkit"])
 
-    def test_search_bollard(self):
-        results = self.kb.search_clues("bollard", top_k=5)
-        self.assertGreater(len(results), 0)
 
-    def test_compare_countries(self):
-        diffs = self.kb.get_differentiating_clues("UA", "RU")
-        self.assertIsInstance(diffs, list)
+@unittest.skipUnless(HAVE_MODEL, "trained model missing (tools/train_model.py --save)")
+class TestLocator(unittest.TestCase):
+    def test_end_to_end(self):
+        from engine.locator import get_locator
+        res = get_locator().analyze_image(PANO)
+        p = [c["probability"] for c in res["countries"]]
+        self.assertEqual(p, sorted(p, reverse=True))
+        self.assertTrue(0 < sum(p) <= 1.0001)
+        self.assertTrue(-90 <= res["guess"]["lat"] <= 90 and -180 <= res["guess"]["lng"] <= 180)
+        self.assertTrue(res["hints"])
+        self.assertFalse(math.isnan(res["guess"]["expected_score"]))
 
-    def test_real_image_brazil_soil(self):
-        if os.path.exists("sample_brazil_soil.png"):
-            res = self.locator.predict_image_heuristics("sample_brazil_soil.png")
-            self.assertEqual(res["top_prediction"]["country_code"], "BR")
-
-    def test_real_image_ukraine_car(self):
-        if os.path.exists("sample_ukraine_red_car.png"):
-            res = self.locator.predict_image_heuristics("sample_ukraine_red_car.png")
-            self.assertEqual(res["top_prediction"]["country_code"], "UA")
-
-    def test_postmatch_clues_loaded(self):
-        self.assertGreater(len(self.locator.postmatch_kb.get("clues_by_country", {})), 30)
-        clues = self.locator.postmatch_kb.get("all_clues") or self.locator.postmatch_kb.get("clues_by_id", {})
-        self.assertGreater(len(clues), 200)
-
-    def test_official_postmatch_clue_prediction(self):
-        res = self.locator.predict_from_features(clues_list=["Orange Roof Tiles", "Portuguese"])
-        self.assertEqual(res["top_prediction"]["country_code"], "BR")
-
-        res_vn = self.locator.predict_from_features(clues_list=["Waystones with Coloured Tops", "Vietnamese"])
-        self.assertEqual(res_vn["top_prediction"]["country_code"], "VN")
 
 if __name__ == "__main__":
     unittest.main()
