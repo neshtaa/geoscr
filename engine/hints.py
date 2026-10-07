@@ -20,7 +20,7 @@ TAGS = {
     "yellow_center": ("Жовта центральна лінія", ["yellow centre", "yellow center", "yellow middle", "yellow line", "yellow lines", "yellow road"]),
     "white_center": ("Біла центральна лінія", ["white centre", "white center", "white middle", "white line", "white lines"]),
     "double_center": ("Подвійна центральна лінія", ["double", "two lines", "double yellow", "double white"]),
-    "dashed_center": ("Переривчаста центральна лінія", ["dashed", "broken line", "dashes"]),
+    "dashed_center": ("Переривчаста центральна лінія", ["dashed centre", "dashed center", "dashed middle", "dashed yellow", "dashed white", "broken centre", "broken center"]),
     "yellow_edge": ("Жовті крайові лінії", ["yellow outer", "yellow edge", "yellow outside", "yellow side line"]),
     "white_edge": ("Білі крайові лінії", ["white outer", "white edge", "white outside", "white side line"]),
     "no_markings": ("Розмітки немає", ["no road lines", "no lines", "unmarked", "without lines", "no markings"]),
@@ -35,13 +35,11 @@ TAGS = {
     "flat": ("Рівнина, відкритий горизонт", ["flat", "plains", "open landscape", "prairie"]),
     "water": ("Вода поруч (море / озеро)", ["sea", "coast", "lake", "ocean", "beach", "coastal"]),
     "urban": ("Міська забудова", ["city", "urban", "buildings", "apartment"]),
-    "rural": ("Сільська місцевість, мало будинків", ["rural", "countryside", "village", "farmland"]),
+    "rural": ("Майже немає будівель", ["rural", "countryside", "village", "farmland"]),
     "terracotta": ("Теракотові дахи", ["terracotta", "red roof", "orange roof", "tiled roof", "clay tile"]),
     "brick": ("Цегляні будинки", ["brick"]),
     "white_walls": ("Білі стіни будинків", ["white house", "white walls", "whitewashed", "white buildings"]),
     "poles": ("Стовпи ЛЕП уздовж дороги", ["pole", "poles", "utility pole", "electricity pole"]),
-    "wooden_poles": ("Темні (дерев'яні?) стовпи", ["wooden pole", "wooden poles", "wood pole"]),
-    "concrete_poles": ("Світлі (бетонні?) стовпи", ["concrete pole", "concrete poles", "cement"]),
     "wires": ("Багато повітряних дротів", ["wires", "power lines", "cables", "overhead"]),
     "curb": ("Бордюри / тротуари", ["curb", "kerb", "sidewalk", "pavement"]),
     "sun_north": ("Сонце на півночі -> ймовірно Південна півкуля", ["southern hemisphere", "sun in the north"]),
@@ -96,17 +94,17 @@ def observations(F):
     if sand is not None and sand > 0.2:
         add("sand", sand * 2)
     dry = _f(F, "landscape.veg_horizon_dry")
-    if dry is not None and dry > 0.15:
-        add("dry", dry * 2.5)
+    if dry is not None and dry > 0.35:
+        add("dry", dry * 1.6)
     green = _f(F, "landscape.veg_canopy_green")
     if green is not None and green > 0.45:
         add("lush", green)
     dark = _f(F, "landscape.veg_canopy_dark")
-    if dark is not None and dark > 0.25:
-        add("conifer", dark * 2)
+    if dark is not None and dark > 0.2:
+        add("conifer", dark * 2.5)
     snow = max(_f(F, "landscape.snow_ground") or 0, _f(F, "landscape.snow_horizon") or 0)
-    if snow > 0.08:
-        add("snow", snow * 4)
+    if snow > 0.15:
+        add("snow", snow * 3)
     far = _f(F, "landscape.far_frac")
     if far is not None and far > 0.15:
         add("mountains", far * 2.5)
@@ -118,24 +116,18 @@ def observations(F):
         add("water", water * 8)
     built = _f(F, "structure.b_built_frac")
     if built is not None:
-        if built > 0.25:
-            add("urban", 0.5 + built)
-        elif built < 0.03:
-            add("rural", 0.7)
-        if built > 0.05:
-            for k, tag in (("p_terracotta", "terracotta"), ("p_brick", "brick"), ("p_white", "white_walls")):
+        if built > 0.08:
+            add("urban", 0.5 + 2 * built)
+        elif built < 0.002:
+            add("rural", 0.6)
+        if built > 0.03:
+            for k, tag, thr in (("p_terracotta", "terracotta", 0.25), ("p_brick", "brick", 0.3), ("p_white", "white_walls", 0.5)):
                 v = _f(F, "structure." + k)
-                if v is not None and v > 0.2:
-                    add(tag, v * 2)
+                if v is not None and v > thr:
+                    add(tag, v * 1.5)
     n = _f(F, "structure.pole_n360")
     if n is not None and n >= 2:
         add("poles", 0.3 + 0.1 * n)
-        rel = _f(F, "structure.pole_rel_l")
-        if rel is not None:
-            if rel < 0.45:
-                add("wooden_poles", 0.6)
-            elif rel > 0.65:
-                add("concrete_poles", 0.6)
     wc = _f(F, "structure.wire_cols")
     if wc is not None and wc > 0.35:
         add("wires", wc)
