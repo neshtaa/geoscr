@@ -1,0 +1,332 @@
+{
+ "source": "GET /api/maps/{id}",
+ "fetched": "2026-10-08",
+ "maps": [
+  {
+   "id": "62a44b22040f04bd36e8a914",
+   "slug": "62a44b22040f04bd36e8a914",
+   "name": "A Community World",
+   "maxErrorDistance": 18534781,
+   "bounds": {
+    "min": {
+     "lat": -77.84528850589427,
+     "lng": -177.39212542035233
+    },
+    "max": {
+     "lat": 78.2237494667128,
+     "lng": 178.45815885438813
+    }
+   },
+   "coordinateCount": 105000,
+   "updatedAt": "2026-10-03T15:03:33.8170000Z",
+   "world": true
+  },
+  {
+   "id": "668ea3252973190af74233b5",
+   "slug": "668ea3252973190af74233b5",
+   "name": "A Competitive World",
+   "maxErrorDistance": 17499125,
+   "bounds": {
+    "min": {
+     "lat": -54.878946669718026,
+     "lng": -170.65841194028698
+    },
+    "max": {
+     "lat": 78.06418159719388,
+     "lng": 178.54086483107125
+    }
+   },
+   "coordinateCount": 108804,
+   "updatedAt": "2026-08-18T09:09:10.7330000Z",
+   "world": true
+  },
+  {
+   "id": "6078c830e945e900015f4a64",
+   "slug": "6078c830e945e900015f4a64",
+   "name": "A Learning World",
+   "maxErrorDistance": 15665917,
+   "bounds": {
+    "min": {
+     "lat": -62.59608683422471,
+     "lng": -177.38185725026923
+    },
+    "max": {
+     "lat": 78.22322873904109,
+     "lng": 175.39452743664057
+    }
+   },
+   "coordinateCount": 517,
+   "updatedAt": "2026-10-02T22:34:37.4670000Z",
+   "world": true
+  },
+  {
+   "id": "698ef135b77fb917bcdf8425",
+   "slug": "698ef135b77fb917bcdf8425",
+   "name": "A Modified Moving World",
+   "maxErrorDistance": 14999250,
+   "bounds": {
+    "min": {
+     "lat": -54.84547053792497,
+     "lng": -165.41319452515407
+    },
+    "max": {
+     "lat": 78.21703200532617,
+     "lng": 178.36281639909313
+    }
+   },
+   "coordinateCount": 85510,
+   "updatedAt": "2026-07-06T16:52:35.3950000Z",
+   "world": true
+  },
+  {
+   "id": "696fe47c5b07bed052077a95",
+   "slug": "696fe47c5b07bed052077a95",
+   "name": "A Moving World",
+   "maxErrorDistance": 14999250,
+   "bounds": {
+    "min": {
+     "lat": -54.93796135505917,
+     "lng": -177.3745103358231
+    },
+    "max": {
+     "lat": 78.2190710967324,
+     "lng": 178.54388568513284
+    }
+   },
+   "coordinateCount": 100000,
+   "updatedAt": "2026-10-03T13:55:40.1860000Z",
+   "world": true
+  },
+  {
+   "id": "6620b311f64a7b842b2ca83a",
+   "slug": "6620b311f64a7b842b2ca83a",
+   "name": "A Pro World",
+   "maxErrorDistance": 18499075,
+   "bounds": {
+    "min": {
+     "lat": -54.88669724538031,
+     "lng": -170.7537739259405
+    },
+    "max": {
+     "lat": 78.2191175104757,
+     "lng": 178.54137884576681
+    }
+   },
+   "coordinateCount": 110855,
+   "updatedAt": "2026-10-08T00:18:02.6290000Z",
+   "world": true
+  },
+  {
+   "id": "698f47ed7f653e99dffa51bb",
+   "slug": "698f47ed7f653e99dffa51bb",
+   "name": "A Progression World",
+   "maxErrorDistance": 18499075,
+   "bounds": {
+    "min": {
+     "lat": -54.83487530000343,
+     "lng": -170.7237941537852
+    },
+    "max": {
+     "lat": 76.41847650314814,
+     "lng": 178.36927931995885
+    }
+   },
+   "coordinateCount": 93441,
+   "updatedAt": "2026-08-18T08:05:12.7660000Z",
+   "world": true
+  },
+  {
+   "id": "66c65a243165335bb951ec5b",
+   "slug": "66c65a243165335bb951ec5b",
+   "name": "A Souvlaki World",
+   "maxErrorDistance": 14850091,
+   "bounds": {
+    "min": {
+     "lat": -54.87081598154721,
+     "lng": -177.37248529676842
+    },
+    "max": {
+     "lat": 78.6556009848611,
+     "lng": 178.45892988795114
+    }
+   },
+   "coordinateCount": 110000,
+   "updatedAt": "2026-09-19T15:33:30.2450000Z",
+   "world": true
+  },
+  {
+   "id": "643dbc7ccc47d3a344307998",
+   "slug": "643dbc7ccc47d3a344307998",
+   "name": "An Arbitrary Rural World",
+   "maxErrorDistance": 18499075,
+   "bounds": {
+    "min": {
+     "lat": -54.88689140739704,
+     "lng": -170.81815746973163
+    },
+    "max": {
+     "lat": 78.2176728609497,
+     "lng": 178.52796315832214
+    }
+   },
+   "coordinateCount": 108469,
+   "updatedAt": "2026-10-07T23:42:52.6870000Z",
+   "world": true
+  },
+  {
+   "id": "6782d7f16a0a261e8f6dad60",
+   "slug": "6782d7f16a0a261e8f6dad60",
+   "name": "An Extra-Informed World",
+   "maxErrorDistance": 18499075,
+   "bounds": {
+    "min": {
+     "lat": -54.83787510452843,
+     "lng": -170.72758953725207
+    },
+    "max": {
+     "lat": 72.78905027708169,
+     "lng": 178.3191160846101
+    }
+   },
+   "coordinateCount": 108791,
+   "updatedAt": "2026-10-04T00:53:37.0090000Z",
+   "world": true
+  },
+  {
+   "id": "676340ae2f718dbabdf30331",
+   "slug": "676340ae2f718dbabdf30331",
+   "name": "An Informed World",
+   "maxErrorDistance": 18499075,
+   "bounds": {
+    "min": {
+     "lat": -54.84040491034487,
+     "lng": -170.7328219501844
+    },
+    "max": {
+     "lat": 78.22317403468321,
+     "lng": 178.3796197597696
+    }
+   },
+   "coordinateCount": 109358,
+   "updatedAt": "2026-10-08T00:03:01.3980000Z",
+   "world": true
+  },
+  {
+   "id": "59e940ed39d855c868104b32",
+   "slug": "59e940ed39d855c868104b32",
+   "name": "GeoBettr World - Replayable",
+   "maxErrorDistance": 14008311,
+   "bounds": {
+    "min": {
+     "lat": -54.79894311147263,
+     "lng": -157.8548909791296
+    },
+    "max": {
+     "lat": 69.96945310469835,
+     "lng": 178.02486013053453
+    }
+   },
+   "coordinateCount": 2142,
+   "updatedAt": "2019-09-01T19:41:56.7690000Z",
+   "world": true
+  },
+  {
+   "id": "66014417ff2366aa9a7504df",
+   "slug": "66014417ff2366aa9a7504df",
+   "name": "The World",
+   "maxErrorDistance": 13316891,
+   "bounds": {
+    "min": {
+     "lat": -43.55798313997504,
+     "lng": -123.16880864493012
+    },
+    "max": {
+     "lat": 66.5203467033303,
+     "lng": 174.85133986777777
+    }
+   },
+   "coordinateCount": 42322,
+   "updatedAt": "2025-10-30T13:52:14.9200000Z",
+   "world": true
+  },
+  {
+   "id": "52d15ff6850ffb3b847cb3b4",
+   "slug": "world",
+   "name": "World",
+   "maxErrorDistance": 14916862,
+   "bounds": {
+    "min": {
+     "lat": -54.853378,
+     "lng": -159.778792
+    },
+    "max": {
+     "lat": 78.655743,
+     "lng": 178.4508514404297
+    }
+   },
+   "coordinateCount": 23456746,
+   "updatedAt": "2024-11-20T12:51:59.6650000Z",
+   "world": true
+  },
+  {
+   "id": "5ba862d12c0173524cd9327a",
+   "slug": "5ba862d12c0173524cd9327a",
+   "name": "AI Generated United Kingdom",
+   "maxErrorDistance": 1356695,
+   "bounds": {
+    "min": {
+     "lat": 49.960920182508154,
+     "lng": -8.13764455940069
+    },
+    "max": {
+     "lat": 60.82476451406643,
+     "lng": 1.758219282940228
+    }
+   },
+   "coordinateCount": 78772,
+   "updatedAt": "2025-05-22T13:58:40.4690000Z",
+   "world": false,
+   "aliases": [
+    "United Kingdom (Better Map)"
+   ]
+  },
+  {
+   "id": "5b323ce3150de566bc6805e5",
+   "slug": "5b323ce3150de566bc6805e5",
+   "name": "MLB and MiLB Stadiums 2019",
+   "maxErrorDistance": 5203315,
+   "bounds": {
+    "min": {
+     "lat": 25.77730676498147,
+     "lng": -123.10704615038333
+    },
+    "max": {
+     "lat": 49.24330433632209,
+     "lng": -70.27888950980406
+    }
+   },
+   "coordinateCount": 171,
+   "updatedAt": "2019-08-17T21:07:23.9910000Z",
+   "world": false
+  },
+  {
+   "id": "5ef4699bc0c6aa6d90cf1704",
+   "slug": "ukraine",
+   "name": "Ukraine",
+   "maxErrorDistance": 1312553,
+   "bounds": {
+    "min": {
+     "lat": 46.33356857299805,
+     "lng": 22.20966
+    },
+    "max": {
+     "lat": 52.240741,
+     "lng": 37.9412841796875
+    }
+   },
+   "coordinateCount": 14629,
+   "updatedAt": "2025-08-01T12:17:07.4360000Z",
+   "world": false
+  }
+ ]
+}

@@ -65,9 +65,10 @@ NON_WORLD_MAPS = {"Ukraine", "United Kingdom (Better Map)", "MLB and MiLB Stadiu
 
 
 def split_of(r):
-    """train: random Street View samples; calib / test: halves (by game) of the
-    user's real GeoGuessr World-map rounds; other: rounds from single-country maps."""
-    if r["mode"] in ("world", "balanced"):
+    """train: random Street View samples + public ranked-duel rounds of other players;
+    calib / test: halves (by game) of the user's real GeoGuessr World-map rounds;
+    other: rounds from single-country maps."""
+    if r["mode"] in ("world", "balanced", "duel"):  # duel = public ranked duels of other players
         return "train"
     if r.get("map") in NON_WORLD_MAPS:
         return "other"

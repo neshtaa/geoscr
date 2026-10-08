@@ -47,6 +47,7 @@
   "GE",
   "GH",
   "GI",
+  "GL",
   "GR",
   "GT",
   "GU",
@@ -68,6 +69,7 @@
   "KH",
   "KR",
   "KZ",
+  "LA",
   "LB",
   "LI",
   "LK",
@@ -98,6 +100,7 @@
   "PL",
   "PM",
   "PR",
+  "PS",
   "PT",
   "PY",
   "QA",
@@ -128,24 +131,24 @@
   "ZA"
  ],
  "weights": {
-  "solar": 0.1,
+  "solar": 0.0,
   "road": 0.02,
   "landscape": 0.0,
-  "vehicle": 0.05,
+  "vehicle": 0.0,
   "structure": 0.0,
-  "texture": 0.0,
-  "knn": 0.05,
-  "glm": 0.5,
+  "texture": 0.02,
+  "knn": 0.2,
+  "glm": 0.8,
   "sun": 1.0
  },
- "prior_mix": 0.4,
+ "prior_mix": 0.25,
  "knn_k": 40,
  "loc_params": {
-  "bw": 0.25,
-  "floor": 0.1
+  "bw": 4.0,
+  "floor": 0.3
  },
  "region_params": {
-  "bw": 0.5,
-  "floor": 0.3
+  "bw": 0.25,
+  "floor": 0.001
  }
 }

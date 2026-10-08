@@ -9,6 +9,7 @@ grid (data/world_regions.npz: uint16 grid at 0.05 deg + ISO 3166-2 codes and nam
 """
 import json
 import os
+import re
 import sys
 
 import numpy as np
@@ -16,24 +17,34 @@ from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
+sys.path.insert(0, ROOT)
+from engine.geo import country_at  # noqa: E402
 from make_country_raster import H, RES, W, ring_area, to_px  # noqa: E402
 
 
 def main(path):
     fc = json.load(open(path, encoding="utf-8"))
-    codes, names, countries, polys = ["--"], [""], [""], []
+    codes, names, countries, polys, index = ["--"], [""], [""], [], {}
     for f in fc["features"]:
         p = f["properties"]
         cc = (p.get("iso_a2") or "").upper()
-        code = p.get("iso_3166_2") or ""
-        if not code or code.startswith("-") or "-" not in code or code.endswith("~"):
-            code = "%s-%s" % (cc, p.get("adm1_code"))
+        if not re.match(r"^[A-Z]{2}$", cc) and p.get("latitude") is not None:
+            # territories without an ISO code in Natural Earth (e.g. Christmas Island): use the
+            # country raster at the region's label point so regions match the model's classes
+            cc = country_at(p["latitude"], p["longitude"]) or cc
+        code = (p.get("iso_3166_2") or "").upper()
+        if not re.match(r"^[A-Z]{2}-[A-Z0-9]{1,3}$", code):
+            code = "%s-%s" % (cc, re.sub(r"[^A-Z0-9]", "", str(p.get("adm1_code") or "").upper())[-6:])
         if not f.get("geometry"):
             continue
-        codes.append(code.upper())
-        names.append(p.get("name_en") or p.get("name") or code)
-        countries.append(cc)
-        idx = len(codes) - 1
+        code = code.upper()
+        if code in index:  # several features of one region (e.g. split islands) share one index
+            idx = index[code]
+        else:
+            codes.append(code)
+            names.append(p.get("name_en") or p.get("name") or code)
+            countries.append(cc)
+            idx = index[code] = len(codes) - 1
         g = f["geometry"]
         parts = g["coordinates"] if g["type"] == "MultiPolygon" else [g["coordinates"]]
         for part in parts:

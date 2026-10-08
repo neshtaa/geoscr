@@ -6,16 +6,19 @@ pano id / coordinates. Only official Google coverage (image type 2) is
 requested, which is the same imagery GeoGuessr serves on its World map.
 """
 
+import http.client
 import io
 import json
 import math
-import urllib.request
+import socket
+import threading
 
 from PIL import Image
 
-RPC = "https://maps.googleapis.com/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/"
-TILE_URL = ("https://streetviewpixels-pa.googleapis.com/v1/tile?cb_client=apiv3"
-            "&panoid={pano}&output=tile&x={x}&y={y}&zoom={z}&nbt=1&fover=2")
+RPC_HOST = "maps.googleapis.com"
+RPC_PATH = "/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/"
+TILE_HOST = "streetviewpixels-pa.googleapis.com"
+TILE_PATH = "/v1/tile?cb_client=apiv3&panoid={pano}&output=tile&x={x}&y={y}&zoom={z}&nbt=1&fover=2"
 HEADERS = {
     "content-type": "application/json+protobuf",
     "x-user-agent": "grpc-web-javascript/0.1",
@@ -23,10 +26,58 @@ HEADERS = {
 }
 
 
+_LOCAL = threading.local()
+
+
+def _connect(host, timeout):
+    """IPv4 keep-alive connection (one per thread and host).  Reusing connections avoids a
+    TCP+TLS handshake per tile; IPv4 first because some networks (WSL2) resolve IPv6
+    addresses without having an IPv6 route."""
+    addrs = sorted(socket.getaddrinfo(host, 443, 0, socket.SOCK_STREAM), key=lambda a: a[0] != socket.AF_INET)
+    conn = http.client.HTTPSConnection(host, timeout=timeout)
+    last = None
+    for fam, typ, proto, _, sa in addrs:
+        sock = socket.socket(fam, typ, proto)
+        sock.settimeout(min(timeout, 8))
+        try:
+            sock.connect(sa)
+        except OSError as e:
+            sock.close()
+            last = e
+            continue
+        sock.settimeout(timeout)
+        conn.sock = conn._context.wrap_socket(sock, server_hostname=host)
+        return conn
+    raise last or OSError("cannot connect to " + host)
+
+
+def _request(host, method, path, body=None, headers=None, timeout=20, tries=3):
+    pool = getattr(_LOCAL, "conns", None)
+    if pool is None:
+        pool = _LOCAL.conns = {}
+    err = None
+    for _ in range(tries):
+        conn = pool.get(host)
+        try:
+            if conn is None:
+                conn = pool[host] = _connect(host, timeout)
+            conn.request(method, path, body=body, headers=headers or {})
+            resp = conn.getresponse()
+            data = resp.read()
+            if resp.status >= 400:
+                raise OSError("HTTP %d for %s" % (resp.status, host))
+            return data
+        except (OSError, http.client.HTTPException) as e:
+            err = e
+            if conn is not None:
+                conn.close()
+            pool.pop(host, None)
+    raise err
+
+
 def _rpc(method, payload, timeout=20):
-    req = urllib.request.Request(RPC + method, data=json.dumps(payload).encode(), headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    data = _request(RPC_HOST, "POST", RPC_PATH + method, json.dumps(payload).encode(), HEADERS, timeout)
+    return json.loads(data.decode("utf-8"))
 
 
 def _parse_pano(p):
@@ -81,10 +132,9 @@ def get_metadata(pano_id):
 
 
 def _fetch_tile(pano_id, x, y, z, timeout=20):
-    url = TILE_URL.format(pano=pano_id, x=x, y=y, z=z)
-    req = urllib.request.Request(url, headers={"User-Agent": HEADERS["User-Agent"]})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return Image.open(io.BytesIO(resp.read())).convert("RGB")
+    data = _request(TILE_HOST, "GET", TILE_PATH.format(pano=pano_id, x=x, y=y, z=z),
+                    headers={"User-Agent": HEADERS["User-Agent"]}, timeout=timeout)
+    return Image.open(io.BytesIO(data)).convert("RGB")
 
 
 def download_panorama(meta, min_width=1600, out_width=2048):

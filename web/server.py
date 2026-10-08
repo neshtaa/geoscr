@@ -8,7 +8,13 @@ POST /api/predict  JSON, one of:
   {"views": [{"image_b64": "...", "yaw": 0, "pitch": 0, "hfov": 100}, ...]}   yaw = true azimuth (deg)
   {"image_b64": "...", "heading": 123.0, "hfov": 100}                          panorama (2:1) or screenshot
   {"pano_id": "..."} | {"lat": 50.4, "lng": 30.5}                               official Street View (tests)
-POST /api/evaluate_round  {"lat", "lng", "guess_lat", "guess_lng", "pred_code"}
+  optional "map": {"id", "name", "bounds": {"min": {"lat", "lng"}, "max": {...}}, "maxErrorDistance"}
+      (all optional; missing fields from data/maps.json) -> map prior, score scale and bounds;
+      invalid bounds / maxErrorDistance are dropped and listed in the result's "warnings";
+  optional "debug_dir": save the reconstructed sphere there as sphere.jpg (inside the project
+      or the temp directory; relative paths are relative to the project)
+POST /api/evaluate_round  {"lat", "lng", "guess_lat", "guess_lng", "pred_code", "map"?}
+GET  /api/maps     known maps (data/maps.json)
 GET  /api/health
 """
 import argparse
@@ -17,6 +23,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import traceback
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -27,7 +34,8 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from engine.geo import country_at, geoguessr_score, haversine_km  # noqa: E402
+from engine.geo import (country_at, geoguessr_points, haversine_km, load_maps, parse_bounds,  # noqa: E402
+                        positive_float, resolve_map)
 from engine.locator import distance_report, get_locator  # noqa: E402
 
 LOCK = threading.Lock()
@@ -40,22 +48,66 @@ def _img(b64):
     return Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
 
 
+def map_from_request(req, warnings=None):
+    """The optional "map" of a request -> map_info for the locator (None when absent).
+    A string is taken as an id / slug / name.  Invalid bounds (also boxes crossing the
+    antimeridian) and maxErrorDistance values are dropped (data/maps.json values apply instead)
+    with a note in warnings, so a round keeps its prediction."""
+    m = req.get("map")
+    if m is None or m == "" or m == {}:
+        return None
+    if isinstance(m, str):
+        return m
+    if not isinstance(m, dict):
+        raise ValueError("map must be an object {id, name, bounds, maxErrorDistance}")
+    warnings = [] if warnings is None else warnings
+    out = {k: str(m[k]) for k in ("id", "slug", "name") if m.get(k)}
+    if m.get("bounds") is not None:
+        if parse_bounds(m["bounds"]) is None:
+            warnings.append("map.bounds ignored: expected {min: {lat, lng}, max: {lat, lng}} with min <= max")
+        else:
+            out["bounds"] = m["bounds"]
+    if m.get("maxErrorDistance") is not None:
+        d = positive_float(m["maxErrorDistance"])
+        if d is None:
+            warnings.append("map.maxErrorDistance ignored: expected a positive number of metres")
+        else:
+            out["maxErrorDistance"] = d
+    return out or None
+
+
+def debug_dir_from_request(req):
+    d = req.get("debug_dir")
+    if not d:
+        return None
+    path = os.path.realpath(os.path.join(ROOT, str(d)))
+    allowed = [os.path.realpath(ROOT), os.path.realpath(tempfile.gettempdir())]
+    if not any(path == a or path.startswith(a + os.sep) for a in allowed):
+        raise ValueError("debug_dir must be inside the project or the temp directory")
+    return path
+
+
 def predict(req):
     loc = get_locator()
+    warnings = []
+    kw = {"map_info": map_from_request(req, warnings), "debug_dir": debug_dir_from_request(req)}
     if req.get("views"):
         views = [{"image": _img(v["image_b64"]), "yaw": float(v.get("yaw", 0.0)), "pitch": float(v.get("pitch", 0.0)),
                   "hfov": float(v.get("hfov", 100.0)), "true_north": bool(v.get("true_north", True))}
                  for v in req["views"]]
-        return loc.analyze_views(views)
-    if req.get("image_b64"):
+        res = loc.analyze_views(views, **kw)
+    elif req.get("image_b64"):
         h = req.get("heading")
-        return loc.analyze_image(_img(req["image_b64"]), heading=None if h is None else float(h),
-                                 hfov=req.get("hfov"), pitch=float(req.get("pitch", 0.0)))
-    if req.get("pano_id") or req.get("lat") is not None:
-        res = loc.analyze_pano(pano_id=req.get("pano_id"), lat=req.get("lat"), lng=req.get("lng"))
+        res = loc.analyze_image(_img(req["image_b64"]), heading=None if h is None else float(h),
+                                hfov=req.get("hfov"), pitch=float(req.get("pitch", 0.0)), **kw)
+    elif req.get("pano_id") or req.get("lat") is not None:
+        res = loc.analyze_pano(pano_id=req.get("pano_id"), lat=req.get("lat"), lng=req.get("lng"), **kw)
         res["check"] = distance_report(res, res["panorama"]["lat"], res["panorama"]["lng"])
-        return res
-    raise ValueError("expected views, image_b64, pano_id or lat/lng")
+    else:
+        raise ValueError("expected views, image_b64, pano_id or lat/lng")
+    if warnings:
+        res["warnings"] = warnings
+    return res
 
 
 def evaluate_round(req):
@@ -64,8 +116,14 @@ def evaluate_round(req):
     out = {"true_code": true_cc, "pred_code": req.get("pred_code"), "is_match": true_cc == req.get("pred_code")}
     if req.get("guess_lat") is not None:
         d = float(haversine_km(lat, lng, float(req["guess_lat"]), float(req["guess_lng"])))
-        out.update(distance_km=round(d, 1), points=int(round(float(geoguessr_score(d)))))
+        mp = resolve_map(map_from_request(req))
+        out.update(distance_km=round(d, 1), points=int(geoguessr_points(d, (mp or {}).get("maxErrorDistance"))))
     return out
+
+
+def list_maps():
+    return {"maps": [{k: m.get(k) for k in ("id", "slug", "name", "world", "maxErrorDistance", "bounds")}
+                     for m in load_maps()]}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -88,6 +146,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             return self._send(200, open(PAGE, "rb").read(), "text/html")
+        if self.path == "/api/maps":
+            return self._send(200, list_maps())
         if self.path == "/api/health":
             m = get_locator().model
             return self._send(200, {"ok": True, "countries": len(m.classes), "groups": m.groups})

@@ -17,19 +17,30 @@ Everything here is classical statistics / linear algebra (no neural networks):
   user's real GeoGuessr rounds (calib split) by maximising log-likelihood;
 * the location is a mixture over reference panoramas (country posterior spread by
   within-country similarity); the guess is the point maximising the expected
-  GeoGuessr score 5000·exp(-d / 1491.7 km).
+  GeoGuessr score 5000·exp(-10 d / D) with the map's maxErrorDistance D;
+* map-aware prior (data/model/priors.json, tools/build_priors.py): a mixture of the map's
+  empirical country frequencies (the user's CALIB rounds on that map, or public ranked duels
+  for other World-type maps) with the model prior.  The map bounds remove the countries with
+  (almost) nothing inside them; on maps smaller than World-type ones the world-level priors are
+  conditioned on the box (times each country's share inside it).  The guess stays inside the bounds.
 """
 
+import hashlib
 import json
 import math
 import os
+import sys
 
 import numpy as np
 
-from .geo import WORLD_SCORE_SCALE_KM, haversine_km
+from .geo import (WORLD_SCORE_SCALE_KM, clip_to_bounds, country_area_inside, haversine_km, in_bounds,
+                  parse_bounds, score_scale_km)
 
 SUN_LAT_GRID = np.arange(-60.0, 80.1, 1.0)
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "model")
+PRIORS_FILE = "priors.json"
+BOUNDS_MARGIN_DEG = 0.5   # location kernel: reference panoramas this far outside the bounds still count
+MASK_MIN_FRAC = 0.01      # share of its area or references inside the bounds a country needs to be kept
 
 
 # ----------------------------------------------------------------------------- utils
@@ -42,6 +53,22 @@ def _softmax(a):
     a = a - a.max(-1, keepdims=True)
     e = np.exp(a)
     return e / e.sum(-1, keepdims=True)
+
+
+def _norm(p):
+    p = np.asarray(p, float)
+    return p / np.maximum(p.sum(-1, keepdims=True), 1e-300)
+
+
+def mix_prior(kind, mix, base, ranked=None, emp=None):
+    """Prior of a map kind: 'map' = per-map empirical + ranked_world + model prior, 'ranked' =
+    ranked_world + model prior, anything else the model prior.  The components are already
+    restricted to the map bounds and normalised.  Row-wise on (n, C) arrays."""
+    if kind == "map":
+        return mix["map"] * emp + mix["map_ranked"] * ranked + (1.0 - mix["map"] - mix["map_ranked"]) * base
+    if kind == "ranked":
+        return mix["ranked"] * ranked + (1.0 - mix["ranked"]) * base
+    return base
 
 
 class GroupGaussian:
@@ -182,6 +209,8 @@ class GeoModel:
         self.prior_mix = 0.5
         self.loc_params = {"bw": 1.0, "floor": 1e-3}
         self.region_params = {"bw": 1.0, "floor": 0.05}
+        self.priors = {}
+        self._inside, self._share = {}, {}
 
     # ------------------------------------------------------------------ training
     def fit(self, X_by_group, y, lat, lng, is_world, min_count=6, knn_k=40):
@@ -279,14 +308,19 @@ class GeoModel:
         p = (votes + 1.0 * base[None, :]) / (votes.sum(1, keepdims=True) + 1.0)
         return np.log(p) - np.log(base)[None, :], d2
 
-    def prior(self):
-        return self.prior_mix * self.prior_world + (1 - self.prior_mix) * self.prior_uniform
-
-    def combine(self, ev, weights=None, prior_mix=None):
-        w = weights or self.weights
+    def base_prior(self, prior_mix=None):
         pm = self.prior_mix if prior_mix is None else prior_mix
-        prior = pm * self.prior_world + (1 - pm) * self.prior_uniform
-        lp = np.log(prior)[None, :] + 0.0
+        return pm * self.prior_world + (1 - pm) * self.prior_uniform
+
+    def prior(self, map_info=None):
+        return self.map_setup(map_info)["prior"]
+
+    def combine(self, ev, weights=None, prior_mix=None, prior=None):
+        """Log posterior (n, C); prior = (C,) or per-row (n, C) vector, else the model prior."""
+        w = weights or self.weights
+        if prior is None:
+            prior = self.base_prior(prior_mix)
+        lp = np.log(np.maximum(np.atleast_2d(prior), 1e-300))
         for g in self.groups:
             lp = lp + w.get(g, 0.0) * ev[g]
         lp = lp + w.get("knn", 0.0) * ev["knn"]
@@ -323,45 +357,167 @@ class GeoModel:
         self.weights, self.prior_mix = w, pm
         return best
 
+    # ---------------------------------------------------------------- map-aware prior
+    def empirical_prior(self, counts):
+        """Smoothed class frequencies from {country code: rounds} (codes outside the classes ignored)."""
+        a = float(self.priors.get("alpha", 0.25))
+        cidx = {c: i for i, c in enumerate(self.classes)}
+        v = np.zeros(len(self.classes))
+        for cc, n in counts.items():
+            if cc in cidx:
+                v[cidx[cc]] += max(float(n), 0.0)
+        return (v + a) / (v.sum() + a * len(v))
+
+    def refs_inside(self, bounds, margin=BOUNDS_MARGIN_DEG):
+        b = parse_bounds(bounds)
+        if (b, margin) not in self._inside:
+            self._inside[(b, margin)] = in_bounds(self.ref_lat, self.ref_lng, b, margin)
+        return self._inside[(b, margin)]
+
+    def bounds_share(self, bounds):
+        """(C,) share of each class inside the bounds (strict box): the larger of its land-area
+        share and its reference-panorama share."""
+        b = parse_bounds(bounds)
+        if b not in self._share:
+            C = len(self.classes)
+            n_all = np.bincount(self.ref_yi, minlength=C).astype(float)
+            n_in = np.bincount(self.ref_yi[self.refs_inside(b, 0.0)], minlength=C)
+            area = country_area_inside(b)
+            self._share[b] = np.maximum(n_in / np.maximum(n_all, 1.0), [area.get(c, 0.0) for c in self.classes])
+        return self._share[b]
+
+    def bounds_factors(self, bounds):
+        """(support, share) prior factors of the map bounds.  support: 1 for the classes with at
+        least MASK_MIN_FRAC of their area or references inside (relative to the best class, so a
+        city box keeps its country), ~0 for the rest.  share: ~P(inside the bounds | class), which
+        conditions a world-level prior on a smaller map (a neighbour that only touches the box
+        keeps almost nothing).  Both all ones without bounds."""
+        C = len(self.classes)
+        if parse_bounds(bounds) is None:
+            return np.ones(C), np.ones(C)
+        s = self.bounds_share(bounds)
+        thr = min(MASK_MIN_FRAC, 0.1 * float(s.max()))
+        return np.where((s >= thr) & (s > 0), 1.0, 1e-9), np.maximum(s, 1e-9)
+
+    def map_components(self, map_info, emp_counts=None, use=("map", "ranked")):
+        """(kind, ranked_world prior, per-map prior, bounds factor of the world-level priors) of a
+        map resolved by engine.geo.resolve_map, the priors restricted to the bounds and normalised.
+        The map's own counts already describe its bounds (support only); the ranked-duel and model
+        priors are world-level: support on World-type maps, conditioned on the box on other maps.
+        emp_counts overrides the stored per-map counts (out-of-fold calibration); use limits the
+        empirical priors ('map': per-map counts, 'ranked': ranked_world for World-type maps)."""
+        if not map_info:
+            return "none", None, None, np.ones(len(self.classes))
+        support, share = self.bounds_factors(map_info.get("bounds"))
+        wb = support if map_info.get("world") else share
+        rc = (self.priors.get("ranked_world") or {}).get("counts")
+        ranked = _norm(self.empirical_prior(rc) * wb) if rc else None
+        if emp_counts is None:
+            emp_counts = self.map_entry(map_info).get("counts")
+        emp = None
+        if "map" in use and emp_counts and ranked is not None:
+            emp = _norm(self.empirical_prior(emp_counts) * support)
+        if emp is not None:
+            return "map", ranked, emp, wb
+        ranked_ok = ranked is not None and map_info.get("world") and "ranked" in use
+        return ("ranked" if ranked_ok else "base"), ranked, emp, wb
+
+    def map_entry(self, map_info):
+        return (self.priors.get("maps") or {}).get((map_info or {}).get("id") or "") or {}
+
+    def fingerprint(self):
+        return hashlib.sha1(json.dumps([self.classes, self.groups]).encode()).hexdigest()[:12]
+
+    def map_params(self):
+        """Calibrated map-aware parameters (priors.json "params"), None if missing or fitted for a
+        model with other classes / feature groups."""
+        p = self.priors.get("params")
+        if p and p.get("model") not in (None, self.fingerprint()):
+            if not getattr(self, "_warned", False):
+                sys.stderr.write("priors.json params were calibrated for another model - map priors off "
+                                 "(run tools/train_model.py --calibrate-maps --save)\n")
+                self._warned = True
+            return None
+        return p
+
+    def counts_info(self, map_info):
+        """Rounds and dates behind a map's own counts; stale when the map was edited after them."""
+        e = self.map_entry(map_info)
+        if not e:
+            return None
+        dates = e.get("dates")
+        upd = str((map_info or {}).get("updatedAt") or e.get("map_updated") or "")[:10]
+        return {"rounds": e.get("n"), "dates": dates, "map_updated": upd or None,
+                "stale": upd > dates[1] if dates and upd else None}
+
+    def map_setup(self, map_info=None, use=("map", "ranked")):
+        """Prior, evidence exponents, score scale and bounds for a map resolved by
+        engine.geo.resolve_map.  No map: model prior, World scale, no bounds.  The empirical
+        mixtures need the parameters calibrated by tools/train_model.py (priors.json "params")."""
+        kind, ranked, emp, wb = self.map_components(map_info, use=use)
+        params = self.map_params()
+        if kind in ("map", "ranked") and not params:
+            kind = "base"
+        if kind in ("map", "ranked"):
+            weights = params["weights"]
+            prior = mix_prior(kind, params["mix"], _norm(self.base_prior(params["prior_mix"]) * wb), ranked, emp)
+        else:
+            weights, prior = self.weights, self.base_prior() * wb
+        return {"kind": kind, "weights": weights, "prior": _norm(prior),
+                "counts": self.counts_info(map_info) if kind == "map" else None,
+                "scale_km": score_scale_km((map_info or {}).get("maxErrorDistance")),
+                "bounds": parse_bounds((map_info or {}).get("bounds"))}
+
     # ---------------------------------------------------------------- location
-    def ref_weights(self, logpost_row, d2_row, bw=None, floor=None, top_countries=12):
+    def ref_weights(self, logpost_row, d2_row, bw=None, floor=None, top_countries=12, bounds=None):
         """Posterior mass over reference panoramas: P(country) spread inside each country by a
         Gaussian kernel on the embedding distance (bandwidth bw x the median of the 200 nearest
-        distances, plus a uniform floor share inside the country)."""
+        distances, plus a uniform floor share inside the country).  Panoramas outside the map
+        bounds (plus a small margin) get no weight."""
         bw = self.loc_params.get("bw", 1.0) if bw is None else bw
         floor = self.loc_params.get("floor", 1e-3) if floor is None else floor
         post = np.exp(logpost_row)
         w = np.zeros(len(self.ref_yi))
         h2 = max(float(np.median(np.sort(d2_row)[:200])), 1e-6) * bw
         kern = np.exp(-0.5 * (d2_row - d2_row.min()) / h2)
+        inside = self.refs_inside(bounds) if parse_bounds(bounds) else None
         for c in np.argsort(-post)[:top_countries]:
             rows = self.ref_rows[c]
+            if inside is not None:
+                rows = rows[inside[rows]]
             if not len(rows):
                 continue
             kc = kern[rows]
             kc = kc / max(kc.sum(), 1e-300)
             w[rows] = post[c] * ((1 - floor) * kc + floor / len(rows))
+        if inside is not None and w.sum() <= 0:  # no reference inside the bounds: clip later
+            return self.ref_weights(logpost_row, d2_row, bw, floor, top_countries)
         return w / max(w.sum(), 1e-300)
 
-    def locate(self, logpost_row, d2_row, support=2500, n_cand=300, w=None):
-        """Guess maximising the expected GeoGuessr score under the reference-panorama mixture."""
+    def locate(self, logpost_row, d2_row, support=2500, n_cand=300, w=None, score_scale_km=None, bounds=None):
+        """Guess maximising the expected GeoGuessr score (scale = maxErrorDistance / 10, World map
+        by default) under the reference-panorama mixture, inside the map bounds."""
+        scale = score_scale_km or WORLD_SCORE_SCALE_KM
         if w is None:
-            w = self.ref_weights(logpost_row, d2_row)
+            w = self.ref_weights(logpost_row, d2_row, bounds=bounds)
         sup = np.argsort(-w)[:support]
         ws = w[sup] / w[sup].sum()
         cand = sup[:n_cand]
         D = haversine_km(self.ref_lat[cand][:, None], self.ref_lng[cand][:, None],
                          self.ref_lat[sup][None, :], self.ref_lng[sup][None, :])
-        exp_score = (5000.0 * np.exp(-D / WORLD_SCORE_SCALE_KM)) @ ws
+        exp_score = (5000.0 * np.exp(-D / scale)) @ ws
         b = int(np.argmax(exp_score))
-        return {"lat": float(self.ref_lat[cand[b]]), "lng": float(self.ref_lng[cand[b]]),
-                "expected_score": float(exp_score[b])}
+        lat, lng = clip_to_bounds(self.ref_lat[cand[b]], self.ref_lng[cand[b]], bounds)
+        es = float(exp_score[b])
+        if (lat, lng) != (float(self.ref_lat[cand[b]]), float(self.ref_lng[cand[b]])):
+            es = float(5000.0 * np.exp(-haversine_km(lat, lng, self.ref_lat[sup], self.ref_lng[sup]) / scale) @ ws)
+        return {"lat": lat, "lng": lng, "expected_score": es}
 
-    def region_posterior(self, logpost_row, d2_row):
+    def region_posterior(self, logpost_row, d2_row, bounds=None):
         """P(admin-1 region) = sum of the reference weights of its panoramas (region kernel
         parameters calibrated separately from the location ones)."""
         rp = self.region_params
-        w = self.ref_weights(logpost_row, d2_row, rp.get("bw", 1.0), rp.get("floor", 0.05))
+        w = self.ref_weights(logpost_row, d2_row, rp.get("bw", 1.0), rp.get("floor", 0.05), bounds=bounds)
         p = np.bincount(self.ref_region, weights=w, minlength=int(self.ref_region.max()) + 1)
         p[0] = 0.0
         return p / max(p.sum(), 1e-300)
@@ -370,6 +526,7 @@ class GeoModel:
         from .geo import region_index
         self.ref_rows = [np.flatnonzero(self.ref_yi == c) for c in range(len(self.classes))]
         self.ref_region = region_index(self.ref_lat, self.ref_lng)
+        self._inside, self._share = {}, {}
 
     # ------------------------------------------------------------- persistence
     def save(self, path=MODEL_DIR):
@@ -388,6 +545,9 @@ class GeoModel:
                    "loc_params": self.loc_params, "region_params": self.region_params},
                   open(os.path.join(path, "model.json"), "w"), indent=1)
 
+    def save_priors(self, path=MODEL_DIR):
+        json.dump(self.priors, open(os.path.join(path, PRIORS_FILE), "w"), indent=1)
+
     @classmethod
     def load(cls, path=MODEL_DIR):
         m = cls()
@@ -397,6 +557,8 @@ class GeoModel:
         m.prior_mix, m.knn_k = meta["prior_mix"], meta["knn_k"]
         m.loc_params = meta.get("loc_params", {})
         m.region_params = meta.get("region_params", {})
+        pf = os.path.join(path, PRIORS_FILE)
+        m.priors = json.load(open(pf)) if os.path.exists(pf) else {}
         for k in ("ref_yi", "ref_lat", "ref_lng", "ref_emb", "prior_world", "prior_uniform", "train_freq", "lat_hist"):
             setattr(m, k, z[k])
         m.ref_emb = m.ref_emb.astype(np.float64)

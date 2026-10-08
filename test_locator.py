@@ -11,7 +11,7 @@ from PIL import Image
 
 from engine import features
 from engine.geo import country_at, geoguessr_score, haversine_km
-from engine.hints import build_hints, observations
+from engine.hints import ClueBase, build_hints, observations
 from engine.panorama import SphericalImage
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -86,9 +86,10 @@ class TestHints(unittest.TestCase):
         self.assertIn("unpaved", tags)
         self.assertIn("red_soil", tags)
         h = build_hints(F, [("KE", 0.6), ("ZA", 0.2)], 2)
-        # a regional GeoGuessr card is promoted when its region is likely
+        # keyword + region ranking (no clue index): a regional GeoGuessr card is promoted when its region is
+        # likely. With data/model/clue_index.npz the calibrated weights decide (tools/build_clue_index.py).
         hb = build_hints({}, [("BR", 0.9)], 1, [{"code": "BR-RS", "name": "Rio Grande do Sul", "country": "BR",
-                                                  "probability": 0.9}])
+                                                  "probability": 0.9}], kb=ClueBase(index_path=""))
         self.assertTrue(any("BR-RS" in c["regions"] for c in hb["countries"][0]["geoguessr"]))
         self.assertEqual(h["countries"][0]["country_code"], "KE")
         self.assertTrue(h["countries"][0]["driving_side_consistent"])

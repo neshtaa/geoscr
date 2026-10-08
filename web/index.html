@@ -13,7 +13,7 @@
   p.sub { color: var(--muted); margin: 0 0 16px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 12px 0; }
   label { display: block; margin: 6px 0; color: var(--muted); }
-  input[type=number], input[type=text] { width: 140px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+  input[type=number], input[type=text], select { width: 140px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
   button { padding: 8px 16px; border: 0; border-radius: 6px; background: var(--acc); color: #fff; font-weight: 600; cursor: pointer; }
   .bar { height: 8px; background: var(--acc); border-radius: 4px; }
   .row { display: grid; grid-template-columns: minmax(120px, 220px) 1fr 60px; gap: 8px; align-items: center; margin: 4px 0; }
@@ -29,6 +29,7 @@
     <label>Панорама (2:1) або скріншот <input id="file" type="file" accept="image/*"></label>
     <label>Курс центру зображення, град (необов'язково) <input id="heading" type="number" step="any"></label>
     <label>Або pano_id / «lat,lng» Street View <input id="pano" type="text" style="width:260px"></label>
+    <label>Карта (апріорні частоти, шкала балів, межі) <select id="map" style="width:260px"><option value="">— без карти —</option></select></label>
     <button id="go">Розпізнати</button> <span id="status" class="m"></span>
   </div>
   <div id="out"></div>
@@ -44,6 +45,10 @@ function render(r) {
   const g = r.guess;
   if (r.top_country_point) h += `<p class="m">Точка в межах ${esc(r.countries[0].name)}: ${r.top_country_point.lat}, ${r.top_country_point.lng}</p>`;
   h += `<p>Здогадка: <a target="_blank" href="https://www.google.com/maps?q=${g.lat},${g.lng}">${g.lat}, ${g.lng}</a> · очікувано ~${g.expected_score} балів</p>`;
+  if (r.map) h += `<p class="m">Карта: ${esc(r.map.name || r.map.id)} · бали за D = ${Math.round(r.map.score_scale_km * 10)} км · апріорі: ${esc(r.map.prior)}</p>`;
+  const pc = r.map && r.map.prior_counts;
+  if (pc && pc.stale) h += `<p class="m">Увага: карту змінено ${esc(pc.map_updated)}, після ігор, з яких взято частоти (${esc(pc.dates[0])}…${esc(pc.dates[1])})</p>`;
+  if (r.warnings) h += `<p class="m">${r.warnings.map(esc).join("<br>")}</p>`;
   if (r.check) h += `<p class="m">Перевірка: справжня країна ${esc(r.check.true_country)}, похибка ${r.check.distance_km} км, ${r.check.points} балів</p>`;
   h += `</div><div class="card"><b>Що видно</b><ul>` + r.observations.map(o => `<li>${esc(o.text)} <span class="m">${Math.round(o.strength * 100)}%</span></li>`).join("") + `</ul></div>`;
   for (const c of r.hints) {
@@ -56,8 +61,23 @@ function render(r) {
   }
   $("#out").innerHTML = h;
 }
+fetch("/api/maps").then(r => r.json()).then(d => {
+  for (const [label, world] of [["Світові карти", true], ["Інші карти", false]]) {
+    const maps = d.maps.filter(m => !!m.world === world);
+    if (!maps.length) continue;
+    const g = document.createElement("optgroup");
+    g.label = label;
+    for (const m of maps) {
+      const o = document.createElement("option");
+      o.value = m.id; o.textContent = m.name;
+      g.appendChild(o);
+    }
+    $("#map").appendChild(g);
+  }
+}).catch(() => {});
 $("#go").onclick = async () => {
   const body = {};
+  if ($("#map").value) body.map = {id: $("#map").value};
   const p = $("#pano").value.trim();
   if (p) {
     const m = p.match(/^\s*(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)\s*$/);

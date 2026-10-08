@@ -287,6 +287,54 @@ def run_history(args, seen):
     print(f"[history] stored {n} panoramas")
 
 
+def run_duels(args, seen):
+    """Rounds of public ranked duels (tools/crawl_duels.py) - real GeoGuessr location pools."""
+    from engine.geo import haversine_km
+    import numpy as np
+    state = json.load(open(os.path.join(ROOT, "data/calibration/duel_rounds.json")))
+    rounds = state["rounds"]
+    # never download a location of the user's own (calib/test) rounds
+    own = json.load(open(os.path.join(ROOT, "data/calibration/history_rounds.json")))
+    own_ids = {r["pano_id"] for r in own}
+    olat = np.array([r["lat"] for r in own])
+    olng = np.array([r["lng"] for r in own])
+    keep, dup = [], set()
+    for r in rounds:
+        if r["pano_id"] in own_ids or r["pano_id"] in dup:
+            continue
+        if float(np.min(haversine_km(r["lat"], r["lng"], olat, olng))) < 1.0:
+            continue
+        dup.add(r["pano_id"])
+        keep.append(r)
+    if args.n:
+        keep = keep[: args.n]
+    print(f"[duels] {len(rounds)} crawled rounds, {len(keep)} after removing the user's own locations")
+
+    def work(r):
+        try:
+            meta = retry(get_metadata, r["pano_id"]) if r.get("pano_id") else None
+            if not meta:
+                meta = retry(search_pano, r["lat"], r["lng"], 100)
+            if not meta or meta["pano_id"] in seen:
+                return None
+            seen[meta["pano_id"]] = True
+            extra = {"game": r["game"], "round": r["round"], "gg_country": r["gg_country"],
+                     "gg_heading": r.get("gg_heading"), "duel_mode": r.get("mode"),
+                     "round_lat": r["lat"], "round_lng": r["lng"], "start": r.get("start")}
+            return retry(fetch_and_store, args.out, meta, "duel", extra)
+        except Exception:
+            return None
+
+    done = 0
+    with ThreadPoolExecutor(args.threads) as ex:
+        for f in as_completed([ex.submit(work, r) for r in keep]):
+            if f.result():
+                done += 1
+                if done % 500 == 0:
+                    print(f"[duels] stored {done}", flush=True)
+    print(f"[duels] stored {done} panoramas")
+
+
 def run_postmatch(args, seen):
     pm = json.load(open(os.path.join(ROOT, "data/geoguessr_postmatch_clues.json"), encoding="utf-8"))
     panos = {}
@@ -315,7 +363,7 @@ def run_postmatch(args, seen):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["world", "balanced", "history", "postmatch"])
+    ap.add_argument("mode", choices=["world", "balanced", "history", "postmatch", "duels"])
     ap.add_argument("--out", default=os.path.join(ROOT, "scratch/dataset"))
     ap.add_argument("-n", type=int, default=2000, help="world: number of random land points")
     ap.add_argument("--quota", type=int, default=40, help="balanced: panoramas per country")
@@ -329,7 +377,7 @@ def main():
     os.makedirs(os.path.join(args.out, "panos"), exist_ok=True)
     seen = load_index(args.out)
     {"world": run_world, "balanced": run_balanced, "history": run_history,
-     "postmatch": run_postmatch}[args.mode](args, seen)
+     "postmatch": run_postmatch, "duels": run_duels}[args.mode](args, seen)
 
 
 if __name__ == "__main__":

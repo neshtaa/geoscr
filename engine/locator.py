@@ -8,7 +8,8 @@ Pipeline (no neural networks, no language models):
      camera vehicle and built structure;
   3. the calibrated Bayesian model (engine/model.py, trained by tools/train_model.py)
      turns the features into P(country | image) and a guess maximising the expected
-     GeoGuessr score;
+     GeoGuessr score; with a map (id / slug / name, bounds, maxErrorDistance; missing fields
+     from data/maps.json) the prior, the score scale and the bounds are the map's;
   4. engine/hints.py turns the measurements into observations and picks the matching
      clue cards from the GeoGuessr and Plonk It knowledge bases.
 """
@@ -20,7 +21,7 @@ import numpy as np
 from PIL import Image
 
 from . import features
-from .geo import region_info
+from .geo import bounds_dict, region_info, resolve_map
 from .hints import build_hints, clue_base
 from .model import MODEL_DIR, GeoModel
 from .panorama import SphericalImage
@@ -44,8 +45,14 @@ class Locator:
         self.modules = {m: features.load(m) for m in self.model.groups}
 
     # ------------------------------------------------------------------ core
-    def analyze(self, sph, top_k=5, n_hint_countries=3):
+    def analyze(self, sph, top_k=5, n_hint_countries=3, map_info=None, debug_dir=None):
+        """map_info: None, an id / slug / name, or a dict with any of id, slug, name, bounds,
+        maxErrorDistance.  debug_dir: also save the reconstructed sphere there (sphere.jpg)."""
         t0 = time.time()
+        if debug_dir:
+            os.makedirs(debug_dir, exist_ok=True)
+            Image.fromarray(sph.rgb).save(os.path.join(debug_dir, "sphere.jpg"), quality=90)
+        mp = resolve_map(map_info)
         X, evidence, flat = {}, {}, {}
         for name, mod in self.modules.items():
             try:
@@ -59,15 +66,17 @@ class Locator:
             flat.update({"%s.%s" % (name, k): float(v) for k, v in zip(mod.FEATURE_NAMES, x)})
         t_feat = time.time() - t0
         m = self.model
+        setup = m.map_setup(mp)
+        where = {"score_scale_km": setup["scale_km"], "bounds": setup["bounds"]}
         ev = m.evidence(X)
-        lp = m.combine(ev)[0]
+        lp = m.combine(ev, setup["weights"], prior=setup["prior"])[0]
         post = np.exp(lp)
         order = np.argsort(-post)
         kb = clue_base()
         countries = [{"code": m.classes[i], "name": kb.country_name(m.classes[i]),
                       "probability": round(float(post[i]), 4)} for i in order[:top_k]]
-        guess = m.locate(lp, ev["_d2"][0])
-        pr = m.region_posterior(lp, ev["_d2"][0])
+        guess = m.locate(lp, ev["_d2"][0], **where)
+        pr = m.region_posterior(lp, ev["_d2"][0], bounds=setup["bounds"])
         regions = []
         for i in np.argsort(-pr)[:400]:
             if pr[i] <= 0:
@@ -78,14 +87,14 @@ class Locator:
         top = order[0]
         lp_top = np.full_like(lp, -1e9)
         lp_top[top] = 0.0
-        g_top = m.locate(lp_top, ev["_d2"][0])
+        g_top = m.locate(lp_top, ev["_d2"][0], **where)
         # how much each evidence source moved the top country against the prior
-        prior = m.prior()
+        prior = setup["prior"]
         contrib = {}
         for c in order[:n_hint_countries]:
             row = {}
             for g in m.groups + ["knn"] + [k for k in ("glm", "sun") if k in ev]:
-                w = m.weights.get(g, 0.0)
+                w = setup["weights"].get(g, 0.0)
                 e = ev[g][0]
                 row[g] = round(float(w * (e[c] - np.dot(prior, e))), 2)
             contrib[m.classes[c]] = row
@@ -100,6 +109,10 @@ class Locator:
             "observations": hints["observations"],
             "hints": hints["countries"],
             "contributions": contrib,
+            "map": None if mp is None else {
+                "id": mp["id"], "slug": mp["slug"], "name": mp["name"], "bounds": bounds_dict(setup["bounds"]),
+                "maxErrorDistance": mp["maxErrorDistance"], "score_scale_km": round(setup["scale_km"], 1),
+                "world": mp["world"], "known": mp["known"], "prior": setup["kind"], "prior_counts": setup["counts"]},
             "measurements": evidence,
             "input": {"source": sph.source, "coverage": round(sph.coverage(), 3),
                       "true_heading_known": sph.heading is not None,
@@ -108,29 +121,30 @@ class Locator:
         }
 
     # ------------------------------------------------------------ front-ends
-    def analyze_image(self, image, heading=None, hfov=None, pitch=0.0):
-        return self.analyze(load_spherical(image, heading, hfov, pitch))
+    def analyze_image(self, image, heading=None, hfov=None, pitch=0.0, map_info=None, debug_dir=None):
+        return self.analyze(load_spherical(image, heading, hfov, pitch), map_info=map_info, debug_dir=debug_dir)
 
-    def analyze_views(self, views, width=2048):
+    def analyze_views(self, views, width=2048, map_info=None, debug_dir=None):
         """views: [{image, yaw (true azimuth if true_north), pitch, hfov, mask?}, ...]"""
-        return self.analyze(SphericalImage.from_views(views, width=width, heading=0.0))
+        return self.analyze(SphericalImage.from_views(views, width=width, heading=0.0), map_info=map_info,
+                            debug_dir=debug_dir)
 
-    def analyze_pano(self, pano_id=None, lat=None, lng=None, radius=1000):
+    def analyze_pano(self, pano_id=None, lat=None, lng=None, radius=1000, map_info=None, debug_dir=None):
         """Official Street View panorama by id or nearest to lat/lng (for tests and calibration)."""
         from .streetview import download_panorama, get_metadata, search_pano
         meta = get_metadata(pano_id) if pano_id else search_pano(lat, lng, radius)
         if not meta:
             raise LookupError("no official Street View panorama found")
         sph = SphericalImage.from_equirect(download_panorama(meta), heading=meta.get("heading"))
-        res = self.analyze(sph)
+        res = self.analyze(sph, map_info=map_info, debug_dir=debug_dir)
         res["panorama"] = {"pano_id": meta["pano_id"], "lat": meta["lat"], "lng": meta["lng"],
                            "country_code": meta.get("country_code"), "date": meta.get("date")}
         return res
 
 
 def distance_report(res, lat, lng):
-    """Distance / GeoGuessr points of a result against the true position."""
-    from .geo import country_at, geoguessr_score, haversine_km, region_at
+    """Distance / GeoGuessr points (with the result's map scale) of a result against the true position."""
+    from .geo import country_at, geoguessr_points, haversine_km, region_at
     d = float(haversine_km(lat, lng, res["guess"]["lat"], res["guess"]["lng"]))
     true_cc = country_at(lat, lng)
     codes = [c["code"] for c in res["countries"]]
@@ -138,7 +152,8 @@ def distance_report(res, lat, lng):
     rcodes = [r["code"] for r in res.get("regions", [])]
     return {"true_region": reg[0] + " " + reg[1] if reg else None,
             "rank_of_true_region": (rcodes.index(reg[0]) + 1) if reg and reg[0] in rcodes else None,
-            "distance_km": round(d, 1), "points": int(round(float(geoguessr_score(d)))), "true_country": true_cc,
+            "distance_km": round(d, 1), "true_country": true_cc,
+            "points": int(geoguessr_points(d, (res.get("map") or {}).get("maxErrorDistance"))),
             "rank_of_true_country": (codes.index(true_cc) + 1) if true_cc in codes else None}
 
 

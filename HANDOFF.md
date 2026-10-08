@@ -31,12 +31,16 @@ country from two captures with different start yaw: 94.2%.
 ## GeoGuessr's own analysis
 Not image recognition: the client calls `GET /api/v4/clues/{panoId}` and the server returns
 curated cards for that panorama (country, `seterraRegionIds` = ISO 3166-2 / AREA_* ids,
-heading/pitch/zoom of the view showing the clue). geoguessr.com is blocked by this cloud
-environment's network policy (403 at the proxy); the user can allow `www.geoguessr.com`,
-`game-server.geoguessr.com` in the environment's Network access settings. Then run
-`tools/fetch_pano_clues.py` (history rounds) and `--dataset --n 200` (does it annotate
-non-game panoramas?) to get per-panorama clue labels for offline calibration of detectors.
-Never use it in live play.
+heading/pitch/zoom of the view showing the clue). Offline labels only, never in live play:
+`tools/fetch_pano_clues.py` (history rounds; `--duels --n N [--months 2026-08,...]` finished
+public duels; `--translations` card texts; `--seterra` unmapped / partially matched region ids)
+-> `data/calibration/pano_clues.json`; after `calibrate.py features` and `train_model.py --save`,
+`python3 tools/build_clue_index.py [--baseline-rev 0c406f7]` -> `data/model/clue_index.npz`
+(index = duel + CALIB rounds, TEST held out). It ranks the hint cards by card frequency in the
+country + kNN of similar annotated panoramas + region vote; keyword + region ranking without the
+index or for countries without annotations. TEST (127 rounds, true country): precision@3 0.404,
+recall@3 0.457 vs 0.131 / 0.148 for 0c406f7 (+0.27 [0.22, 0.33]); the gain is the country-level
+card frequency, the kNN / region parts are within noise of it (frequency only 0.396 / 0.449).
 
 ## What was fixed / learned
 - `solar`: the hand-tuned disk score accepted bright clouds (hemisphere accuracy 67%, worse than
@@ -70,6 +74,10 @@ Feature extraction ~9 pano/s on 4 cores; `train_model.py` ~2 min.
 ## Ideas not done
 - Text/sign/plate recognition is out of scope for closed-form maths; bollards and pole types
   would need dedicated detectors.
-- Live script is untested here (geoguessr.com is blocked in the cloud); the FOV formula
-  `fov = 180 / 2^zoom` and the overlay hiding should be checked on the user's machine
-  (rebuild one round with `SphericalImage.from_views` and look at it).
+- Live script: capture checked on the real site only through `--replay` of a finished game
+  (`tools/rebuild_views.py` registration: measured FOV exact, s = 1.000). The FOV comes from
+  Google's projection matrix or a two-frame registration (tan(hfov/2) = 2^(1-zoom), vertical FOV
+  capped at 90; the old `180 / 2^zoom` was right only at zoom 1). Not yet exercised on a live
+  round: round detection, `--submit` and the ticket prompt on `/game` pages.
+  `tools/eval_live.py` now renders the live grid (2 x 5 views, 112.7 x 90 deg); the "12 rendered
+  views" row above is from the old grid (a paired run of both grids differed by +30 +- 44 pts).

@@ -6,6 +6,7 @@ GeoGuessr locator - purely mathematical (no AI / neural networks).
   python3 geoguessr_locator.py --views views.json                      in-game screenshots with camera angles
   python3 geoguessr_locator.py --pano <pano_id>                        official Street View panorama (test)
   python3 geoguessr_locator.py --latlng 50.45,30.52                    nearest panorama to a point (test)
+  add --map "<name|id|slug>" for the map being played (prior, score scale, bounds; data/maps.json)
   add --json for machine-readable output
 
 views.json: [{"image": "v0.jpg", "yaw": 0, "pitch": 0, "hfov": 100}, ...]  (yaw = true azimuth, deg)
@@ -18,6 +19,7 @@ import sys
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 
+from engine.geo import load_maps, resolve_map  # noqa: E402
 from engine.locator import distance_report, get_locator  # noqa: E402
 
 GROUP_UK = {"solar": "сонце/небо", "road": "дорога", "landscape": "ландшафт", "vehicle": "авто/камера",
@@ -27,6 +29,13 @@ GROUP_UK = {"solar": "сонце/небо", "road": "дорога", "landscape":
 def print_result(res, truth=None):
     line = "=" * 64
     print(line)
+    mp = res.get("map")
+    if mp:
+        print("Карта: %s (бали: D = %.0f км, апріорі: %s)" % (mp["name"] or mp["id"], mp["score_scale_km"] * 10, mp["prior"]))
+        pc = mp.get("prior_counts") or {}
+        if pc.get("stale"):
+            print("  увага: карту змінено %s, після ігор, з яких взято частоти (%s..%s)"
+                  % (pc["map_updated"], pc["dates"][0], pc["dates"][1]))
     print("Найімовірніші країни:")
     for i, c in enumerate(res["countries"], 1):
         bar = "#" * int(round(c["probability"] * 30))
@@ -82,24 +91,29 @@ def main():
                     help="true azimuth of the image centre (deg); unknown if omitted")
     ap.add_argument("--hfov", type=float, default=None, help="horizontal field of view of a screenshot")
     ap.add_argument("--radius", type=int, default=1000)
+    ap.add_argument("--map", default=None, help="map being played: name, id or slug (data/maps.json)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
+    mp = resolve_map(args.map)
+    if mp and not mp["known"]:
+        sys.stderr.write("map %r is not in data/maps.json (known: %s); using its name only\n"
+                         % (args.map, ", ".join(m["name"] for m in load_maps())))
     loc = get_locator()
     truth = None
     if args.image:
-        res = loc.analyze_image(args.image, heading=args.heading, hfov=args.hfov)
+        res = loc.analyze_image(args.image, heading=args.heading, hfov=args.hfov, map_info=mp)
     elif args.views:
         base = os.path.dirname(os.path.abspath(args.views))
         views = json.load(open(args.views))
         for v in views:
             v["image"] = os.path.join(base, v["image"])
-        res = loc.analyze_views(views)
+        res = loc.analyze_views(views, map_info=mp)
     elif args.pano:
-        res = loc.analyze_pano(pano_id=args.pano)
+        res = loc.analyze_pano(pano_id=args.pano, map_info=mp)
     else:
         lat, lng = (float(v) for v in args.latlng.split(","))
-        res = loc.analyze_pano(lat=lat, lng=lng, radius=args.radius)
+        res = loc.analyze_pano(lat=lat, lng=lng, radius=args.radius, map_info=mp)
     if "panorama" in res:
         truth = distance_report(res, res["panorama"]["lat"], res["panorama"]["lng"])
         res["check"] = truth
