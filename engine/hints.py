@@ -152,6 +152,25 @@ def observations(F):
     return out
 
 
+# GeoGuessr areas that group several admin-1 units of the Natural Earth raster
+AREA_ALIASES = {
+    "AREA_AUSTRIA_KARNTEN": ["AT-2"], "AREA_AUSTRIA_STEIERMARK": ["AT-6"], "AREA_AUSTRIA_TIROL": ["AT-7"],
+    "AREA_GERMANY_BAYERN": ["DE-BY"], "AREA_GERMANY_NIEDERSACHSEN": ["DE-NI"],
+    "AREA_GERMANY_NORDRHEINWESTFALEN": ["DE-NW"],
+    "AREA_ANDALUSIA": ["ES-AL", "ES-CA", "ES-CO", "ES-GR", "ES-H", "ES-J", "ES-MA", "ES-SE"],
+    "AREA_ARAGON": ["ES-HU", "ES-TE", "ES-Z"], "AREA_BASQUECOUNTRY": ["ES-BI", "ES-SS", "ES-VI"],
+    "AREA_CANARIANISLANDS": ["ES-GC", "ES-TF"], "AREA_CASTILELAMANCHA": ["ES-AB", "ES-CR", "ES-CU", "ES-GU", "ES-TO"],
+    "AREA_CATALONIA": ["ES-B", "ES-GI", "ES-L", "ES-T"], "AREA_EXTREMADURA": ["ES-BA", "ES-CC"],
+    "AREA_GALICIA": ["ES-C", "ES-LU", "ES-OR", "ES-PO"],
+    "AREA_BRETAGNE": ["FR-22", "FR-29", "FR-35", "FR-56"], "AREA_NORMANDIE": ["FR-14", "FR-27", "FR-50", "FR-61", "FR-76"],
+    "AREA_PROVENCEALPESCOTEDAZUR": ["FR-04", "FR-05", "FR-06", "FR-13", "FR-83", "FR-84"],
+    "AREA_LANGUEDOCROUSSILLONMIDIPYRENEES": ["FR-09", "FR-11", "FR-12", "FR-30", "FR-31", "FR-32", "FR-34", "FR-46",
+                                             "FR-48", "FR-65", "FR-66", "FR-81", "FR-82"],
+    "AREA_JAPAN_TOHOKU": ["JP-02", "JP-03", "JP-04", "JP-05", "JP-06", "JP-07"],
+    "AREA_JAPAN_CHUBU": ["JP-15", "JP-16", "JP-17", "JP-18", "JP-19", "JP-20", "JP-21", "JP-22", "JP-23"],
+}
+
+
 class ClueBase:
     def __init__(self):
         self.gg = {}
@@ -168,13 +187,46 @@ class ClueBase:
                 if (c.get("id") or "").lower() not in seen and c.get("countryCode"):
                     self.gg.setdefault(c["countryCode"].upper(), []).append(
                         {"id": c["id"], "title": c.get("title"), "description": c.get("description"),
-                         "category": c.get("type") or c.get("category"), "image_url": c.get("image_url")})
+                         "category": c.get("type") or c.get("category"), "image_url": c.get("image_url"),
+                         "regions": self._region_codes(c["countryCode"].upper(), c.get("seterraRegionIds") or [])})
         p = os.path.join(DATA, "plonkit_kb.json")
         if os.path.exists(p):
             self.plonkit = _load(p)
         p = os.path.join(DATA, "country_rules.json")
         if os.path.exists(p):
             self.rules = _load(p).get("by_country", {})
+
+    @staticmethod
+    def _norm(t):
+        import unicodedata
+        t = unicodedata.normalize("NFKD", t or "").encode("ascii", "ignore").decode()
+        return re.sub(r"[^A-Z]", "", t.upper())
+
+    def _region_codes(self, cc, ids):
+        """GeoGuessr seterra ids ('ISO-ID-JI', 'AREA_BRAZIL_PARANA') -> ISO 3166-2 codes of the raster."""
+        if not hasattr(self, "_rnames"):
+            try:
+                from .geo import _regions
+                _, codes, names, countries, _ = _regions()
+                self._rnames = {}
+                for code, name, c in zip(codes, names, countries):
+                    self._rnames.setdefault(c, {})[self._norm(name)] = code
+            except Exception:
+                self._rnames = {}
+        out = []
+        for i in ids:
+            if i.startswith("ISO-"):
+                out.append(i[4:].upper())
+            elif i in AREA_ALIASES:
+                out.extend(AREA_ALIASES[i])
+            elif i.startswith("AREA_"):
+                key = self._norm(i.split("_", 2)[-1])
+                code = self._rnames.get(cc, {}).get(key)
+                if code is None:  # partial name match ("RIOGRANDEDOSUL" vs "RIOGRANDEDOSUL")
+                    code = next((v for k, v in self._rnames.get(cc, {}).items() if key and (key in k or k in key)), None)
+                if code:
+                    out.append(code)
+        return out
 
     def country_name(self, cc):
         for src in (self.plonkit, self.rules):
@@ -193,7 +245,7 @@ class ClueBase:
                 why.append(tag)
         return s, why
 
-    def for_country(self, cc, tags, n_gg=3, n_plonkit=2):
+    def for_country(self, cc, tags, n_gg=3, n_plonkit=2, region_probs=None):
         cc = cc.upper()
         res = {"country_code": cc, "country": self.country_name(cc), "geoguessr": [], "plonkit": []}
         side = (self.rules.get(cc) or {}).get("driving_side")
@@ -201,12 +253,18 @@ class ClueBase:
         ranked = []
         for i, c in enumerate(self.gg.get(cc, [])):
             s, why = self._score((c.get("title") or "") + " " + (c.get("description") or ""), tags)
+            if c.get("regions") and region_probs:
+                pr = sum(region_probs.get(r, 0.0) for r in c["regions"])
+                s += 3.0 * pr  # regional card of a likely region
+                if pr > 0.15:
+                    why = why + ["_region"]
             ranked.append((s, -i, c, why))
         ranked.sort(key=lambda r: (r[0], r[1]), reverse=True)
         for s, _, c, why in ranked[:n_gg]:
             res["geoguessr"].append({"title": c.get("title"), "text": (c.get("description") or "").strip(),
                                      "category": c.get("category"), "image_url": c.get("image_url"),
-                                     "matched": [TAGS[t][0] for t in why]})
+                                     "regions": c.get("regions") or [],
+                                     "matched": [("Імовірний регіон" if t == "_region" else TAGS[t][0]) for t in why]})
         tips = (self.plonkit.get(cc) or {}).get("tips") or []
         ranked = []
         for i, t in enumerate(tips):
@@ -230,15 +288,21 @@ def clue_base():
     return _BASE
 
 
-def build_hints(F, top_countries, n_countries=3):
-    """F: {'module.feature': value}; top_countries: [(code, prob), ...]."""
+def build_hints(F, top_countries, n_countries=3, regions=None):
+    """F: {'module.feature': value}; top_countries: [(code, prob), ...];
+    regions: [{"code", "name", "country", "probability"}, ...] (posterior over admin-1 regions)."""
     tags = observations(F)
     kb = clue_base()
     obs = [{"tag": t, "text": TAGS[t][0], "strength": s} for t, s in tags]
     side_tag = next((t for t, _ in tags if t in ("drive_left", "drive_right")), None)
     cards = []
     for cc, p in top_countries[:n_countries]:
-        c = kb.for_country(cc, tags)
+        rp = {r["code"]: r["probability"] for r in (regions or []) if r["country"] == cc}
+        tot = sum(rp.values())
+        rp = {k: v / tot for k, v in rp.items()} if tot > 0 else {}
+        c = kb.for_country(cc, tags, region_probs=rp)
+        c["regions"] = [{"code": k, "name": next(r["name"] for r in regions if r["code"] == k),
+                         "probability": round(v, 3)} for k, v in sorted(rp.items(), key=lambda kv: -kv[1])[:3]]
         c["probability"] = round(float(p), 3)
         if side_tag and c["driving_side"]:
             c["driving_side_consistent"] = (c["driving_side"] == side_tag.split("_")[1])

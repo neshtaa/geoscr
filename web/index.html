@@ -40,12 +40,15 @@ function render(r) {
   if (r.error) { $("#out").innerHTML = `<div class="card">Помилка: ${esc(r.error)}</div>`; return; }
   let h = `<div class="card"><b>Країни</b>`;
   for (const c of r.countries) h += `<div class="row"><span>${esc(c.name)} (${esc(c.code)})</span><div class="bar" style="width:${Math.max(1, c.probability * 100)}%"></div><span>${(c.probability * 100).toFixed(1)}%</span></div>`;
+  if (r.regions && r.regions.length) h += `<p class="m">Регіони: ${r.regions.map(x => `${esc(x.name)} (${esc(x.code)}) ${(x.probability * 100).toFixed(1)}%`).join(" · ")}</p>`;
   const g = r.guess;
+  if (r.top_country_point) h += `<p class="m">Точка в межах ${esc(r.countries[0].name)}: ${r.top_country_point.lat}, ${r.top_country_point.lng}</p>`;
   h += `<p>Здогадка: <a target="_blank" href="https://www.google.com/maps?q=${g.lat},${g.lng}">${g.lat}, ${g.lng}</a> · очікувано ~${g.expected_score} балів</p>`;
   if (r.check) h += `<p class="m">Перевірка: справжня країна ${esc(r.check.true_country)}, похибка ${r.check.distance_km} км, ${r.check.points} балів</p>`;
   h += `</div><div class="card"><b>Що видно</b><ul>` + r.observations.map(o => `<li>${esc(o.text)} <span class="m">${Math.round(o.strength * 100)}%</span></li>`).join("") + `</ul></div>`;
   for (const c of r.hints) {
     h += `<div class="card"><b>${esc(c.country)} (${esc(c.country_code)}) — ${(c.probability * 100).toFixed(1)}%</b>`;
+    if (c.regions && c.regions.length) h += `<div class="m">Регіони: ${c.regions.map(x => `${esc(x.name)} ${Math.round(x.probability * 100)}%`).join(", ")}</div>`;
     if (c.driving_side) h += `<div class="m">Рух: ${c.driving_side === "left" ? "лівосторонній" : "правосторонній"}${c.driving_side_consistent === false ? " — не збігається з побаченим" : ""}</div>`;
     for (const k of c.geoguessr) h += `<div class="clue"><b>GeoGuessr:</b> ${esc(k.title)} — ${esc(k.text)} ${k.matched.length ? `<span class="m">(${esc(k.matched.join(", "))})</span>` : ""}</div>`;
     for (const k of c.plonkit) h += `<div class="clue"><b>Plonk It:</b> ${esc(k.text)} ${k.matched.length ? `<span class="m">(${esc(k.matched.join(", "))})</span>` : ""}</div>`;

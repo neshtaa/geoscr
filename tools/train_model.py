@@ -20,7 +20,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 from calibrate import FEAT_DIR, load_records, split_of  # noqa: E402
-from engine.geo import geoguessr_score, haversine_km  # noqa: E402
+from engine.geo import geoguessr_score, haversine_km, region_index  # noqa: E402
 from engine.model import GeoModel  # noqa: E402
 
 
@@ -47,19 +47,57 @@ def evaluate(model, ev, recs, rows, label, verbose=True):
     true_p = np.where(yi >= 0, P[np.arange(len(yi)), np.maximum(yi, 0)], 0.0)
     rank = (P > true_p[:, None]).sum(1)
     rank = np.where(yi >= 0, rank, 999)
-    scores, dists = [], []
+    scores, dists, rrank, rrank_ok = [], [], [], []
+    true_reg = region_index([recs[i]["lat"] for i in rows], [recs[i]["lng"] for i in rows])
     for k, i in enumerate(rows):
         g = model.locate(lp[k], ev["_d2"][k])
         d = float(haversine_km(recs[i]["lat"], recs[i]["lng"], g["lat"], g["lng"]))
         dists.append(d)
         scores.append(float(geoguessr_score(d)))
+        pr = model.region_posterior(lp[k], ev["_d2"][k])
+        t = true_reg[k]
+        r = int((pr > pr[t]).sum()) if t and t < len(pr) and pr[t] > 0 else 999
+        rrank.append(r)
+        if rank[k] == 0:
+            rrank_ok.append(r)
+    rrank, rrank_ok = np.array(rrank), np.array(rrank_ok)
     res = {"n": len(rows), "top1": float((rank == 0).mean()), "top3": float((rank < 3).mean()),
            "top5": float((rank < 5).mean()), "mean_score": float(np.mean(scores)),
-           "median_km": float(np.median(dists)), "loglik": float(np.mean(np.log(np.maximum(true_p, 1e-9))))}
+           "median_km": float(np.median(dists)), "loglik": float(np.mean(np.log(np.maximum(true_p, 1e-9)))),
+           "region_top1": float((rrank == 0).mean()), "region_top3": float((rrank < 3).mean()),
+           "region_top1_if_country_right": float((rrank_ok == 0).mean()) if len(rrank_ok) else 0.0,
+           "region_top3_if_country_right": float((rrank_ok < 3).mean()) if len(rrank_ok) else 0.0}
     if verbose:
         print(f"[{label}] n={res['n']} top1={res['top1']:.3f} top3={res['top3']:.3f} top5={res['top5']:.3f} "
-              f"points/round={res['mean_score']:.0f} median={res['median_km']:.0f} km loglik={res['loglik']:.3f}")
+              f"points/round={res['mean_score']:.0f} median={res['median_km']:.0f} km loglik={res['loglik']:.3f} | "
+              f"region top1={res['region_top1']:.3f} top3={res['region_top3']:.3f} "
+              f"(country right: {res['region_top1_if_country_right']:.3f} / {res['region_top3_if_country_right']:.3f})")
     return res
+
+
+def calibrate_location(model, ev, recs, rows):
+    """Grid search of the within-country kernel: location (mean points) and region
+    (mean log P(true region)) parameters on the CALIB rounds."""
+    lp = model.combine(ev)
+    true_reg = region_index([recs[i]["lat"] for i in rows], [recs[i]["lng"] for i in rows])
+    best_loc, best_reg = (-1, None), (-1e9, None)
+    for bw in (0.25, 0.5, 1.0, 2.0, 4.0, 8.0):
+        for floor in (1e-3, 0.03, 0.1, 0.3):
+            pts, rl = [], []
+            for k, i in enumerate(rows):
+                w = model.ref_weights(lp[k], ev["_d2"][k], bw, floor)
+                g = model.locate(lp[k], ev["_d2"][k], w=w)
+                pts.append(float(geoguessr_score(haversine_km(recs[i]["lat"], recs[i]["lng"], g["lat"], g["lng"]))))
+                p = np.bincount(model.ref_region, weights=w, minlength=int(model.ref_region.max()) + 1)
+                t = true_reg[k]
+                rl.append(np.log(max(p[t] if t < len(p) else 0.0, 1e-4)))
+            if np.mean(pts) > best_loc[0]:
+                best_loc = (float(np.mean(pts)), {"bw": bw, "floor": floor})
+            if np.mean(rl) > best_reg[0]:
+                best_reg = (float(np.mean(rl)), {"bw": bw, "floor": floor})
+    model.loc_params, model.region_params = best_loc[1], best_reg[1]
+    print(f"location kernel {best_loc[1]} ({best_loc[0]:.0f} pts on calib), "
+          f"region kernel {best_reg[1]} (log P(region) {best_reg[0]:.3f})")
 
 
 def main():
@@ -99,6 +137,7 @@ def main():
     ll = model.calibrate(ev_ca_ok, yca[ok])
     print("calibrated weights:", json.dumps({k: round(v, 3) for k, v in model.weights.items()}),
           "prior_mix", model.prior_mix, f"calib loglik {ll:.3f}")
+    calibrate_location(model, ev_ca, recs, ca)
     evaluate(model, ev_ca, recs, ca, "calib")
     res = evaluate(model, ev_te, recs, te, "TEST")
     # prior-only reference

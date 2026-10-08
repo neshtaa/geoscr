@@ -20,6 +20,7 @@ import numpy as np
 from PIL import Image
 
 from . import features
+from .geo import region_info
 from .hints import build_hints, clue_base
 from .model import MODEL_DIR, GeoModel
 from .panorama import SphericalImage
@@ -66,6 +67,18 @@ class Locator:
         countries = [{"code": m.classes[i], "name": kb.country_name(m.classes[i]),
                       "probability": round(float(post[i]), 4)} for i in order[:top_k]]
         guess = m.locate(lp, ev["_d2"][0])
+        pr = m.region_posterior(lp, ev["_d2"][0])
+        regions = []
+        for i in np.argsort(-pr)[:400]:
+            if pr[i] <= 0:
+                break
+            code, name, cc = region_info(int(i))
+            regions.append({"code": code, "name": name, "country": cc, "probability": round(float(pr[i]), 5)})
+        # best point inside the most probable country (the global guess may hedge between countries)
+        top = order[0]
+        lp_top = np.full_like(lp, -1e9)
+        lp_top[top] = 0.0
+        g_top = m.locate(lp_top, ev["_d2"][0])
         # how much each evidence source moved the top country against the prior
         prior = m.prior()
         contrib = {}
@@ -76,9 +89,12 @@ class Locator:
                 e = ev[g][0]
                 row[g] = round(float(w * (e[c] - np.dot(prior, e))), 2)
             contrib[m.classes[c]] = row
-        hints = build_hints(flat, [(m.classes[i], post[i]) for i in order], n_hint_countries)
+        hints = build_hints(flat, [(m.classes[i], post[i]) for i in order], n_hint_countries, regions)
         return {
             "countries": countries,
+            "regions": regions[:5],
+            "top_country_point": {"lat": round(g_top["lat"], 5), "lng": round(g_top["lng"], 5),
+                                  "expected_score_if_country_right": int(round(g_top["expected_score"]))},
             "guess": {"lat": round(guess["lat"], 5), "lng": round(guess["lng"], 5),
                       "expected_score": int(round(guess["expected_score"]))},
             "observations": hints["observations"],
@@ -114,11 +130,15 @@ class Locator:
 
 def distance_report(res, lat, lng):
     """Distance / GeoGuessr points of a result against the true position."""
-    from .geo import country_at, geoguessr_score, haversine_km
+    from .geo import country_at, geoguessr_score, haversine_km, region_at
     d = float(haversine_km(lat, lng, res["guess"]["lat"], res["guess"]["lng"]))
     true_cc = country_at(lat, lng)
     codes = [c["code"] for c in res["countries"]]
-    return {"distance_km": round(d, 1), "points": int(round(float(geoguessr_score(d)))), "true_country": true_cc,
+    reg = region_at(lat, lng)
+    rcodes = [r["code"] for r in res.get("regions", [])]
+    return {"true_region": reg[0] + " " + reg[1] if reg else None,
+            "rank_of_true_region": (rcodes.index(reg[0]) + 1) if reg and reg[0] in rcodes else None,
+            "distance_km": round(d, 1), "points": int(round(float(geoguessr_score(d)))), "true_country": true_cc,
             "rank_of_true_country": (codes.index(true_cc) + 1) if true_cc in codes else None}
 
 

@@ -180,6 +180,8 @@ class GeoModel:
         self.classes = []
         self.weights = {}
         self.prior_mix = 0.5
+        self.loc_params = {"bw": 1.0, "floor": 1e-3}
+        self.region_params = {"bw": 1.0, "floor": 0.05}
 
     # ------------------------------------------------------------------ training
     def fit(self, X_by_group, y, lat, lng, is_world, min_count=6, knn_k=40):
@@ -203,6 +205,7 @@ class GeoModel:
         self.prior_uniform = np.full(len(classes), 1.0 / len(classes))
         self.train_freq = np.bincount(yi, minlength=len(classes)).astype(float)
         self.knn_k = knn_k
+        self._index_refs()
         # latitude histogram of each country's reference panoramas (for the analytic sun term)
         H = np.zeros((len(classes), len(SUN_LAT_GRID)))
         b = np.clip(np.round(self.ref_lat - SUN_LAT_GRID[0]).astype(int), 0, len(SUN_LAT_GRID) - 1)
@@ -321,19 +324,29 @@ class GeoModel:
         return best
 
     # ---------------------------------------------------------------- location
-    def locate(self, logpost_row, d2_row, top_countries=12, support=2500, n_cand=300):
-        """Mixture over reference panoramas -> guess maximising expected GeoGuessr score."""
+    def ref_weights(self, logpost_row, d2_row, bw=None, floor=None, top_countries=12):
+        """Posterior mass over reference panoramas: P(country) spread inside each country by a
+        Gaussian kernel on the embedding distance (bandwidth bw x the median of the 200 nearest
+        distances, plus a uniform floor share inside the country)."""
+        bw = self.loc_params.get("bw", 1.0) if bw is None else bw
+        floor = self.loc_params.get("floor", 1e-3) if floor is None else floor
         post = np.exp(logpost_row)
-        C = len(self.classes)
         w = np.zeros(len(self.ref_yi))
-        h2 = max(float(np.median(np.sort(d2_row)[:200])), 1e-6)
+        h2 = max(float(np.median(np.sort(d2_row)[:200])), 1e-6) * bw
         kern = np.exp(-0.5 * (d2_row - d2_row.min()) / h2)
         for c in np.argsort(-post)[:top_countries]:
-            rows = self.ref_yi == c
-            if not rows.any():
+            rows = self.ref_rows[c]
+            if not len(rows):
                 continue
-            kc = kern[rows] + 1e-3 * kern[rows].max()
-            w[rows] = post[c] * kc / kc.sum()
+            kc = kern[rows]
+            kc = kc / max(kc.sum(), 1e-300)
+            w[rows] = post[c] * ((1 - floor) * kc + floor / len(rows))
+        return w / max(w.sum(), 1e-300)
+
+    def locate(self, logpost_row, d2_row, support=2500, n_cand=300, w=None):
+        """Guess maximising the expected GeoGuessr score under the reference-panorama mixture."""
+        if w is None:
+            w = self.ref_weights(logpost_row, d2_row)
         sup = np.argsort(-w)[:support]
         ws = w[sup] / w[sup].sum()
         cand = sup[:n_cand]
@@ -342,8 +355,21 @@ class GeoModel:
         exp_score = (5000.0 * np.exp(-D / WORLD_SCORE_SCALE_KM)) @ ws
         b = int(np.argmax(exp_score))
         return {"lat": float(self.ref_lat[cand[b]]), "lng": float(self.ref_lng[cand[b]]),
-                "expected_score": float(exp_score[b]),
-                "support": [(float(self.ref_lat[i]), float(self.ref_lng[i]), float(ws[j])) for j, i in enumerate(sup[:50])]}
+                "expected_score": float(exp_score[b])}
+
+    def region_posterior(self, logpost_row, d2_row):
+        """P(admin-1 region) = sum of the reference weights of its panoramas (region kernel
+        parameters calibrated separately from the location ones)."""
+        rp = self.region_params
+        w = self.ref_weights(logpost_row, d2_row, rp.get("bw", 1.0), rp.get("floor", 0.05))
+        p = np.bincount(self.ref_region, weights=w, minlength=int(self.ref_region.max()) + 1)
+        p[0] = 0.0
+        return p / max(p.sum(), 1e-300)
+
+    def _index_refs(self):
+        from .geo import region_index
+        self.ref_rows = [np.flatnonzero(self.ref_yi == c) for c in range(len(self.classes))]
+        self.ref_region = region_index(self.ref_lat, self.ref_lng)
 
     # ------------------------------------------------------------- persistence
     def save(self, path=MODEL_DIR):
@@ -358,7 +384,8 @@ class GeoModel:
                 arrays[f"g.{g}.{k}"] = v
         np.savez_compressed(os.path.join(path, "model.npz"), **arrays)
         json.dump({"groups": self.groups, "classes": self.classes, "weights": self.weights,
-                   "prior_mix": self.prior_mix, "knn_k": self.knn_k},
+                   "prior_mix": self.prior_mix, "knn_k": self.knn_k,
+                   "loc_params": self.loc_params, "region_params": self.region_params},
                   open(os.path.join(path, "model.json"), "w"), indent=1)
 
     @classmethod
@@ -368,6 +395,8 @@ class GeoModel:
         z = np.load(os.path.join(path, "model.npz"))
         m.groups, m.classes, m.weights = meta["groups"], meta["classes"], meta["weights"]
         m.prior_mix, m.knn_k = meta["prior_mix"], meta["knn_k"]
+        m.loc_params = meta.get("loc_params", {})
+        m.region_params = meta.get("region_params", {})
         for k in ("ref_yi", "ref_lat", "ref_lng", "ref_emb", "prior_world", "prior_uniform", "train_freq", "lat_hist"):
             setattr(m, k, z[k])
         m.ref_emb = m.ref_emb.astype(np.float64)
@@ -378,4 +407,5 @@ class GeoModel:
         m.gauss = {}
         for g in m.groups:
             m.gauss[g] = GroupGaussian.from_dict({k.split(".", 2)[2]: z[k] for k in z.files if k.startswith(f"g.{g}.")})
+        m._index_refs()
         return m

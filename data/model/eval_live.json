@@ -5,7 +5,10 @@
  "top1": 0.1792452830188679,
  "top3": 0.33962264150943394,
  "top5": 0.46037735849056605,
- "mean_score": 1560.1749018624262,
- "median_km": 2423.0115914771727,
- "analysis_ms": 1465.5
+ "mean_score": 1617.1501239506931,
+ "median_km": 2288.268826863704,
+ "region_top1_if_country_right": 0.14736842105263157,
+ "region_top3_if_country_right": 0.3157894736842105,
+ "analysis_ms": 1603.0,
+ "same_top_country_two_captures": 0.9415094339622642
 }

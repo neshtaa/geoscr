@@ -25,6 +25,11 @@ class TestGeometry(unittest.TestCase):
         self.assertEqual(country_at(35.68, 139.69), "JP")
         self.assertEqual(country_at(-23.55, -46.63), "BR")
 
+    def test_region_lookup(self):
+        from engine.geo import region_at
+        self.assertEqual(region_at(50.45, 30.52)[0], "UA-30")
+        self.assertEqual(region_at(-7.28, 112.75)[0], "ID-JI")
+
     def test_score_curve(self):
         self.assertAlmostEqual(float(geoguessr_score(0)), 5000.0)
         d = float(haversine_km(50.45, 30.52, 52.23, 21.01))
@@ -81,6 +86,10 @@ class TestHints(unittest.TestCase):
         self.assertIn("unpaved", tags)
         self.assertIn("red_soil", tags)
         h = build_hints(F, [("KE", 0.6), ("ZA", 0.2)], 2)
+        # a regional GeoGuessr card is promoted when its region is likely
+        hb = build_hints({}, [("BR", 0.9)], 1, [{"code": "BR-RS", "name": "Rio Grande do Sul", "country": "BR",
+                                                  "probability": 0.9}])
+        self.assertTrue(any("BR-RS" in c["regions"] for c in hb["countries"][0]["geoguessr"]))
         self.assertEqual(h["countries"][0]["country_code"], "KE")
         self.assertTrue(h["countries"][0]["driving_side_consistent"])
         self.assertTrue(h["countries"][0]["geoguessr"] or h["countries"][0]["plonkit"])
@@ -96,6 +105,9 @@ class TestLocator(unittest.TestCase):
         self.assertTrue(0 < sum(p) <= 1.0001)
         self.assertTrue(-90 <= res["guess"]["lat"] <= 90 and -180 <= res["guess"]["lng"] <= 180)
         self.assertTrue(res["hints"])
+        self.assertTrue(res["regions"])
+        rp = [r["probability"] for r in res["hints"][0]["regions"]]
+        self.assertTrue(all(0 <= p <= 1 for p in rp))
         self.assertFalse(math.isnan(res["guess"]["expected_score"]))
 
 

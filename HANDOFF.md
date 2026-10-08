@@ -14,8 +14,8 @@ for fitting or calibration):
 |---|---|---|---|---|
 | prior only | 4.3% | 10% | 16% | 209 |
 | old `deterministic_locator` (removed) | 3.4% | 6.6% | - | 450 |
-| new, full panorama | 18.9% | 35.3% | 44.7% | 1643 |
-| new, 12 rendered views, car axis unknown (`tools/eval_live.py`) | 17.9% | 34.0% | 46.0% | 1560 |
+| new, full panorama | 18.9% | 35.3% | 44.7% | 1653 |
+| new, 12 rendered views, car axis unknown (`tools/eval_live.py`) | 17.9% | 34.0% | 46.0% | 1617 |
 
 Model trained on 17.1k panoramas (world 2.3k, balanced quota 150 per country, 118 classes).
 The first version on 10k panoramas gave 1515 pts/round; more data is still the clearest lever.
@@ -24,6 +24,19 @@ Pipeline: `engine/locator.py` (SphericalImage -> 6 feature modules -> `engine/mo
 score-optimal guess -> `engine/hints.py`). Entry points: `geoguessr_locator.py` (CLI),
 `web/server.py` (+ `web/index.html`), `play_live_visual.js` (live HUD, `setPov` only).
 Gemini (`vlm_engine`) and all old heuristic engines are deleted.
+
+Regions (admin-1) when the country is right: top1 14.7%, top3 31.6% (live mode); the same top
+country from two captures with different start yaw: 94.2%.
+
+## GeoGuessr's own analysis
+Not image recognition: the client calls `GET /api/v4/clues/{panoId}` and the server returns
+curated cards for that panorama (country, `seterraRegionIds` = ISO 3166-2 / AREA_* ids,
+heading/pitch/zoom of the view showing the clue). geoguessr.com is blocked by this cloud
+environment's network policy (403 at the proxy); the user can allow `www.geoguessr.com`,
+`game-server.geoguessr.com` in the environment's Network access settings. Then run
+`tools/fetch_pano_clues.py` (history rounds) and `--dataset --n 200` (does it annotate
+non-game panoramas?) to get per-panorama clue labels for offline calibration of detectors.
+Never use it in live play.
 
 ## What was fixed / learned
 - `solar`: the hand-tuned disk score accepted bright clouds (hemisphere accuracy 67%, worse than
@@ -43,6 +56,10 @@ Gemini (`vlm_engine`) and all old heuristic engines are deleted.
   strongest single group.
 - Model: per-group Gaussians + kNN + multinomial logit (GLM) + sun term; exponents and prior
   mix calibrated on CALIB. More data helped clearly (half -> full train: calib top5 37% -> 45%).
+- Regions: within-country kernel over reference panoramas; tried Fisher / landscape / texture
+  spaces and sun-latitude weighting on CALIB - all ~8% top1 / ~23% top3 given the true country
+  (barely above reference density), so regions are limited by ~150 references per country.
+  Location and region kernels are calibrated separately (`calibrate_location`).
 - Street View download: `_parse_pano` now returns None for removed panoramas so history rounds
   fall back to a 100 m search.
 

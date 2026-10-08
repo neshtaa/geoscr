@@ -161,6 +161,7 @@ async function showHud(page, state) {
         }
         for (const c of r.hints) {
           h += `<div style="margin-top:10px;font-weight:700">${esc(c.country)} — ${(c.probability * 100).toFixed(1)}%</div>`;
+          if (c.regions && c.regions.length) h += `<div style="color:#f59e0b;font-size:11px">Регіон: ${c.regions.map(x => `${esc(x.name)} ${Math.round(x.probability * 100)}%`).join(', ')}</div>`;
           for (const k of c.geoguessr.slice(0, 2)) h += `<div style="border-left:3px solid #10b981;padding:4px 8px;margin-top:4px;background:#1e293b;border-radius:4px"><b>${esc(k.title)}</b><div style="color:#cbd5e1;font-size:11px">${esc(k.text)}</div></div>`;
           for (const k of c.plonkit.slice(0, 1)) h += `<div style="border-left:3px solid #f59e0b;padding:4px 8px;margin-top:4px;background:#1e293b;border-radius:4px;color:#cbd5e1;font-size:11px">Plonk It: ${esc(k.text)}</div>`;
         }
@@ -181,6 +182,8 @@ async function analyzeRound(page, label) {
   const top = result.countries[0];
   console.log(`[${label}] ${result.countries.map(c => `${c.code} ${(c.probability * 100).toFixed(0)}%`).join(', ')}  -> ${result.guess.lat}, ${result.guess.lng}`);
   console.log('   видно: ' + result.observations.map(o => o.text).join('; '));
+  if (result.hints[0] && result.hints[0].regions.length)
+    console.log('   регіон: ' + result.hints[0].regions.map(x => `${x.name} ${Math.round(x.probability * 100)}%`).join(', '));
   await showHud(page, { round: label, status: `Найімовірніше: ${top.name}`, result });
   return result;
 }

@@ -56,3 +56,47 @@ def haversine_km(lat1, lng1, lat2, lng2):
 
 def geoguessr_score(distance_km):
     return 5000.0 * np.exp(-np.asarray(distance_km) / WORLD_SCORE_SCALE_KM)
+
+
+_REGIONS = None
+
+
+def _regions():
+    global _REGIONS
+    if _REGIONS is None:
+        z = np.load(os.path.join(DATA_DIR, "world_regions.npz"))
+        _REGIONS = (z["grid"], [str(c) for c in z["codes"]], [str(n) for n in z["names"]],
+                    [str(c) for c in z["countries"]], float(z["resolution_deg"]))
+    return _REGIONS
+
+
+def region_index(lat, lng, search_px=3):
+    """Index into region_info() of the admin-1 region at lat/lng (0 = none). Vectorised."""
+    grid, _, _, _, res = _regions()
+    h, w = grid.shape
+    lat, lng = np.atleast_1d(np.asarray(lat, float)), np.atleast_1d(np.asarray(lng, float))
+    y = np.clip(((90.0 - lat) / res).astype(int), 0, h - 1)
+    x = ((lng + 180.0) / res).astype(int) % w
+    v = grid[y, x].astype(int)
+    for k in np.flatnonzero(v == 0):
+        if not search_px:
+            break
+        y0, y1 = max(0, y[k] - search_px), min(h, y[k] + search_px + 1)
+        xs = [(x[k] + d) % w for d in range(-search_px, search_px + 1)]
+        win = grid[y0:y1][:, xs]
+        nz = np.argwhere(win > 0)
+        if len(nz):
+            j = np.argmin((nz[:, 0] - (y[k] - y0)) ** 2 + (nz[:, 1] - search_px) ** 2)
+            v[k] = win[nz[j][0], nz[j][1]]
+    return v
+
+
+def region_info(i):
+    """(ISO 3166-2 code, English name, country code) of a region index."""
+    _, codes, names, countries, _ = _regions()
+    return codes[i], names[i], countries[i]
+
+
+def region_at(lat, lng):
+    i = int(region_index(lat, lng)[0])
+    return region_info(i) if i else None

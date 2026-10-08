@@ -31,8 +31,16 @@ def print_result(res, truth=None):
     for i, c in enumerate(res["countries"], 1):
         bar = "#" * int(round(c["probability"] * 30))
         print("  %d. %-28s %5.1f%%  %s" % (i, "%s (%s)" % (c["name"], c["code"]), 100 * c["probability"], bar))
+    if res.get("regions"):
+        print("\nНайімовірніші регіони:")
+        for r in res["regions"]:
+            print("  - %-34s %5.1f%%" % ("%s (%s)" % (r["name"], r["code"]), 100 * r["probability"]))
     g = res["guess"]
     print("\nТочка здогадки: %.4f, %.4f   (очікувано ~%d балів)" % (g["lat"], g["lng"], g["expected_score"]))
+    t = res.get("top_country_point")
+    if t:
+        print("Точка всередині %s: %.4f, %.4f   (~%d балів, якщо країна вірна)"
+              % (res["countries"][0]["code"], t["lat"], t["lng"], t["expected_score_if_country_right"]))
     if res["observations"]:
         print("\nЩо видно на зображенні:")
         for o in res["observations"][:10]:
@@ -43,6 +51,8 @@ def print_result(res, truth=None):
             ok = h.get("driving_side_consistent")
             mark = "" if ok is None else ("  [збігається]" if ok else "  [НЕ збігається]")
             print("  Рух: %s%s" % ({"left": "лівосторонній", "right": "правосторонній"}.get(h["driving_side"], h["driving_side"]), mark))
+        if h.get("regions"):
+            print("  Регіони в межах країни: " + ", ".join("%s %.0f%%" % (r["name"], 100 * r["probability"]) for r in h["regions"]))
         contrib = res["contributions"].get(h["country_code"], {})
         if contrib:
             parts = sorted(contrib.items(), key=lambda kv: -abs(kv[1]))[:4]
@@ -54,8 +64,9 @@ def print_result(res, truth=None):
             m = (" <- " + ", ".join(t["matched"])) if t["matched"] else ""
             print("  [Plonk It] %s%s" % (t["text"][:220], m))
     if truth:
-        print("\nПеревірка: справжня країна %s, ранг %s, похибка %.0f км, %d балів"
-              % (truth["true_country"], truth["rank_of_true_country"], truth["distance_km"], truth["points"]))
+        print("\nПеревірка: справжня країна %s (ранг %s), регіон %s (ранг %s), похибка %.0f км, %d балів"
+              % (truth["true_country"], truth["rank_of_true_country"], truth["true_region"],
+                 truth["rank_of_true_region"], truth["distance_km"], truth["points"]))
     print("(%d мс)" % res["timing_ms"]["total"])
     print(line)
 

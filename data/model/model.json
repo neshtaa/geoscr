@@ -139,5 +139,13 @@
   "sun": 1.0
  },
  "prior_mix": 0.4,
- "knn_k": 40
+ "knn_k": 40,
+ "loc_params": {
+  "bw": 0.25,
+  "floor": 0.1
+ },
+ "region_params": {
+  "bw": 0.5,
+  "floor": 0.3
+ }
 }
