@@ -13,6 +13,16 @@
  *     ... --submit                                 also submit the locator's guess (single-player pages only; implies --auto)
  *   node play_live_visual.js --replay <finishedGameToken> --round N    safe test on a finished game
  *     ... --extension                              run the capture through the unpacked extension (extension/)
+ *     ... --moves K                                then simulate a player who walks K steps of the round's walk
+ *                                                  (cached by tools/moving_calib.py) with auto-analyse on: each
+ *                                                  move is re-captured once the player stops, fused by the
+ *                                                  server; HUD screenshots hud_move<k>.png, points per step
+ *     ... --interrupt hud|pano                     during the first move's sweep click the HUD / drag the panorama
+ *
+ * Moving games: when the round's panorama changes inside the round (the player moved) and auto-analyse
+ * is on, the page's controller re-captures it once the player has been idle for 1.5 s (no pano change,
+ * camera turn or mouse button) and the server fuses all panoramas of the round (engine/fusion.py; the
+ * round key is the game token + round number). Alt+G does the same at any time.
  *
  * Options: --capture page|screenshot  page (default): the canvas is read in the page, as in the
  *          extension; screenshot: puppeteer screenshots of the isolated canvas (FOV registration probe
@@ -417,9 +427,9 @@ function pageCapture(payload) {
     zoomLocked: !!c.zoomLocked, source: 'page' };
 }
 
-async function predict(views, map) {
+async function predict(views, map, fusion = null) {
   const body = predictBody(views.map(v => ({ image_b64: v.buf ? v.buf.toString('base64') : v.image_b64, yaw: v.yaw,
-    pitch: v.pitch, hfov: v.hfov, vfov: v.vfov })), map);
+    pitch: v.pitch, hfov: v.hfov, vfov: v.vfov })), map, fusion);
   const resp = await fetch(`${SERVER}/api/predict`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
@@ -450,6 +460,12 @@ async function inlineImages(result) {
 function logResult(info, result, tCap, map, dir) {
   console.log(`[${info.label}] ${result.countries.map(x => `${x.code} ${(x.probability * 100).toFixed(0)}%`).join(', ')}` +
     `  -> ${result.guess.lat}, ${result.guess.lng}  (capture ${(tCap / 1000).toFixed(1)} s, map ${map ? map.name || map.id : '?'})`);
+  const f = result.fusion;
+  if (f && (f.n > 1 || f.replaced)) {
+    console.log(`   рух: панорам ${f.n}${f.replaced ? ' (та сама панорама, замінено)' : ''}, ` +
+      `${f.changed_top ? `відповідь змінилась (${f.prev_top} -> ${f.top})` : 'відповідь та сама'}; окремо: ` +
+      (f.captures || []).map((c, i) => `${i + 1}: ${(c.countries[0] || {}).code}`).join(', '));
+  }
   console.log('   видно: ' + result.observations.map(o => o.text).join('; '));
   if (result.hints[0] && result.hints[0].regions.length)
     console.log('   регіон: ' + result.hints[0].regions.map(x => `${x.name} ${Math.round(x.probability * 100)}%`).join(', '));
@@ -490,7 +506,7 @@ async function waitPanorama(ctx, since, timeoutMs = 20000) {
 async function analyseRound(ctx, info) {
   const { page } = ctx;
   ctx.capturePath = info.path;
-  const dir = path.join(OUT_ROOT, `${info.key}_r${info.round}`);
+  const dir = path.join(OUT_ROOT, info.dir || `${info.key}_r${info.round}`);
   await hudStatus(page, 'Чекаю панораму…');
   const st = await waitPanorama(ctx, info.since);
   const flags = gameFlags(info.meta, st.nmpz);
@@ -509,7 +525,7 @@ async function analyseRound(ctx, info) {
   const tCap = Date.now() - t0;
   await hudStatus(page, 'Аналіз…');
   const t1 = Date.now();
-  const result = await predict(cap.views, map);
+  const result = await predict(cap.views, map, info.fusion || null);
   fs.writeFileSync(path.join(dir, 'response.json'), JSON.stringify(result, null, 1));
   logResult(info, result, tCap, map, dir);
   return { result, dir, noRotate: !!noRotate, timing: { capture_ms: tCap, server_ms: result.timing_ms ? result.timing_ms.total : null,
@@ -542,13 +558,17 @@ async function bridge(ctx, type, payload) {
   const p = String(job.path || '');
   const meta = mergeMeta(mergeMeta(ctx.metaCache[p] || {}, job.meta || null), ctx.extraMeta[p] || null);
   const info = { key: String(job.key || 'page').replace(/[^A-Za-z0-9]/g, '') || 'page', round: +job.round || 0,
-    label: job.label || '', path: p, meta, trigger: job.trigger };
+    label: job.label || '', path: p, meta, trigger: job.trigger, fusion: payload.fusion || job.fusion || null };
+  // a move of the player: its own capture directory <game>_r<round>_m<k>
+  const rk = `${info.key}_r${info.round}`;
+  if (job.trigger === 'move') ctx.moves[rk] = (ctx.moves[rk] || 0) + 1;
+  const sub = job.trigger === 'move' ? `${rk}_m${ctx.moves[rk]}` : rk;
   let out;
   if (type === 'predict') {
-    const dir = path.join(OUT_ROOT, `${info.key}_r${info.round}`);
+    const dir = path.join(OUT_ROOT, sub);
     const cap = pageCapture(payload);
     saveCapture(dir, cap, info, meta);
-    const result = await predict(cap.views, payload.map || serverMap(meta));
+    const result = await predict(cap.views, payload.map || serverMap(meta), info.fusion);
     fs.writeFileSync(path.join(dir, 'response.json'), JSON.stringify(result, null, 1));
     const c = payload.capture || {};
     console.log(`   знімання в сторінці: ${cap.views.length} кадр., ${cap.views[0] ? cap.views[0].read : '?'}, ` +
@@ -560,6 +580,7 @@ async function bridge(ctx, type, payload) {
     const st = await pageState(ctx.page);
     info.since = job.since && st ? { id: st.id, panoChanges: job.since.panoChanges } : null;
     info.freeZoom = ctx.freeZoom;
+    info.dir = sub;
     const r = await analyseRound(ctx, info);
     out = { result: await inlineImages(r.result), timing: r.timing, noRotate: r.noRotate };
   } else throw new Error(`unknown request ${type}`);
@@ -729,6 +750,138 @@ async function runReplay(ctx, fin) {
   fs.writeFileSync(path.join(dir, 'evaluation.json'), JSON.stringify(resp, null, 1));
   console.log(`   перевірка (завершений раунд): справжня країна ${resp.true_code}, топ-1 ${resp.pred_code}, ` +
     `${resp.distance_km} км, ${resp.points} балів`);
+  if (opts.moves) await runMoves(ctx, fin, info, dir, { result, evaluation: resp });
+}
+
+// Neighbouring panoramas of a finished round cached by tools/moving_calib.py (local, no API call).
+function cachedNeighbours(pano) {
+  return new Promise((resolve, reject) => {
+    execFile('python3', [path.join(ROOT, 'tools', 'moving_calib.py'), 'neighbours', pano], { timeout: 60000 }, (err, stdout, stderr) => {
+      if (err) return reject(new Error(String(stderr || err.message).trim().split('\n').pop()));
+      try { resolve(JSON.parse(stdout.trim().split('\n').pop())); } catch (e) { reject(e); }
+    });
+  });
+}
+
+const fusionView = page => page.evaluate(() => {
+  const C = window.__geoscr && window.__geoscr.ctl;
+  if (!C) return null;
+  const f = C.view.fusion;
+  return { busy: !!C.busy, level: C.view.status && C.view.status.level, text: C.view.status && C.view.status.text,
+    seq: f ? f.seq : 0, fusion: f || null, result: C.view.result || null, panoChanges: window.__geoscr.panoChanges };
+}).catch(() => null);
+
+// Waits until the controller has fused a capture newer than `seq` (or failed).
+async function waitFusion(page, seq, timeoutMs = 180000) {
+  const t0 = Date.now();
+  let started = false;
+  for (;;) {
+    const v = await fusionView(page);
+    if (v && v.busy) started = true;
+    if (v && !v.busy && v.seq > seq && v.level === 'ok') return v;
+    if (v && !v.busy && started && v.level === 'error') throw new Error('рух: ' + v.text);
+    if (Date.now() - t0 > timeoutMs) throw new Error('рух: немає нового результату' + (v ? ` (${v.text})` : ''));
+    await sleep(300);
+  }
+}
+
+// --replay --moves K: a player who walks K steps of the finished round's cached walk (tools/moving_calib.py:
+// Street View's own links from the round's panorama; the first step, then about 45 / 100 / 170 m). Auto-analyse
+// is switched on in the page, so its controller notices each pano change, waits until the player is idle,
+// re-captures and gets the server's fused answer. Every step: the fused result, the captures' own answers,
+// a HUD screenshot (hud_move<k>.png) and the score of the fused guess against the finished round; the
+// summary lists the points of every step from the start (step 0: the round's panorama alone), worse or not.
+// --interrupt hud|pano: during the first move's sweep the "player" presses like a real one would: a click on the
+// HUD, or a drag of the panorama. Records the player's camera before the sweep, the camera the sweep had
+// turned to, the camera right after the press (the page puts the player's one back inside the press event)
+// and after the release (a drag stays the player's).
+async function interruptSweep(page, where) {
+  const pov = () => page.evaluate(() => {
+    const S = window.__geoscr, p = S.pano();
+    const v = p.getPov();
+    return { heading: Math.round(v.heading * 100) / 100, pitch: Math.round(v.pitch * 100) / 100, zoom: p.getZoom() };
+  }).catch(() => null);
+  const t0 = Date.now();
+  let sw = null;
+  while (!sw && Date.now() - t0 < 90000) {
+    sw = await page.evaluate(() => {
+      const s = window.__geoscr.sweep;
+      return s && s.touched ? { base: s.base } : null;
+    }).catch(() => null);
+    if (!sw) await sleep(100);
+  }
+  if (!sw) return { error: 'no sweep seen' };
+  await sleep(1500);   // the middle of the sweep
+  const during = await pov();
+  const sel = where === 'hud' ? '#geoscr-hud-host' : 'canvas.widget-scene-canvas';
+  const box = await page.$eval(sel, el => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+  const x = where === 'hud' ? box.x + 40 : box.x + box.w / 2, y = where === 'hud' ? box.y + 14 : box.y + box.h / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  const atPress = await pov();
+  const stop = await page.evaluate(() => { const s = window.__geoscr.sweep; return s ? s.stop : 'ended'; }).catch(() => null);
+  if (where === 'pano') await page.mouse.move(x + 80, y + 10, { steps: 8 });
+  await page.mouse.up();
+  await sleep(400);
+  const afterRelease = await pov();
+  const base = { heading: Math.round(sw.base.heading * 100) / 100, pitch: Math.round(sw.base.pitch * 100) / 100, zoom: sw.base.zoom };
+  const restored = !!atPress && Math.abs(((atPress.heading - base.heading) % 360 + 540) % 360 - 180) < 0.05 &&
+    Math.abs(atPress.pitch - base.pitch) < 0.05;
+  return { where, base, during, atPress, stop, afterRelease, restored_at_press: restored };
+}
+
+async function runMoves(ctx, fin, info, dir, start) {
+  const { page, opts } = ctx;
+  const p = info.path;
+  const nb = (await cachedNeighbours(fin.view.pano)).slice(0, opts.moves);
+  if (!nb.length) throw new Error('--moves: no cached neighbouring panoramas for this round');
+  await page.evaluate(() => { const C = window.__geoscr.ctl; C.settings.auto = true; C.show({ auto: true }); });
+  const hud = async name => {
+    const el = await page.$('#geoscr-hud-host');
+    if (el) await el.screenshot({ path: path.join(dir, name) }).catch(e => console.log('   [!] HUD screenshot: ' + e.message));
+  };
+  await hud('hud_move0.png');
+  const steps = [];
+  for (const [i, n] of nb.entries()) {
+    const before = await fusionView(page);
+    const heading = Math.round((fin.view.heading + 50 * (i + 1)) % 360);
+    console.log(`   крок ${i + 1}: гравець переходить на панораму ${n.dist_m} м від старту (${n.steps || '?'} кл. стрілок)`);
+    const ok = await page.evaluate((v, p) => window.__geoscr.loadPano(v, p), { pano: n.pano_id, heading, pitch: 0, zoom: 0 }, p);
+    if (!ok) throw new Error('--moves: the replay page has no panorama to move in');
+    const t0 = Date.now();
+    const probe = opts.interrupt && i === 0 ? interruptSweep(page, opts.interrupt) : null;
+    const v = await waitFusion(page, before ? before.seq : 0);
+    const interrupted = probe ? await probe : null;
+    if (interrupted) {
+      console.log(`   крок 1: «гравець» натискає (${interrupted.where}) під час огляду: ${JSON.stringify(interrupted)}`);
+      await page.screenshot({ path: path.join(dir, 'interrupt_after.png') }).catch(() => null);
+    }
+    const f = v.fusion, r = v.result;
+    const ev = await fetch(`${SERVER}/api/evaluate_round`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: fin.truth.lat, lng: fin.truth.lng, guess_lat: r.guess.lat, guess_lng: r.guess.lng,
+        pred_code: r.countries[0].code, map: serverMap(info.meta) }),
+    }).then(x => x.json()).catch(e => ({ error: e.message }));
+    const step = { step: i + 1, dist_m: n.dist_m, arrow_steps: n.steps, role: n.role, seconds: Math.round((Date.now() - t0) / 100) / 10,
+      panoChanges: v.panoChanges,
+      fused: { n: f.n, w: f.w, changed_top: f.changed_top, prev_top: f.prev_top, replaced: f.replaced,
+        countries: r.countries.slice(0, 3), guess: r.guess, regions: (r.regions || []).slice(0, 2) },
+      captures: f.captures, evaluation: ev, status: v.text, interrupted };
+    steps.push(step);
+    console.log(`   крок ${i + 1}: за ${step.seconds} с; ${v.text}`);
+    console.log(`      злито ${f.n}: ${r.countries.slice(0, 3).map(x => `${x.code} ${(x.probability * 100).toFixed(0)}%`).join(', ')}` +
+      ` -> ${r.guess.lat}, ${r.guess.lng}; окремо ${f.captures.map((c, k) => `${k + 1}:${(c.countries[0] || {}).code}`).join(' ')}` +
+      `; перевірка: ${ev.distance_km} км, ${ev.points} балів`);
+    await hud(`hud_move${i + 1}.png`);
+  }
+  const ev0 = (start && start.evaluation) || {};
+  const r0 = start && start.result;
+  const step0 = { step: 0, dist_m: 0, fused: r0 ? { n: 1, countries: r0.countries.slice(0, 3), guess: r0.guess } : null, evaluation: ev0 };
+  fs.writeFileSync(path.join(dir, 'moves.json'), JSON.stringify([step0].concat(steps), null, 1));
+  const pts = [step0].concat(steps).map(s => (s.evaluation && typeof s.evaluation.points === 'number' ? s.evaluation.points : null));
+  console.log(`   рух: бали по кроках (0 = лише стартова панорама): ${pts.map((x, k) => `${k}: ${x === null ? '?' : x}`).join(', ')}` +
+    (pts[0] !== null && pts[pts.length - 1] !== null ? `; останній крок ${pts[pts.length - 1] >= pts[0] ? '+' : ''}${pts[pts.length - 1] - pts[0]} до старту` : ''));
+  console.log(`   рух: ${steps.length} кроків, збережено ${path.relative(ROOT, path.join(dir, 'moves.json'))} і hud_move*.png`);
 }
 
 function parseArgs(argv) {
@@ -741,6 +894,8 @@ function parseArgs(argv) {
     playerZoom: val('--player-zoom') === null ? null : Math.min(3, Math.max(0, parseFloat(val('--player-zoom')) || 0)),
     auto: has('--auto') || has('--submit'), extension: has('--extension'),
     capture: val('--capture', 'page') === 'screenshot' ? 'screenshot' : 'page',
+    moves: Math.max(0, Math.min(4, parseInt(val('--moves', '0'), 10) || 0)),
+    interrupt: ['hud', 'pano'].includes(val('--interrupt')) ? val('--interrupt') : null,
   };
 }
 
@@ -773,7 +928,7 @@ async function main() {
   browser.on('disconnected', () => process.exit(process.exitCode || 0));
   const page = (await browser.pages())[0] || await browser.newPage();
   const paths = opts.replay ? ALLOWED_PATHS.concat([REPLAY_PATH]) : ALLOWED_PATHS;
-  const ctx = { page, opts, metaCache: {}, extraMeta: {}, fovCache: loadFovCache(), zoomChoice: {}, total: 0,
+  const ctx = { page, opts, metaCache: {}, extraMeta: {}, fovCache: loadFovCache(), zoomChoice: {}, total: 0, moves: {},
     capturePath: null, waitTiles: trackTiles(page), settings: { auto: opts.auto && !opts.replay },
     freeZoom: !!opts.replay && opts.playerZoom === null };
   if (opts.replay) {

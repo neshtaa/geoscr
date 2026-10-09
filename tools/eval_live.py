@@ -77,7 +77,7 @@ def main():
     args = ap.parse_args()
     global STABILITY, WITH_MAP
     STABILITY, WITH_MAP = args.stability, args.map
-    recs = [r for r in load_records() if split_of(r) == args.split and r.get("heading") is not None]
+    recs = [r for r in load_records(pixels=True) if split_of(r) == args.split and r.get("heading") is not None]
     if args.n:
         recs = recs[: args.n]
     with Pool(args.workers) as pool:

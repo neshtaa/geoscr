@@ -10,6 +10,11 @@ Pipeline (no neural networks, no language models):
      turns the features into P(country | image) and a guess maximising the expected
      GeoGuessr score; with a map (id / slug / name, bounds, maxErrorDistance; missing fields
      from data/maps.json) the prior, the score scale and the bounds are the map's;
+  3a. the calibrated parameters (evidence exponents, prior mixes, location / region kernels, region-model
+     weights) are picked by input kind (input_kind): live captures (SphericalImage.source == "views") that
+     cover at least VIEWS_MIN_COVERAGE of the sphere use the "views" set calibrated on live-grid renderings
+     of the CALIB rounds, full panoramas and smaller captures the "pano" set (engine.model.GeoModel.for_input,
+     engine.regions.RegionModel.params_for; "pano" when "views" is missing or stale);
   4. engine/hints.py turns the measurements into observations and picks the matching
      clue cards from the GeoGuessr and Plonk It knowledge bases;
   5. engine/clue_detect.py slides classical detectors of GeoGuessr's clue cards over the sphere:
@@ -33,6 +38,16 @@ from .regions import load_region_model, location_weights, region_list, region_po
 from .hints import build_hints, clue_base
 from .model import MODEL_DIR, GeoModel
 from .panorama import SphericalImage
+
+# smallest sphere coverage that gets the "views" parameter set (the live grid covers ~0.95, a single
+# 112.7 deg frame ~0.14; see input_kind)
+VIEWS_MIN_COVERAGE = 0.5
+
+
+def input_kind(sph):
+    """Parameter set of an input: "views" for screenshot captures covering >= VIEWS_MIN_COVERAGE of the sphere
+    (the set was calibrated on the live grid), "pano" for full panoramas and smaller captures."""
+    return "views" if sph.source == "views" and sph.coverage() >= VIEWS_MIN_COVERAGE else "pano"
 
 
 def load_spherical(image, heading=None, hfov=None, pitch=0.0):
@@ -77,7 +92,8 @@ class Locator:
             X[name] = x[None, :]
             flat.update({"%s.%s" % (name, k): float(v) for k, v in zip(mod.FEATURE_NAMES, x)})
         t_feat = time.time() - t0
-        m = self.model
+        kind = input_kind(sph)
+        m = self.model.for_input(kind)
         setup = m.map_setup(mp)
         where = {"score_scale_km": setup["scale_km"], "bounds": setup["bounds"]}
         t1 = time.time()
@@ -106,7 +122,8 @@ class Locator:
         if rmodel is not None:
             # within-country region model (engine/regions.py): regions, and the guess placed on the
             # reference mass of the likely regions
-            mix, per = region_posterior(X, post, classes=m.classes, by_country="both", bounds=setup["bounds"])
+            mix, per = region_posterior(X, post, classes=m.classes, by_country="both", bounds=setup["bounds"],
+                                        params=rmodel.params_for(kind))
             regions = region_list(mix)
             guess = m.locate(lp, d2, w=location_weights(m, lp, d2, per, bounds=setup["bounds"]), **where)
             g_top = m.locate(lp_top, d2, w=location_weights(m, lp_top, d2, per, bounds=setup["bounds"]), **where)
@@ -148,12 +165,17 @@ class Locator:
             "observations": hints["observations"],
             "hints": hints["countries"],
             "contributions": contrib,
+            # the full country posterior and the prior it was computed with (engine/fusion.py fuses the
+            # captures of one round by their evidence relative to that prior)
+            "posterior": {m.classes[i]: float("%.4g" % post[i]) for i in range(len(post))},
+            "prior": {m.classes[i]: float("%.4g" % prior[i]) for i in range(len(prior))},
             "map": None if mp is None else {
                 "id": mp["id"], "slug": mp["slug"], "name": mp["name"], "bounds": bounds_dict(setup["bounds"]),
                 "maxErrorDistance": mp["maxErrorDistance"], "score_scale_km": round(setup["scale_km"], 1),
                 "world": mp["world"], "known": mp["known"], "prior": setup["kind"], "prior_counts": setup["counts"]},
             "measurements": evidence,
-            "input": {"source": sph.source, "coverage": round(sph.coverage(), 3),
+            "input": {"source": sph.source, "coverage": round(sph.coverage(), 3), "kind": kind, "params": m.param_set,
+                      "region_params": kind if rmodel is not None and kind in rmodel.param_sets else "pano",
                       "true_heading_known": sph.heading is not None,
                       "car_axis_known": sph.car_heading is not None},
             "timing_ms": {"features": int(t_feat * 1000), "cards": int(t_cards * 1000),

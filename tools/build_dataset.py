@@ -9,6 +9,8 @@ Modes
   history   every round of the user's own GeoGuessr games (duels, challenges,
             standard games) read from the GeoGuessr API - the real-game test set
   postmatch panoramas listed in data/geoguessr_postmatch_clues.json
+  duels     rounds of public ranked duels (tools/crawl_duels.py); images kept - for many rounds use
+            tools/stream_duels.py (features only, images deleted)
 
 Output: <out>/panos/<pano_id>.jpg (2048x1024 equirectangular, centre = car heading)
         <out>/index.jsonl (one metadata record per panorama)
@@ -29,6 +31,7 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tools"))
+from calibrate import OWN_FILE, OWN_KM  # noqa: E402  (the user's own rounds; no duel location this close)
 from engine.geo import _raster, country_at  # noqa: E402
 from engine.streetview import download_panorama, get_metadata, search_pano  # noqa: E402
 
@@ -258,6 +261,31 @@ def history_rounds():
     return rounds
 
 
+def write_json_atomic(obj, path):
+    tmp = path + ".tmp%d" % os.getpid()
+    with open(tmp, "w") as f:
+        json.dump(obj, f)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def merge_own_rounds(rounds, path=OWN_FILE):
+    """Add the history rounds to OWN_FILE (the exclusion list of the duel crawl / stream and of
+    calibrate.load_records; read by build_priors, build_clue_index, ...): union by (game, round), new rounds
+    replace old copies.  Returns the number of rounds added."""
+    try:
+        with open(path) as f:
+            old = json.load(f)
+    except (OSError, ValueError):
+        old = []
+    key = lambda r: (r.get("game"), r.get("round"))
+    new = {key(r) for r in rounds}
+    out = [r for r in old if key(r) not in new] + list(rounds)
+    write_json_atomic(out, path)
+    return len(out) - len(old)
+
+
 def run_history(args, seen):
     if args.rounds_file:  # offline copy (e.g. in environments where geoguessr.com is blocked)
         rounds = json.load(open(args.rounds_file))
@@ -265,6 +293,7 @@ def run_history(args, seen):
         rounds = history_rounds()
     print(f"[history] {len(rounds)} rounds in game history")
     json.dump(rounds, open(os.path.join(args.out, "history_rounds.json"), "w"))
+    print(f"[history] {merge_own_rounds(rounds)} new rounds in {os.path.relpath(OWN_FILE, ROOT)}")
 
     def work(r):
         try:
@@ -273,7 +302,10 @@ def run_history(args, seen):
                 meta = retry(search_pano, r["lat"], r["lng"], 100)
             if not meta:
                 return None
-            if meta["pano_id"] in seen:
+            prev = seen.get(meta["pano_id"])
+            # a panorama known only as a training (duel / world / balanced) record becomes the user's round:
+            # calibrate.load_records prefers the own record (and drops training records near own rounds)
+            if prev is not None and not (isinstance(prev, dict) and prev.get("mode") in ("world", "balanced", "duel")):
                 return None
             seen[meta["pano_id"]] = True
             extra = {k: r[k] for k in ("game", "kind", "map", "round", "gg_country", "gg_heading")}
@@ -287,41 +319,73 @@ def run_history(args, seen):
     print(f"[history] stored {n} panoramas")
 
 
-def run_duels(args, seen):
-    """Rounds of public ranked duels (tools/crawl_duels.py) - real GeoGuessr location pools."""
+DUELS_FILE = os.path.join(ROOT, "data", "calibration", "duel_rounds.json")
+
+
+def round_key(r):
+    """Identity of a crawled round: its panorama id, or game/round when the round has none."""
+    return r.get("pano_id") or "%s/%s" % (r.get("game"), r.get("round"))
+
+
+def duel_candidates(rounds, own, seen=(), skip=()):
+    """Crawled duel rounds worth a panorama: not one of the user's own rounds (pano id) nor within OWN_KM of
+    one, one round per panorama id, panorama not in `seen` (dataset index) or `skip` (round_key given up
+    before).  Rounds without a panorama id are kept (the panorama is searched at the position)."""
     from engine.geo import haversine_km
-    import numpy as np
-    state = json.load(open(os.path.join(ROOT, "data/calibration/duel_rounds.json")))
-    rounds = state["rounds"]
-    # never download a location of the user's own (calib/test) rounds
-    own = json.load(open(os.path.join(ROOT, "data/calibration/history_rounds.json")))
-    own_ids = {r["pano_id"] for r in own}
-    olat = np.array([r["lat"] for r in own])
-    olng = np.array([r["lng"] for r in own])
+    own_ids = {r.get("pano_id") for r in own} - {None}
+    olat = np.array([r["lat"] for r in own], float)
+    olng = np.array([r["lng"] for r in own], float)
     keep, dup = [], set()
     for r in rounds:
-        if r["pano_id"] in own_ids or r["pano_id"] in dup:
+        pid = r.get("pano_id")
+        if round_key(r) in skip or (pid is not None and (pid in own_ids or pid in dup or pid in seen)):
             continue
-        if float(np.min(haversine_km(r["lat"], r["lng"], olat, olng))) < 1.0:
+        if len(olat) and float(np.min(haversine_km(r["lat"], r["lng"], olat, olng))) < OWN_KM:
             continue
-        dup.add(r["pano_id"])
+        if pid is not None:
+            dup.add(pid)
         keep.append(r)
+    return keep
+
+
+def duel_meta(r):
+    """Street View metadata of a duel round's panorama (fallback: nearest panorama within 100 m)."""
+    meta = retry(get_metadata, r["pano_id"]) if r.get("pano_id") else None
+    return meta or retry(search_pano, r["lat"], r["lng"], 100)
+
+
+def duel_extra(r):
+    """Index fields of a duel round (added to the Street View metadata)."""
+    return {"game": r["game"], "round": r["round"], "gg_country": r["gg_country"],
+            "gg_heading": r.get("gg_heading"), "duel_mode": r.get("mode"),
+            "round_lat": r["lat"], "round_lng": r["lng"], "start": r.get("start")}
+
+
+MAX_KEEP = 1000  # duels: new images kept without --keep-images (~0.45 MB each)
+
+
+def run_duels(args, seen):
+    """Rounds of public ranked duels (tools/crawl_duels.py) - real GeoGuessr location pools.  Keeps every image
+    (~0.45 MB each); tools/stream_duels.py stores the features only."""
+    rounds = json.load(open(DUELS_FILE))["rounds"]
+    # never download a location of the user's own (calib/test) rounds
+    keep = duel_candidates(rounds, json.load(open(OWN_FILE)))
+    print(f"[duels] {len(rounds)} crawled rounds, {len(keep)} after removing the user's own locations")
     if args.n:
         keep = keep[: args.n]
-    print(f"[duels] {len(rounds)} crawled rounds, {len(keep)} after removing the user's own locations")
+    n_new = sum(1 for r in keep if r.get("pano_id") not in seen)
+    if n_new > MAX_KEEP and not args.keep_images:
+        sys.exit(f"[duels] {n_new} new panoramas would be kept as images (~{n_new * 0.45 / 1000:.1f} GB; limit "
+                 f"{MAX_KEEP} without --keep-images): use tools/stream_duels.py (features only, images deleted), "
+                 f"a smaller -n, or pass --keep-images")
 
     def work(r):
         try:
-            meta = retry(get_metadata, r["pano_id"]) if r.get("pano_id") else None
-            if not meta:
-                meta = retry(search_pano, r["lat"], r["lng"], 100)
+            meta = duel_meta(r)
             if not meta or meta["pano_id"] in seen:
                 return None
             seen[meta["pano_id"]] = True
-            extra = {"game": r["game"], "round": r["round"], "gg_country": r["gg_country"],
-                     "gg_heading": r.get("gg_heading"), "duel_mode": r.get("mode"),
-                     "round_lat": r["lat"], "round_lng": r["lng"], "start": r.get("start")}
-            return retry(fetch_and_store, args.out, meta, "duel", extra)
+            return retry(fetch_and_store, args.out, meta, "duel", duel_extra(r))
         except Exception:
             return None
 
@@ -365,7 +429,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=["world", "balanced", "history", "postmatch", "duels"])
     ap.add_argument("--out", default=os.path.join(ROOT, "scratch/dataset"))
-    ap.add_argument("-n", type=int, default=2000, help="world: number of random land points")
+    ap.add_argument("-n", type=int, default=2000, help="world: number of random land points; duels: rounds (0 = all)")
     ap.add_argument("--quota", type=int, default=40, help="balanced: panoramas per country")
     ap.add_argument("--max-misses", type=int, default=60)
     ap.add_argument("--countries", default="", help="balanced: comma separated ISO codes")
@@ -373,6 +437,7 @@ def main():
     ap.add_argument("--threads", type=int, default=24)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--rounds-file", default="", help="history: read rounds from this JSON instead of the GeoGuessr API")
+    ap.add_argument("--keep-images", action="store_true", help="duels: allow storing > %d new images" % MAX_KEEP)
     args = ap.parse_args()
     os.makedirs(os.path.join(args.out, "panos"), exist_ok=True)
     seen = load_index(args.out)

@@ -85,7 +85,7 @@ def main():
     ap.add_argument("--n", type=int, default=3000)
     ap.add_argument("--workers", type=int, default=4)
     args = ap.parse_args()
-    recs = [r for r in load_records() if r.get("heading") is not None and r.get("date")][: args.n]
+    recs = [r for r in load_records(pixels=True) if r.get("heading") is not None and r.get("date")][: args.n]
     # candidates must be scored with the heuristic, not a previous fit: hide the old model
     if os.path.exists(OUT):
         os.rename(OUT, OUT + ".old")

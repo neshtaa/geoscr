@@ -751,7 +751,7 @@ def cmd_check_compat(args, groups):
     from calibrate import _extract_one, _init
     from engine import features
     compat = load_compat()
-    recs = sorted((r for r in load_records() if split_of(r) == "train"),
+    recs = sorted((r for r in load_records(pixels=True) if split_of(r) == "train"),
                   key=lambda r: hashlib.md5(r["pano_id"].encode()).hexdigest())
     for g in groups:
         hm, hc = main_hash(g), module_hash(features.load(g))

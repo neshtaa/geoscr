@@ -13,6 +13,13 @@ POST /api/predict  JSON, one of:
       invalid bounds / maxErrorDistance are dropped and listed in the result's "warnings";
   optional "debug_dir": save the reconstructed sphere there as sphere.jpg (inside the project
       or the temp directory; relative paths are relative to the project)
+  optional "fusion": {"round": "<key>", "reset": false} (views only): the capture joins the captures of
+      that round (moving games: the player walked to another panorama; the key is the client's game
+      token + round number, never a location) and the answer is the fused result of all of them
+      (engine/fusion.py) with "fusion" {n, w, replaced, top, prev_top, changed_top, captures: the
+      captures' own top countries and guesses} and "capture" (this capture's own analysis).  A
+      re-capture of the same panorama replaces the earlier one.  Rounds are kept in memory (LRU 32
+      rounds, 3 h).
 POST /api/evaluate_round  {"lat", "lng", "guess_lat", "guess_lng", "pred_code", "map"?}
 GET  /api/maps     known maps (data/maps.json)
 GET  /api/health
@@ -28,6 +35,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import traceback
@@ -44,6 +52,11 @@ sys.path.insert(0, ROOT)
 from engine.geo import (country_at, geoguessr_points, haversine_km, load_maps, parse_bounds,  # noqa: E402
                         positive_float, resolve_map)
 from engine.locator import distance_report, get_locator  # noqa: E402
+from engine import fusion  # noqa: E402
+
+FUSION = fusion.FusionStore(max_rounds=32, ttl_s=3 * 3600)
+# game / challenge token + round number >= 1 (replays of finished games: + the page instance); never a location
+ROUND_KEY = re.compile(r"^(game|challenge|replay):[A-Za-z0-9]{1,64}#[1-9][0-9]{0,3}(@[a-z0-9]{1,24})?$")
 
 LOCK = threading.Lock()
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
@@ -98,15 +111,34 @@ def debug_dir_from_request(req):
     return path
 
 
+def fusion_request(req):
+    """(round key, reset) of the optional "fusion" field, None without one."""
+    f = req.get("fusion")
+    if f is None or f == {}:
+        return None
+    if not isinstance(f, dict) or not isinstance(f.get("round"), str) or not ROUND_KEY.fullmatch(f["round"]):
+        raise ValueError("fusion must be {round: '<game|challenge|replay>:<token>#<round number>', reset?: bool}")
+    return f["round"], bool(f.get("reset"))
+
+
 def predict(req):
-    loc = get_locator()
+    loc = fusion.install_tap(get_locator())
     warnings = []
     kw = {"map_info": map_from_request(req, warnings), "debug_dir": debug_dir_from_request(req)}
     if req.get("views"):
         views = [{"image": _img(v["image_b64"]), "yaw": float(v.get("yaw", 0.0)), "pitch": float(v.get("pitch", 0.0)),
                   "hfov": float(v.get("hfov", 100.0)), "true_north": bool(v.get("true_north", True))}
                  for v in req["views"]]
+        fz = fusion_request(req)
         res = loc.analyze_views(views, **kw)
+        if fz:  # moving: fuse with the earlier captures of the round
+            X, flat, det = fusion.tapped(loc)
+            try:
+                cap = fusion.capture_state(res, X, flat, det)
+            except ValueError as e:  # a locator without the full posterior: the capture's own answer
+                warnings.append("fusion off: %s" % e)
+            else:
+                res = FUSION.add(loc, fz[0], cap, map_info=kw["map_info"], reset=fz[1])
     elif req.get("image_b64"):
         h = req.get("heading")
         res = loc.analyze_image(_img(req["image_b64"]), heading=None if h is None else float(h),
@@ -243,7 +275,7 @@ def main():
     ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
-    get_locator()  # load the model before accepting requests
+    fusion.install_tap(get_locator())  # load the model before accepting requests
     print("Locator server on http://%s:%d" % (args.host, args.port))
     Server((args.host, args.port), Handler).serve_forever()
 

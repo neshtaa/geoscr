@@ -1,0 +1,33 @@
+{
+ "views": {
+  "params": {
+   "pre": "qn",
+   "K": 32,
+   "K_big": 128,
+   "shrink": 0.3,
+   "tau": 5.0,
+   "tau_geo": 5.0,
+   "geo_sigma_km": 150.0,
+   "own": 0.0,
+   "own_min": 150,
+   "extra_w": 1.0,
+   "beta": 0.6,
+   "alpha": 0.3,
+   "knn_k": 30,
+   "knn_s": 4.0,
+   "sun_smooth": 5,
+   "weights": {
+    "prior": 1.2,
+    "lda": 0.4,
+    "knn": 0.5,
+    "sun": 1.0
+   },
+   "smooth": 0.3,
+   "smooth_km": 400.0,
+   "smooth_card": 0.0
+  },
+  "regions_npz": "eaadde240661",
+  "calib_rounds": 517,
+  "features": "live grid renderings (tools/live_features.py)"
+ }
+}

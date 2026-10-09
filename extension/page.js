@@ -46,6 +46,12 @@
   const NOT_SUPPORTED = 'Тут не підтримується (мультиплеєр або інша сторінка). Підказки працюють лише в одиночних /challenge/… та /game/….';
   const PAGE_CHANGED = 'сторінка змінилася під час знімання';
   const PANO_CHANGED = 'панорама змінилася під час знімання';
+  const PLAYER_INPUT = 'ви рухаєте камеру: знімання перервано';
+  const MOVE_IDLE_MS = 1500;     // moving: a new panorama of the round is analysed after this long without input
+  // moving: the round key (game / challenge token + round number >= 1; replays also the page instance)
+  const ROUND_KEY_RE = /^(game|challenge|replay):[A-Za-z0-9]{1,64}#[1-9][0-9]{0,3}(@[a-z0-9]{1,24})?$/;
+  // keys that move, turn or zoom Street View (GeoGuessr's own key handling); typing in a field does not count
+  const NAV_KEY_RE = /^(arrowup|arrowdown|arrowleft|arrowright|w|a|s|d|\+|-|=|_)$/;
 
   // ---------------------------------------------------------------- fair-play metadata whitelist
   // These read only the whitelisted keys; nothing touches rounds, coordinates, pano ids or streak codes.
@@ -188,12 +194,33 @@
     return { ok: true };
   }
 
-  // forbidRotating (null = unknown, probe the camera) and whether the zoom must stay as the player has it.
+  // forbidRotating (null = unknown, probe the camera), whether the zoom must stay as the player has it and
+  // forbidMoving (null = unknown: a pano change inside the round means the player moved).
   function gameFlags(meta, nmpz) {
     const g = (meta && meta.game) || {}, c = (meta && meta.challenge) || {};
     const flag = k => (typeof g[k] === 'boolean' ? g[k] : typeof c[k] === 'boolean' ? c[k] : null);
-    const rotate = flag('forbidRotating');
-    return { noRotate: rotate !== null ? rotate : nmpz ? true : null, zoomLocked: flag('forbidZooming') !== false };
+    const rotate = flag('forbidRotating'), move = flag('forbidMoving');
+    return { noRotate: rotate !== null ? rotate : nmpz ? true : null, zoomLocked: flag('forbidZooming') !== false,
+      noMove: move !== null ? move : nmpz ? true : null };
+  }
+
+  // Moving: the round key the server fuses the captures under (game / challenge token + round number;
+  // replays of finished games also carry the page instance, so test runs never mix).
+  // No key (no fusion) unless the round number is known.
+  function fusionKey(path, token, round, replay, pageId) {
+    if (!Number.isInteger(round) || round < 1 || typeof token !== 'string') return null;
+    const kind = replay ? 'replay' : String(path || '').split('/')[1] || 'page';
+    const k = `${kind}:${token}#${round}${replay && pageId ? '@' + pageId : ''}`;
+    return ROUND_KEY_RE.test(k) ? k : null;
+  }
+
+  // Moving: a new panorama of the round is analysed once the player has stopped: no pano change, camera
+  // turn or mouse input for idleMs, no mouse button held and the panorama not blurred (GeoGuessr blurs it
+  // while the player drags during a move).
+  function moveReady(t) {
+    if (!t || t.mouseDown || t.blur) return false;
+    const last = Math.max(t.panoAt || 0, t.povAt || 0, t.inputAt || 0);
+    return t.now - last >= (t.idleMs || MOVE_IDLE_MS);
   }
 
   // ---------------------------------------------------------------- camera geometry
@@ -263,8 +290,9 @@
   const matrixFov = (canvas, f) => ({ hfov: hfovFromVfov(f.vfov, canvas.width / canvas.height), vfov: f.vfov,
     hfovMatrix: f.hfov, method: 'webgl-matrix' });
 
-  // Payload of a "predict" request as the locator server takes it (no extra keys pass through).
-  function predictBody(views, map) {
+  // Payload of a "predict" request as the locator server takes it (no extra keys pass through); fusion: the
+  // round key of moving games ({round}, see fusionKey).
+  function predictBody(views, map, fusion) {
     const body = { views: (views || []).map(v => ({ image_b64: String(v.image_b64), yaw: +v.yaw, pitch: +v.pitch,
       hfov: +v.hfov, vfov: +v.vfov })) };
     const m = map && typeof map === 'object' ? map : null;
@@ -272,6 +300,7 @@
       body.map = {};
       for (const k of ['id', 'slug', 'name', 'bounds', 'maxErrorDistance']) if (m[k] !== undefined && m[k] !== null) body.map[k] = m[k];
     }
+    if (fusion && typeof fusion.round === 'string' && ROUND_KEY_RE.test(fusion.round)) body.fusion = { round: fusion.round };
     return body;
   }
 
@@ -293,7 +322,8 @@
       return memo.ok;
     };
     const S = { id: Math.random().toString(36).slice(2), api: API, cfg, panos: [], seq: 0, hidden: [],
-      store: {}, panoChanges: 0, panoAt: 0, mark: null, tileAt: 0, onDraw: null };
+      store: {}, panoChanges: 0, panoAt: 0, mark: null, tileAt: 0, onDraw: null, povAt: 0, inputAt: 0, pressAt: 0,
+      mouseDown: false, sweep: null };
     if (cfg.expose) window.__geoscr = S;   // play_live_visual.js and the replay test mode only
     S.allowed = allowed;
     S.setReplay = on => { cfg.replay = !!on; };
@@ -308,8 +338,61 @@
       if (!S.panos.includes(inst)) {
         S.panos.push(inst);
         try { inst.addListener('pano_changed', panoChanged); } catch (e) { /* not an MVCObject */ }
+        try { inst.addListener('pov_changed', () => { S.povAt = performance.now(); }); } catch (e) { /* not an MVCObject */ }
       }
       inst.__geoscrUsed = performance.now();
+    };
+    // The player's input (allowed pages only). A press on the panorama grabs the camera: no capture starts
+    // while it is held. Any press (panorama, guess map, HUD) or a Street View key stops a running sweep and
+    // puts the player's camera back at once, before the page's own handlers see the event, so a drag starts
+    // from the player's view (S.interrupt). Moves wait for idle input (moveReady).
+    const inPanorama = t => {
+      if (!t || typeof t !== 'object') return false;
+      const p = S.pano();
+      const c = S.canvas();
+      // the Street View element, GeoGuessr's panorama container, or Google's scene around the canvas
+      const els = [p && p.__geoscrDiv, document.querySelector('#panorama-container'), document.querySelector("[data-qa='panorama']"),
+        c && c.parentElement, c];
+      return els.some(el => !!el && typeof el.contains === 'function' && (el === t || el.contains(t)));
+    };
+    const input = down => e => {
+      try {
+        if (!allowed() || (down && typeof e.button === 'number' && e.button !== 0)) return;
+        if (e.type === 'blur' && e.target !== window) return;   // the window lost focus (not an element)
+        S.mouseDown = down && inPanorama(e.target);
+        S.inputAt = performance.now();
+        if (down) {
+          S.pressAt = S.inputAt;
+          S.interrupt();
+        }
+      } catch (err) { /* never break the page */ }
+    };
+    const key = e => {
+      try {
+        if (!allowed() || e.altKey || e.ctrlKey || e.metaKey || !NAV_KEY_RE.test(String(e.key || '').toLowerCase())) return;
+        const t = e.target;
+        if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '') || t.isContentEditable)) return;
+        S.inputAt = S.pressAt = performance.now();
+        S.interrupt();
+      } catch (err) { /* never break the page */ }
+    };
+    if (typeof window.addEventListener === 'function') {
+      for (const [t, d] of [['mousedown', true], ['pointerdown', true], ['mouseup', false], ['pointerup', false],
+        ['pointercancel', false], ['blur', false]]) window.addEventListener(t, input(d), { capture: true, passive: true });
+      window.addEventListener('keydown', key, { capture: true, passive: true });
+    }
+    // the panorama held (a release the page never saw expires after 20 s)
+    S.held = () => !!S.mouseDown && performance.now() - S.inputAt < 20000;
+    // The player took over during a sweep: stop it and put their camera (and the navigation arrows) back now.
+    S.interrupt = () => {
+      const sw = S.sweep;
+      if (!sw || sw.stop) return;
+      sw.stop = PLAYER_INPUT;
+      if (sw.touched && !sw.restored && S.panoChanges === sw.pano) {
+        sw.restored = true;
+        try { S.setView(sw.base, sw.p); } catch (e) { /* page gone */ }
+      }
+      try { S.arrows(true, sw.p); } catch (e) { /* page gone */ }
     };
     const hookStreetView = () => {
       const g = window.google;
@@ -505,6 +588,7 @@
         panoChanges: S.panoChanges, sincePano: S.panoAt ? performance.now() - S.panoAt : null,
         drawnSincePano: !mk || S.seq > mk.seq || (canv === mk.canvas ? draws > mk.draws : draws > 0),
         blur: !!(canv && /blur/.test(canv.style.filter || '')),
+        mouseDown: S.held(), povAt: S.povAt, inputAt: S.inputAt, panoAt: S.panoAt, now: performance.now(),
         nmpz: !!document.querySelector("[data-qa='panorama'][class*='playingNmpz']"),
         canvas: canv ? { width: canv.width, height: canv.height, cssWidth: r.width, cssHeight: r.height } : null,
         roundText: rn ? rn.innerText.replace(/\s+/g, ' ').trim() : null,
@@ -533,13 +617,17 @@
       if (v.heading !== undefined && v.heading !== null) pano.setPov({ heading: v.heading, pitch: v.pitch || 0 });
       return true;
     };
-    // forbidRotating unknown: GeoGuessr puts the camera back 25 ms after any change in no-rotate rounds
-    S.rotateLocked = async p => {
+    // forbidRotating unknown: GeoGuessr puts the camera back 25 ms after any change in no-rotate rounds.
+    // sw: the sweep it belongs to (S.guard before the camera is touched; nothing is put back once the
+    // player took over, S.interrupt did that).
+    S.rotateLocked = async (p, sw = null) => {
       const pano = S.here(p) ? S.pano() : null;
       if (!pano) return null;
+      if (sw) { S.guard(sw); sw.touched = true; }
       const v0 = pano.getPov(), target = (v0.heading + 5) % 360;
       pano.setPov({ heading: target, pitch: v0.pitch });
       await new Promise(r => setTimeout(r, 150));
+      if (sw && sw.stop) return null;
       const v1 = pano.getPov();
       const locked = Math.abs(((v1.heading - target) % 360 + 540) % 360 - 180) > 2;
       if (!locked) pano.setPov({ heading: v0.heading, pitch: v0.pitch });
@@ -615,10 +703,12 @@
     // Wait until the view is painted and stable: a draw at or after `after` (the setView; a view that
     // needs no redraw is accepted after 400 ms), then no draw and no Street View tile for idleMs (tiles
     // arrive progressively and each one triggers a redraw).
-    S.waitSettled = async ({ after = null, minMs = 0, idleMs = S.idleMs || 150, maxMs = 3000 } = {}) => {
+    // stop(): give up early (the player took over; the caller checks why).
+    S.waitSettled = async ({ after = null, minMs = 0, idleMs = S.idleMs || 150, maxMs = 3000, stop = null } = {}) => {
       const t0 = now();
       if (minMs) await sleep(minMs);
       for (;;) {
+        if (stop && stop()) return;
         const c = S.canvas();
         const drawAt = c && c.__geoscrDrawAt || 0;
         const drew = after === null || drawAt >= after || now() - t0 > 400;
@@ -626,6 +716,41 @@
         await sleep(25);
       }
       await new Promise(r => { requestAnimationFrame(() => requestAnimationFrame(r)); setTimeout(r, 500); });
+    };
+
+    // A sweep: the player's camera (base), the pano-change count and page it belongs to. S.guard runs
+    // before every camera change of the script: the page, the panorama and the player's hands are checked.
+    const stopped = sw => !!sw.stop || S.held() || S.pressAt > sw.t0 || S.panoChanges !== sw.pano || !S.here(sw.p);
+    S.guard = sw => {
+      check(sw.p);
+      if (S.panoChanges !== sw.pano) fail(PANO_CHANGED);
+      if (sw.stop || S.held() || S.pressAt > sw.t0) {
+        sw.stop = sw.stop || PLAYER_INPUT;
+        fail(PLAYER_INPUT);
+      }
+    };
+    const camera = (sw, v) => {
+      S.guard(sw);
+      sw.touched = true;
+      if (!S.setView(v, sw.p)) fail(PAGE_CHANGED);
+    };
+    // The player's camera back after a sweep (not after a move: that panorama is gone). While the player
+    // holds the panorama it is put back on release (within 20 s), unless a new sweep has started.
+    S.restore = sw => {
+      if (!sw || !sw.touched || sw.restored) return;
+      const go = () => {
+        if (sw.restored || S.panoChanges !== sw.pano || !S.here(sw.p) || (S.sweep && S.sweep !== sw)) return;
+        sw.restored = true;
+        try { S.setView(sw.base, sw.p); } catch (e) { /* page gone */ }
+      };
+      if (!S.held()) { go(); return; }
+      const t0 = now();
+      const wait = () => {
+        if (sw.restored || now() - t0 > 20000) return;
+        if (S.held()) { setTimeout(wait, 100); return; }
+        go();
+      };
+      setTimeout(wait, 100);
     };
 
     const glOf = c => {
@@ -656,7 +781,7 @@
 
     // The current frame of the panorama canvas as a JPEG data URL. A preserved (or 2D) canvas is read
     // directly; otherwise the next frame is read right after it is drawn (measured redraw).
-    S.grab = (p, maxW = MAX_WIDTH) => {
+    S.grab = (p, maxW = MAX_WIDTH, sw = null) => {
       check(p);
       const c = S.canvas();
       if (!c) fail('панорами немає на сторінці');
@@ -667,6 +792,7 @@
         const r = readCanvas(c, maxW);
         if (!r.blank) return Promise.resolve(Object.assign(r, { method: gl ? 'preserved' : '2d' }));
       }
+      if (sw) S.guard(sw);   // the redraw below nudges the camera: not once the player took over
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => { S.onDraw = null; reject(new Error('кадр не вдалося прочитати (canvas не читається)')); }, 3000);
         S.onDraw = cv => {
@@ -691,15 +817,19 @@
         if (st.renderer === 'tiles') fail('непідтримуваний рендерер: панорама GeoGuessr (Baidu / GG_)');
         if (!moved && st.panoChanges !== since.panoChanges) moved = true;
         if (!moved && now() - t0 > 12000) moved = true;   // no pano change seen: capture what is shown
-        if (moved && st.renderer === 'google' && st.status === 'OK' && st.pov && !st.blur && st.canvas &&
+        if (moved && st.renderer === 'google' && st.status === 'OK' && st.pov && !st.blur && !st.mouseDown && st.canvas &&
           st.drawnSincePano && (st.sincePano === null || st.sincePano >= SETTLE_MS)) {
+          const t1 = now(), pc = st.panoChanges;
           await S.waitSettled({ idleMs: 400, maxMs: 4000 });
-          return S.state();
+          const s2 = S.state();
+          // still the same panorama and nobody touched it while it settled: ready
+          if (s2.panoChanges === pc && !s2.mouseDown && !s2.blur && S.pressAt <= t1) return s2;
+          continue;
         }
         if (now() - t0 > timeoutMs) {
           if (st.renderer === 'none') fail('панорами немає на сторінці');
           if (st.renderer === 'google-unhooked') fail('об’єкт Street View не перехоплено (hook не спрацював)');
-          if (st.blur) fail('панорама розмита (затиснута кнопка миші?)');
+          if (st.blur || st.mouseDown) fail('панорама розмита або затиснута кнопка миші');
           fail(`панорама не завантажилась (статус ${st.status})`);
         }
         await sleep(200);
@@ -708,21 +838,23 @@
 
     // Point the camera, wait for its draw and the tiles, read back POV / zoom / projection and take the
     // frame. pano: the pano-change count at the start of the capture (a move or a new round aborts it).
-    const grabAt = async (p, view, maxW, pano) => {
+    const grabAt = async (sw, view, maxW) => {
       const before = S.state();
       const drawnSince = s => (s.fov ? s.fov.seq > before.seq : s.draws > before.draws);
       const t = now();
-      if (!S.setView(view, p)) fail(PAGE_CHANGED);
-      await S.waitSettled({ after: t });
+      camera(sw, view);
+      await S.waitSettled({ after: t, stop: () => stopped(sw) });
+      S.guard(sw);
       let st = S.state();
       for (let i = 0; !drawnSince(st) && i < 20; i++) {
-        if (i === 10) S.setView({ heading: view.heading + 0.01, pitch: view.pitch }, p);
+        if (i === 10) camera(sw, { heading: view.heading + 0.01, pitch: view.pitch });
         await sleep(100);
+        S.guard(sw);
         st = S.state();
       }
-      check(p);
-      if (S.panoChanges !== pano) fail(PANO_CHANGED);
-      const img = await S.grab(p, maxW);
+      S.guard(sw);
+      const img = await S.grab(sw.p, maxW, sw);
+      S.guard(sw);   // the frame must be the script's view, not one the player started turning
       st = S.state();
       const fresh = st.fov && st.fov.seq > before.seq ? st.fov : null;
       return { img, st, fresh };
@@ -731,15 +863,15 @@
     // FOV at `zoom`: Google's projection matrix of the next frame (WebGL renderer, kept per canvas size
     // and zoom for this page) or the formula (2D renderer, which has no matrix). No frame is read.
     const fovSeen = {};
-    const measureFov = async (p, zoom, base) => {
+    const measureFov = async (sw, zoom, base) => {
       const st0 = S.state();
       const key = `${st0.canvas.width}x${st0.canvas.height}|${zoom.toFixed(3)}`;
       if (fovSeen[key]) return Object.assign({}, fovSeen[key]);
-      if (!S.setView({ zoom, heading: base.heading + 1, pitch: 0 }, p)) fail(PAGE_CHANGED);
+      camera(sw, { zoom, heading: base.heading + 1, pitch: 0 });
       let st = S.state();
       for (let i = 0; st0.fov && !(st.fov && st.fov.seq > st0.seq) && i < 40; i++) {
         await sleep(40);
-        check(p);
+        S.guard(sw);
         st = S.state();
       }
       if (st.fov && st.fov.seq > st0.seq) return Object.assign({}, fovSeen[key] = Object.assign({ zoom: st.zoom }, matrixFov(st.canvas, st.fov)));
@@ -748,7 +880,7 @@
 
     // Zoom whose measured horizontal FOV is close to the target. Google caps the vertical FOV at 90 deg,
     // so the widest view depends on the canvas aspect. fixedZoom: keep the player's zoom (no-zoom games).
-    const chooseZoom = async (p, base, canvas, fixedZoom, wantH) => {
+    const chooseZoom = async (sw, base, canvas, fixedZoom, wantH) => {
       if (fixedZoom !== null) {
         const st = S.state();
         const f = st.fov ? matrixFov(st.canvas, st.fov) : formulaFov(st.zoom, canvas.width / canvas.height);
@@ -758,7 +890,7 @@
       const target = Math.min(wantH, widest);
       let z = target >= widest - 0.01 ? 0 : Math.max(0, zoomForHfov(target)), best = null, last = null;
       for (let i = 0; i < 3; i++) {
-        const f = Object.assign(await measureFov(p, z, base), { zoom: Math.round(z * 1000) / 1000 });
+        const f = Object.assign(await measureFov(sw, z, base), { zoom: Math.round(z * 1000) / 1000 });
         if (!best || Math.abs(f.hfov - target) < Math.abs(best.hfov - target)) best = f;
         if (Math.abs(f.hfov - target) < 2 || f.method === 'formula' || (last && Math.abs(f.hfov - last.hfov) < 0.3)) break;
         last = f;
@@ -777,58 +909,71 @@
     // opts: {since, flags: {noRotate, zoomLocked}, hfov, maxWidth, progress(i, n, text)}
     S.capture = async (p, opts = {}) => {
       const t0 = now();
-      const progress = opts.progress || (() => null);
-      const maxW = opts.maxWidth || MAX_WIDTH;
-      let st = await S.waitPanorama(p, opts.since || null);
+      const st = await S.waitPanorama(p, opts.since || null);
       const t1 = now();
       const pano = S.panoChanges;
       const flags = opts.flags || { noRotate: null, zoomLocked: true };
+      const zoomLocked = !!flags.zoomLocked;
+      const fixedZoom = zoomLocked ? st.zoom : null;
+      // the player's camera, put back after the sweep (or at once when the player takes over: S.interrupt)
+      const base = { heading: st.pov.heading, pitch: st.pov.pitch, zoom: fixedZoom === null ? st.zoom : null };
+      const sw = { base, pano, p, t0: t1, stop: null, touched: false, restored: false };
+      S.sweep = sw;
+      try {
+        return await sweep(sw, st, flags, fixedZoom, opts, t0, t1);
+      } finally {
+        if (S.sweep === sw) S.sweep = null;
+        S.restore(sw);
+        try { S.arrows(true, p); } catch (e) { /* page gone */ }
+      }
+    };
+
+    const sweep = async (sw, st, flags, fixedZoom, opts, t0, t1) => {
+      const p = sw.p, pano = sw.pano, base = sw.base;
+      const progress = opts.progress || (() => null);
+      const maxW = opts.maxWidth || MAX_WIDTH;
+      const zoomLocked = !!flags.zoomLocked;
       let noRotate = flags.noRotate === null || flags.noRotate === undefined ? (st.nmpz ? true : null) : flags.noRotate;
       if (noRotate === null) {
-        noRotate = await S.rotateLocked(p);
+        noRotate = await S.rotateLocked(p, sw);
+        S.guard(sw);
         if (noRotate === null) fail(PAGE_CHANGED);
       }
       if (noRotate) {
         progress(0, 1, 'Без обертання: знімаю поточний кадр…');
-        for (const t2 = now(); st.blur && now() - t2 < 15000;) { await sleep(200); st = S.state(); }
-        if (st.blur) fail('панорама розмита (затиснута кнопка миші?)');
+        for (const t2 = now(); (st.blur || st.mouseDown) && now() - t2 < 15000;) { await sleep(200); st = S.state(); }
+        if (st.blur || st.mouseDown) fail('панорама розмита або затиснута кнопка миші');
         if (S.panoChanges !== pano) fail(PANO_CHANGED);
         const f = st.fov ? matrixFov(st.canvas, st.fov) : formulaFov(st.zoom, st.canvas.width / st.canvas.height);
         const img = await S.grab(p, maxW);
         const st2 = S.state();
         progress(1, 1);
         return { views: [view(img, st2, f, f.method)], mode: 'single', fov: f, grid: null, canvas: st.canvas,
-          zoomLocked: true, noRotate: true, ms: now() - t1, wait_ms: t1 - t0 };
+          zoomLocked: true, noRotate: true, ms: now() - t1, wait_ms: t1 - t0, pano };
       }
-      const zoomLocked = !!flags.zoomLocked;
-      const fixedZoom = zoomLocked ? st.zoom : null;
-      const base = { heading: st.pov.heading, pitch: st.pov.pitch, zoom: fixedZoom === null ? st.zoom : null };
       const views = [];
-      let choice, grid;
-      try {
-        S.arrows(false, p);
-        progress(0, 0, 'Вимірюю поле зору…');
-        choice = await chooseZoom(p, base, st.canvas, fixedZoom, opts.hfov || HFOV_WANTED);
-        grid = planGrid(choice.hfov, choice.vfov, base.heading);
-        for (const g of grid) {
-          progress(views.length, grid.length, 'Знімаю панораму…');
-          const r = await grabAt(p, { heading: g.yaw, pitch: g.pitch, zoom: fixedZoom === null ? choice.zoom : null }, maxW, pano);
-          const f = r.fresh ? matrixFov(r.st.canvas, r.fresh) : choice;
-          views.push(view(r.img, r.st, f, r.fresh ? 'webgl-matrix' : choice.method));
-        }
-        progress(views.length, grid.length);
-      } finally {
-        try { if (S.panoChanges === pano) S.setView(base, p); } catch (e) { /* page gone */ }
-        try { S.arrows(true, p); } catch (e) { /* page gone */ }
+      S.guard(sw);
+      S.arrows(false, p);
+      progress(0, 0, 'Вимірюю поле зору…');
+      const choice = await chooseZoom(sw, base, st.canvas, fixedZoom, opts.hfov || HFOV_WANTED);
+      const grid = planGrid(choice.hfov, choice.vfov, base.heading);
+      for (const g of grid) {
+        progress(views.length, grid.length, 'Знімаю панораму…');
+        const r = await grabAt(sw, { heading: g.yaw, pitch: g.pitch, zoom: fixedZoom === null ? choice.zoom : null }, maxW);
+        const f = r.fresh ? matrixFov(r.st.canvas, r.fresh) : choice;
+        views.push(view(r.img, r.st, f, r.fresh ? 'webgl-matrix' : choice.method));
       }
+      progress(views.length, grid.length);
       return { views, mode: 'sweep', fov: choice, grid, canvas: st.canvas, zoomLocked, noRotate: false, ms: now() - t1,
-        wait_ms: t1 - t0 };
+        wait_ms: t1 - t0, pano };
     };
   }
 
   // ---------------------------------------------------------------- round controller + HUD
 
-  const TRIGGERS = { auto: 'авто', manual: 'вручну', replay: 'повтор' };
+  const TRIGGERS = { auto: 'авто', manual: 'вручну', replay: 'повтор', move: 'рух' };
+  const MOVE_WAIT = 'Ви перемістились: аналіз нової панорами, щойно зупинитесь…';
+  const MOVE_MANUAL = 'Ви перемістились. Alt+G або «Аналіз» додасть нову панораму до відповіді (з «Авто» — сама).';
   const READY = 'Готово. Alt+G або кнопка «Аналіз» — аналізувати панораму.';
   const RESULT = 'Результат раунду. Alt+G — аналіз цієї панорами.';
   const same = (a, b) => a === b || JSON.stringify(a) === JSON.stringify(b);
@@ -836,8 +981,8 @@
   function installController(S) {
     const C = S.ctl = { attached: false, transport: null, port: null, css: null, settings: { auto: false, capture: 'page', maxWidth: MAX_WIDTH },
       busy: null, lastKey: null, roundAt: 0, since: null, resultKey: null, resultMark: null, rotate: null, healthPath: null,
-      last: null, hud: null,
-      view: { mode: 'off', status: { text: '', level: 'idle' }, auto: false, result: null, round: '', canLook: false } };
+      last: null, hud: null, fuse: null,
+      view: { mode: 'off', status: { text: '', level: 'idle' }, auto: false, result: null, round: '', canLook: false, fusion: null } };
     let seq = 0;
     const waiting = {};
 
@@ -1015,23 +1160,49 @@
       const key = `${p}#${info.round}`;
       if (key === C.lastKey) {
         if (st.result && C.view.status.level === 'idle' && !C.view.result) status(RESULT, 'idle');
+        else C.moveCheck(info);
         return;
       }
       const prev = C.lastKey;
       C.lastKey = key;
       C.roundAt = performance.now();
       C.rotate = null;
+      C.fuse = null;
       // auto-analyse waits for this round's panorama: a pano change after the previous round's result
       // screen; without one, the pano change of the last 3 s, else the next one
       C.since = prev && C.resultKey === prev ? { panoChanges: C.resultMark }
         : S.panoAt && performance.now() - S.panoAt < 3000 ? null : { panoChanges: S.panoChanges };
-      C.show({ round: info.label, result: null, timing: null, score: null, canLook: false });
+      C.show({ round: info.label, result: null, timing: null, score: null, canLook: false, fusion: null });
       if (C.settings.auto && !st.result && !info.replay) C.analyse('auto', info).catch(() => null);
       else status(st.result ? RESULT : READY, 'idle');
       if (C.serverDown) C.checkServer();
     };
 
     C.tick = tick;
+
+    // ---- moving: the player walked to another panorama of the round. With auto-analyse on, the new
+    // panorama is captured once the player stops (moveReady) and the server fuses it with the round's
+    // earlier captures; without it the HUD says that Alt+G adds the panorama. Alt+G works at any time.
+    // Never in rounds that forbid moving, never after the round's result screen.
+    C.moveCheck = info => {
+      const f = C.fuse, st = info.st;
+      if (C.busy || !f || st.result || (C.resultKey && C.resultKey === C.lastKey)) return false;
+      const flags = info.replay ? { noMove: false } : gameFlags(info.meta, st.nmpz);
+      // a new panorama since the last capture, or a capture the player interrupted (moved / held the mouse)
+      const pending = f.captured === null ? !!f.retry : S.panoChanges !== f.captured || !!f.retry;
+      if (flags.noMove === true || !pending || S.panoChanges === f.failed) return false;
+      if (!C.settings.auto) {   // a move (not an interrupted capture): say how to add the new panorama
+        if (f.captured !== null && S.panoChanges !== f.captured && C.view.status.text !== MOVE_MANUAL) status(MOVE_MANUAL, 'idle');
+        return false;
+      }
+      if (!moveReady({ now: performance.now(), panoAt: S.panoAt, povAt: S.povAt, inputAt: S.inputAt, mouseDown: S.held(),
+        blur: st.blur })) {
+        if (C.view.status.text !== MOVE_WAIT) status(MOVE_WAIT, 'idle');
+        return false;
+      }
+      C.analyse('move', info).catch(() => null);
+      return true;
+    };
 
     // ---- analysis of the current panorama
     C.analyse = (trigger = 'manual', info0 = null) => {
@@ -1044,15 +1215,24 @@
           return null;
         }
         const key = `${p}#${info.round}`;
-        if (C.lastKey !== key) { C.lastKey = key; C.since = null; C.rotate = null; }
+        if (C.lastKey !== key) { C.lastKey = key; C.since = null; C.rotate = null; C.fuse = null; }
+        if (!C.fuse || C.fuse.round !== key) {
+          C.fuse = { round: key, key: fusionKey(p, info.key, info.round, info.replay, S.id), captured: null, failed: null };
+          C.show({ fusion: null });
+        }
+        const fz = fzRun = C.fuse;
         const t0 = Date.now();
-        C.show({ mode: 'game', round: info.label, result: null, timing: null, score: null, canLook: false });
-        status('Чекаю панораму…', 'busy', { trigger: TRIGGERS[trigger] || trigger });
+        // a moving round keeps showing its last answer while the next panorama is analysed
+        C.show({ mode: 'game', round: info.label, timing: null, score: null, canLook: false,
+          result: trigger === 'move' || (fz.captured !== null && C.view.result) ? C.view.result : null });
+        status(trigger === 'move' ? 'Нова панорама: чекаю, поки завантажиться…' : 'Чекаю панораму…', 'busy',
+          { trigger: TRIGGERS[trigger] || trigger });
         let extra = null;
         if (C.settings.node) extra = await C.send('meta', { path: p }).catch(() => null);
         const meta = extra ? mergeMeta(extra, info.meta) : info.meta;
         const since = trigger === 'auto' ? C.since : null;   // manual: the panorama shown now
         const job = { path: p, key: info.key, round: info.round, label: info.label, trigger, map: serverMap(meta),
+          fusion: fz.key ? { round: fz.key } : null,
           meta: { game: meta.game || null, map: meta.map || null, challenge: meta.challenge || null } };
         let out;
         if (C.settings.capture === 'screenshot') {   // play_live_visual.js --capture screenshot
@@ -1065,24 +1245,38 @@
           C.last = { capture: cap, job };
           status('Аналіз…', 'busy', { progress: null });
           const t1 = Date.now();
-          const result = await C.send('predict', { views: cap.views, map: job.map,
+          const result = await C.send('predict', { views: cap.views, map: job.map, fusion: job.fusion,
             capture: { mode: cap.mode, fov: cap.fov, grid: cap.grid, canvas: cap.canvas, zoomLocked: cap.zoomLocked, ms: cap.ms },
             job });
-          out = { result, noRotate: cap.noRotate, timing: { capture_ms: Math.round(cap.ms), wait_ms: Math.round(cap.wait_ms),
+          out = { result, noRotate: cap.noRotate, pano: cap.pano, timing: { capture_ms: Math.round(cap.ms), wait_ms: Math.round(cap.wait_ms),
             server_ms: result && result.timing_ms ? result.timing_ms.total : null, request_ms: Date.now() - t1,
             views: cap.views.length, mode: cap.mode, fov: cap.fov, read: cap.views[0] && cap.views[0].read } };
         }
         if (!out || !out.result) throw new Error('локатор не повернув результату');
         if (typeof out.noRotate === 'boolean') C.rotate = { key, noRotate: out.noRotate };
+        if (C.fuse === fz) { fz.captured = typeof out.pano === 'number' ? out.pano : S.panoChanges; fz.retry = false; }
         const timing = Object.assign({}, out.timing || {}, { total_ms: Date.now() - t0 });
         C.last = Object.assign(C.last || {}, { result: out.result, timing });
         const top = out.result.countries && out.result.countries[0];
-        C.show({ result: out.result, timing, score: out.score || null, canLook: !!info.replay || out.noRotate === false,
-          status: { text: top ? `Готово: найімовірніше ${countryName(top)}` : 'Готово', level: 'ok', trigger: TRIGGERS[trigger] || trigger } });
+        const fu = out.result.fusion || null;
+        const nm = info.replay ? false : gameFlags(meta, info.st.nmpz).noMove;
+        C.show({ result: out.result, timing, score: out.score || null, canLook: !!info.replay || out.noRotate === false, fusion: fu,
+          moving: nm === false ? true : nm === true ? false : null,
+          status: { text: (top ? `Готово: найімовірніше ${countryName(top)}` : 'Готово') + fusionNote(fu), level: 'ok',
+            trigger: TRIGGERS[trigger] || trigger } });
         return out.result;
       };
+      let fzRun = null;
       C.busy = run().catch(e => {
-        status(String(e && e.message || e), 'error');
+        const msg = String(e && e.message || e);
+        // the player moved or grabbed the camera during the capture: captured again once idle (auto); any
+        // other failure of a move capture is not retried for the same panorama (Alt+G still can)
+        const interrupted = msg === PANO_CHANGED || msg === PLAYER_INPUT;
+        if (fzRun && C.fuse === fzRun) {
+          if (interrupted) fzRun.retry = true;
+          else if (trigger === 'move') fzRun.failed = S.panoChanges;
+        }
+        status(msg, interrupted ? 'warn' : 'error');
         return null;
       }).finally(() => { C.busy = null; });
       return C.busy;
@@ -1114,6 +1308,14 @@
     };
   }
 
+  // " (3 панорами, відповідь змінилась)" for a fused answer of a moving round
+  function fusionNote(f) {
+    if (!f || !(f.n > 1) && !f.replaced) return '';
+    const n = f.n, word = n % 10 === 1 && n % 100 !== 11 ? 'панорама' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'панорами' : 'панорам';
+    const what = f.replaced ? 'та сама панорама, оновлено' : f.changed_top ? 'відповідь змінилась' : 'відповідь та сама';
+    return ` (${n} ${word}, ${what})`;
+  }
+
   function countryName(c) {
     try {
       const n = new Intl.DisplayNames(['uk'], { type: 'region' }).of(c.code);
@@ -1140,5 +1342,6 @@
     isAllowedPath, safeBounds, safeMapMeta, safeGameMeta, challengeMeta, extractMeta, mergeMeta, metaKey, serverMap,
     parseRound, captureVerdict, gameFlags, fovFromMatrix, hfovFromVfov, vfovFromHfov, hfovForZoom, zoomForHfov,
     formulaFov, inFrustum, halfWidth, planGrid, predictBody, countryName, installPageHooks, boot,
+    fusionKey, moveReady, fusionNote, MOVE_IDLE_MS,
   };
 });

@@ -1,0 +1,922 @@
+{
+ "note": "2-fold cross-validation inside CALIB live grid (folds by game): both parameter sets recalibrated on one half (pano on its full-panorama features, views on its live grid, per-map counts without the other half's games), scored on the other half; out of sample for both arms.  ci95: bootstrap over games",
+ "n": 517,
+ "games": 113,
+ "params_by_half": [
+  {
+   "pano": {
+    "weights": {
+     "solar": 0.0,
+     "road": 0.0,
+     "landscape": 0.0,
+     "vehicle": 0.0,
+     "structure": 0.0,
+     "texture": 0.0,
+     "knn": 0.2,
+     "glm": 0.8,
+     "sun": 0.8,
+     "cards": 0.05
+    },
+    "prior_mix": 0.1,
+    "loc_params": {
+     "bw": 0.5,
+     "floor": 0.3
+    },
+    "map": {
+     "weights": {
+      "solar": 0.0,
+      "road": 0.0,
+      "landscape": 0.0,
+      "vehicle": 0.0,
+      "structure": 0.0,
+      "texture": 0.0,
+      "knn": 0.2,
+      "glm": 0.8,
+      "sun": 0.65,
+      "cards": 0.05
+     },
+     "prior_mix": 0.0,
+     "mix": {
+      "map": 0.1,
+      "map_ranked": 0.3,
+      "ranked": 0.3
+     },
+     "alpha": 0.25,
+     "model": "8a71f73f583a",
+     "calib_rounds": 216,
+     "calib_loglik": -2.514,
+     "calib_loglik_ranked_only": -2.5189,
+     "calib_loglik_model_prior_bounds": -2.5333
+    },
+    "regions": {
+     "weights": {
+      "prior": 0.8,
+      "lda": 0.3,
+      "knn": 0.2,
+      "sun": 1.0
+     },
+     "beta": 0.3,
+     "alpha": 1.0,
+     "knn_s": 4.0,
+     "smooth": 0.2,
+     "smooth_km": 400.0,
+     "smooth_card": 0.0
+    }
+   },
+   "views": {
+    "model": "8a71f73f583a",
+    "weights": {
+     "solar": 0.0,
+     "road": 0.0,
+     "landscape": 0.0,
+     "vehicle": 0.0,
+     "structure": 0.0,
+     "texture": 0.0,
+     "knn": 0.2,
+     "glm": 0.65,
+     "sun": 0.8,
+     "cards": 0.1
+    },
+    "prior_mix": 0.1,
+    "loc_params": {
+     "bw": 0.25,
+     "floor": 0.1
+    },
+    "region_params": {
+     "bw": 0.25,
+     "floor": 0.1
+    },
+    "calib": {
+     "rounds": 216,
+     "loglik": -2.6172,
+     "loglik_pano_params": -2.64,
+     "start": "pano set",
+     "features": "live grid renderings (tools/live_features.py, render f8b3d93efd72)",
+     "cards": true
+    },
+    "map": {
+     "weights": {
+      "solar": 0.0,
+      "road": 0.0,
+      "landscape": 0.0,
+      "vehicle": 0.0,
+      "structure": 0.0,
+      "texture": 0.0,
+      "knn": 0.2,
+      "glm": 0.65,
+      "sun": 0.8,
+      "cards": 0.1
+     },
+     "prior_mix": 0.0,
+     "mix": {
+      "map": 0.1,
+      "map_ranked": 0.2,
+      "ranked": 0.2
+     },
+     "alpha": 0.25,
+     "model": "8a71f73f583a",
+     "calib_rounds": 216,
+     "calib_loglik": -2.6062,
+     "calib_loglik_ranked_only": -2.6096,
+     "calib_loglik_model_prior_bounds": -2.617
+    },
+    "regions": {
+     "weights": {
+      "prior": 0.8,
+      "lda": 0.3,
+      "knn": 0.2,
+      "sun": 1.0
+     },
+     "beta": 0.3,
+     "alpha": 1.0,
+     "knn_s": 4.0,
+     "smooth": 0.2,
+     "smooth_km": 400.0,
+     "smooth_card": 0.0
+    }
+   }
+  },
+  {
+   "pano": {
+    "weights": {
+     "solar": 0.0,
+     "road": 0.0,
+     "landscape": 0.0,
+     "vehicle": 0.0,
+     "structure": 0.0,
+     "texture": 0.0,
+     "knn": 0.05,
+     "glm": 0.8,
+     "sun": 1.3,
+     "cards": 0.1
+    },
+    "prior_mix": 0.25,
+    "loc_params": {
+     "bw": 0.25,
+     "floor": 0.3
+    },
+    "map": {
+     "weights": {
+      "solar": 0.0,
+      "road": 0.0,
+      "landscape": 0.0,
+      "vehicle": 0.0,
+      "structure": 0.0,
+      "texture": 0.02,
+      "knn": 0.15,
+      "glm": 0.8,
+      "sun": 1.3,
+      "cards": 0.1
+     },
+     "prior_mix": 0.1,
+     "mix": {
+      "map": 0.4,
+      "map_ranked": 0.2,
+      "ranked": 0.3
+     },
+     "alpha": 0.25,
+     "model": "8a71f73f583a",
+     "calib_rounds": 300,
+     "calib_loglik": -2.2621,
+     "calib_loglik_ranked_only": -2.2922,
+     "calib_loglik_model_prior_bounds": -2.3247
+    },
+    "regions": {
+     "weights": {
+      "prior": 1.0,
+      "lda": 0.4,
+      "knn": 0.1,
+      "sun": 1.0
+     },
+     "beta": 0.3,
+     "alpha": 0.1,
+     "knn_s": 4.0,
+     "smooth": 0.2,
+     "smooth_km": 200.0,
+     "smooth_card": 0.0
+    }
+   },
+   "views": {
+    "model": "8a71f73f583a",
+    "weights": {
+     "solar": 0.0,
+     "road": 0.0,
+     "landscape": 0.0,
+     "vehicle": 0.0,
+     "structure": 0.0,
+     "texture": 0.02,
+     "knn": 0.15,
+     "glm": 0.8,
+     "sun": 1.0,
+     "cards": 0.1
+    },
+    "prior_mix": 0.25,
+    "loc_params": {
+     "bw": 1.0,
+     "floor": 0.1
+    },
+    "region_params": {
+     "bw": 0.25,
+     "floor": 0.001
+    },
+    "calib": {
+     "rounds": 300,
+     "loglik": -2.3568,
+     "loglik_pano_params": -2.3791,
+     "start": "pano set",
+     "features": "live grid renderings (tools/live_features.py, render f8b3d93efd72)",
+     "cards": true
+    },
+    "map": {
+     "weights": {
+      "solar": 0.0,
+      "road": 0.0,
+      "landscape": 0.0,
+      "vehicle": 0.0,
+      "structure": 0.0,
+      "texture": 0.0,
+      "knn": 0.15,
+      "glm": 0.8,
+      "sun": 1.0,
+      "cards": 0.1
+     },
+     "prior_mix": 0.1,
+     "mix": {
+      "map": 0.4,
+      "map_ranked": 0.2,
+      "ranked": 0.4
+     },
+     "alpha": 0.25,
+     "model": "8a71f73f583a",
+     "calib_rounds": 300,
+     "calib_loglik": -2.3049,
+     "calib_loglik_ranked_only": -2.3344,
+     "calib_loglik_model_prior_bounds": -2.3567
+    },
+    "regions": {
+     "weights": {
+      "prior": 1.0,
+      "lda": 0.4,
+      "knn": 0.1,
+      "sun": 1.0
+     },
+     "beta": 0.3,
+     "alpha": 0.1,
+     "knn_s": 4.0,
+     "smooth": 0.2,
+     "smooth_km": 400.0,
+     "smooth_card": 0.0
+    }
+   }
+  }
+ ],
+ "views_no_map": {
+  "top1": 0.344294003868472,
+  "top3": 0.5705996131528046,
+  "top5": 0.655705996131528,
+  "mean_score": 2111.800862747431,
+  "mean_points_map_formula": 2075.771760154739,
+  "loglik": -2.5378780139765067
+ },
+ "views_map": {
+  "top1": 0.3520309477756286,
+  "top3": 0.5802707930367504,
+  "top5": 0.6731141199226306,
+  "mean_score": 2193.406551243265,
+  "mean_points_map_formula": 2156.328820116054,
+  "loglik": -2.4961154739591094
+ },
+ "pano_no_map": {
+  "top1": 0.3539651837524178,
+  "top3": 0.5570599613152805,
+  "top5": 0.655705996131528,
+  "mean_score": 2090.7696640670415,
+  "mean_points_map_formula": 2054.570599613153,
+  "loglik": -2.545861870290545
+ },
+ "pano_map": {
+  "top1": 0.35589941972920697,
+  "top3": 0.5686653771760155,
+  "top5": 0.6731141199226306,
+  "mean_score": 2182.249727582666,
+  "mean_points_map_formula": 2145.758220502901,
+  "loglik": -2.5009225496001948
+ },
+ "frame_views_no_map": {
+  "top1": 0.1895551257253385,
+  "top3": 0.35009671179883944,
+  "top5": 0.46034816247582205,
+  "mean_score": 1415.351713754225,
+  "mean_points_map_formula": 1383.3172147001935,
+  "loglik": -3.530511201120102
+ },
+ "frame_views_map": {
+  "top1": 0.19729206963249515,
+  "top3": 0.3694390715667311,
+  "top5": 0.46808510638297873,
+  "mean_score": 1482.2821464206029,
+  "mean_points_map_formula": 1448.1914893617022,
+  "loglik": -3.437447464824648
+ },
+ "frame_pano_no_map": {
+  "top1": 0.18375241779497098,
+  "top3": 0.3404255319148936,
+  "top5": 0.4506769825918762,
+  "mean_score": 1412.9607089468245,
+  "mean_points_map_formula": 1380.4970986460348,
+  "loglik": -3.58098208126723
+ },
+ "frame_pano_map": {
+  "top1": 0.19922630560928434,
+  "top3": 0.3733075435203095,
+  "top5": 0.46808510638297873,
+  "mean_score": 1478.4655600639305,
+  "mean_points_map_formula": 1444.8452611218568,
+  "loglik": -3.4827304772986736
+ },
+ "paired": {
+  "views_no_map - pano_no_map": {
+   "points": {
+    "diff": 21.0312,
+    "ci95_rounds": [
+     -36.0632,
+     81.0121
+    ],
+    "ci95": [
+     -31.2544,
+     76.3069
+    ],
+    "clusters": 113
+   },
+   "points_map_formula": {
+    "diff": 21.2012,
+    "ci95_rounds": [
+     -35.5689,
+     80.3698
+    ],
+    "ci95": [
+     -30.6179,
+     75.9212
+    ],
+    "clusters": 113
+   },
+   "top1": {
+    "diff": -0.0097,
+    "ci95_rounds": [
+     -0.0271,
+     0.0077
+    ],
+    "ci95": [
+     -0.0275,
+     0.0062
+    ],
+    "clusters": 113
+   },
+   "top3": {
+    "diff": 0.0135,
+    "ci95_rounds": [
+     -0.0058,
+     0.0329
+    ],
+    "ci95": [
+     -0.0039,
+     0.0315
+    ],
+    "clusters": 113
+   },
+   "loglik": {
+    "diff": 0.008,
+    "ci95_rounds": [
+     -0.0132,
+     0.0286
+    ],
+    "ci95": [
+     -0.0135,
+     0.0294
+    ],
+    "clusters": 113
+   }
+  },
+  "views_map - pano_map": {
+   "points": {
+    "diff": 11.1568,
+    "ci95_rounds": [
+     -48.7464,
+     73.7161
+    ],
+    "ci95": [
+     -51.5495,
+     76.0966
+    ],
+    "clusters": 113
+   },
+   "points_map_formula": {
+    "diff": 10.5706,
+    "ci95_rounds": [
+     -48.8377,
+     73.0206
+    ],
+    "ci95": [
+     -51.882,
+     74.9659
+    ],
+    "clusters": 113
+   },
+   "top1": {
+    "diff": -0.0039,
+    "ci95_rounds": [
+     -0.0193,
+     0.0116
+    ],
+    "ci95": [
+     -0.0187,
+     0.0115
+    ],
+    "clusters": 113
+   },
+   "top3": {
+    "diff": 0.0116,
+    "ci95_rounds": [
+     -0.0039,
+     0.0271
+    ],
+    "ci95": [
+     -0.0036,
+     0.0287
+    ],
+    "clusters": 113
+   },
+   "loglik": {
+    "diff": 0.0048,
+    "ci95_rounds": [
+     -0.0115,
+     0.0207
+    ],
+    "ci95": [
+     -0.0121,
+     0.0223
+    ],
+    "clusters": 113
+   }
+  },
+  "pano_map - pano_no_map": {
+   "points": {
+    "diff": 91.4801,
+    "ci95_rounds": [
+     25.5805,
+     159.592
+    ],
+    "ci95": [
+     17.8991,
+     172.678
+    ],
+    "clusters": 113
+   },
+   "points_map_formula": {
+    "diff": 91.1876,
+    "ci95_rounds": [
+     25.7329,
+     159.0837
+    ],
+    "ci95": [
+     17.686,
+     171.6613
+    ],
+    "clusters": 113
+   },
+   "top1": {
+    "diff": 0.0019,
+    "ci95_rounds": [
+     -0.0213,
+     0.0251
+    ],
+    "ci95": [
+     -0.0185,
+     0.022
+    ],
+    "clusters": 113
+   },
+   "top3": {
+    "diff": 0.0116,
+    "ci95_rounds": [
+     -0.0077,
+     0.0309
+    ],
+    "ci95": [
+     -0.0076,
+     0.0314
+    ],
+    "clusters": 113
+   },
+   "loglik": {
+    "diff": 0.0449,
+    "ci95_rounds": [
+     0.0198,
+     0.0693
+    ],
+    "ci95": [
+     0.0142,
+     0.0736
+    ],
+    "clusters": 113
+   }
+  },
+  "views_map - views_no_map": {
+   "points": {
+    "diff": 81.6057,
+    "ci95_rounds": [
+     6.6108,
+     160.6547
+    ],
+    "ci95": [
+     5.6986,
+     157.657
+    ],
+    "clusters": 113
+   },
+   "points_map_formula": {
+    "diff": 80.5571,
+    "ci95_rounds": [
+     5.3238,
+     158.5974
+    ],
+    "ci95": [
+     5.1647,
+     156.3862
+    ],
+    "clusters": 113
+   },
+   "top1": {
+    "diff": 0.0077,
+    "ci95_rounds": [
+     -0.0135,
+     0.029
+    ],
+    "ci95": [
+     -0.0127,
+     0.0283
+    ],
+    "clusters": 113
+   },
+   "top3": {
+    "diff": 0.0097,
+    "ci95_rounds": [
+     -0.0116,
+     0.0309
+    ],
+    "ci95": [
+     -0.0113,
+     0.0325
+    ],
+    "clusters": 113
+   },
+   "loglik": {
+    "diff": 0.0418,
+    "ci95_rounds": [
+     0.0193,
+     0.0644
+    ],
+    "ci95": [
+     0.0159,
+     0.0685
+    ],
+    "clusters": 113
+   }
+  },
+  "frame_views_no_map - frame_pano_no_map": {
+   "points": {
+    "diff": 2.391,
+    "ci95_rounds": [
+     -47.7827,
+     50.7996
+    ],
+    "ci95": [
+     -43.2822,
+     49.0145
+    ],
+    "clusters": 113
+   },
+   "points_map_formula": {
+    "diff": 2.8201,
+    "ci95_rounds": [
+     -47.0489,
+     51.2076
+    ],
+    "ci95": [
+     -43.0809,
+     49.2573
+    ],
+    "clusters": 113
+   },
+   "top1": {
+    "diff": 0.0058,
+    "ci95_rounds": [
+     -0.0019,
+     0.0135
+    ],
+    "ci95": [
+     -0.002,
+     0.0144
+    ],
+    "clusters": 113
+   },
+   "top3": {
+    "diff": 0.0097,
+    "ci95_rounds": [
+     -0.0019,
+     0.0213
+    ],
+    "ci95": [
+     -0.0019,
+     0.0211
+    ],
+    "clusters": 113
+   },
+   "loglik": {
+    "diff": 0.0505,
+    "ci95_rounds": [
+     0.0251,
+     0.0758
+    ],
+    "ci95": [
+     0.0224,
+     0.0796
+    ],
+    "clusters": 113
+   }
+  },
+  "frame_views_map - frame_pano_map": {
+   "points": {
+    "diff": 3.8166,
+    "ci95_rounds": [
+     -38.0596,
+     44.6628
+    ],
+    "ci95": [
+     -38.1443,
+     46.3178
+    ],
+    "clusters": 113
+   },
+   "points_map_formula": {
+    "diff": 3.3462,
+    "ci95_rounds": [
+     -38.8207,
+     44.384
+    ],
+    "ci95": [
+     -38.6439,
+     45.7199
+    ],
+    "clusters": 113
+   },
+   "top1": {
+    "diff": -0.0019,
+    "ci95_rounds": [
+     -0.0116,
+     0.0077
+    ],
+    "ci95": [
+     -0.0141,
+     0.0091
+    ],
+    "clusters": 113
+   },
+   "top3": {
+    "diff": -0.0039,
+    "ci95_rounds": [
+     -0.0135,
+     0.0058
+    ],
+    "ci95": [
+     -0.0155,
+     0.0059
+    ],
+    "clusters": 113
+   },
+   "loglik": {
+    "diff": 0.0453,
+    "ci95_rounds": [
+     0.0252,
+     0.0657
+    ],
+    "ci95": [
+     0.0227,
+     0.0693
+    ],
+    "clusters": 113
+   }
+  },
+  "frame_pano_map - frame_pano_no_map": {
+   "points": {
+    "diff": 65.5049,
+    "ci95_rounds": [
+     6.9906,
+     126.2099
+    ],
+    "ci95": [
+     4.6885,
+     128.2448
+    ],
+    "clusters": 113
+   },
+   "points_map_formula": {
+    "diff": 64.3482,
+    "ci95_rounds": [
+     5.8819,
+     124.9596
+    ],
+    "ci95": [
+     4.4282,
+     126.9025
+    ],
+    "clusters": 113
+   },
+   "top1": {
+    "diff": 0.0155,
+    "ci95_rounds": [
+     -0.0039,
+     0.0348
+    ],
+    "ci95": [
+     -0.004,
+     0.0342
+    ],
+    "clusters": 113
+   },
+   "top3": {
+    "diff": 0.0329,
+    "ci95_rounds": [
+     0.0116,
+     0.0542
+    ],
+    "ci95": [
+     0.0119,
+     0.0553
+    ],
+    "clusters": 113
+   },
+   "loglik": {
+    "diff": 0.0983,
+    "ci95_rounds": [
+     0.0689,
+     0.1273
+    ],
+    "ci95": [
+     0.0666,
+     0.1285
+    ],
+    "clusters": 113
+   }
+  },
+  "frame_views_map - frame_views_no_map": {
+   "points": {
+    "diff": 66.9304,
+    "ci95_rounds": [
+     11.3429,
+     124.4317
+    ],
+    "ci95": [
+     13.7954,
+     127.9822
+    ],
+    "clusters": 113
+   },
+   "points_map_formula": {
+    "diff": 64.8743,
+    "ci95_rounds": [
+     9.5415,
+     121.6786
+    ],
+    "ci95": [
+     11.8165,
+     124.5135
+    ],
+    "clusters": 113
+   },
+   "top1": {
+    "diff": 0.0077,
+    "ci95_rounds": [
+     -0.0097,
+     0.0251
+    ],
+    "ci95": [
+     -0.0077,
+     0.0243
+    ],
+    "clusters": 113
+   },
+   "top3": {
+    "diff": 0.0193,
+    "ci95_rounds": [
+     0.0019,
+     0.0387
+    ],
+    "ci95": [
+     0.002,
+     0.0375
+    ],
+    "clusters": 113
+   },
+   "loglik": {
+    "diff": 0.0931,
+    "ci95_rounds": [
+     0.0676,
+     0.1184
+    ],
+    "ci95": [
+     0.0655,
+     0.1209
+    ],
+    "clusters": 113
+   }
+  }
+ },
+ "by_map_group": {
+  "A Moving World": {
+   "n": 221,
+   "games": 42,
+   "pano_map_minus_no_map": {
+    "diff": 92.7421,
+    "ci95_rounds": [
+     -4.5175,
+     195.9466
+    ],
+    "ci95": [
+     -11.0096,
+     202.3962
+    ],
+    "clusters": 42
+   },
+   "views_map_minus_no_map": {
+    "diff": 106.0679,
+    "ci95_rounds": [
+     7.4245,
+     210.8682
+    ],
+    "ci95": [
+     -3.6699,
+     215.4616
+    ],
+    "clusters": 42
+   }
+  },
+  "The World": {
+   "n": 230,
+   "games": 61,
+   "pano_map_minus_no_map": {
+    "diff": 50.9652,
+    "ci95_rounds": [
+     -46.893,
+     152.3
+    ],
+    "ci95": [
+     -52.04,
+     174.3306
+    ],
+    "clusters": 61
+   },
+   "views_map_minus_no_map": {
+    "diff": 49.7957,
+    "ci95_rounds": [
+     -72.647,
+     175.4322
+    ],
+    "ci95": [
+     -74.2935,
+     181.1761
+    ],
+    "clusters": 61
+   }
+  },
+  "World-type maps, ranked prior": {
+   "n": 66,
+   "games": 10,
+   "pano_map_minus_no_map": {
+    "diff": 226.1515,
+    "ci95_rounds": [
+     52.5822,
+     429.9955
+    ],
+    "ci95": [
+     30.1325,
+     409.7053
+    ],
+    "clusters": 10
+   },
+   "views_map_minus_no_map": {
+    "diff": 102.3333,
+    "ci95_rounds": [
+     -93.1239,
+     306.0208
+    ],
+    "ci95": [
+     -20.6878,
+     284.5254
+    ],
+    "clusters": 10
+   }
+  }
+ },
+ "frame_arms_note": "frame_* arms (single NMPZ frames of the same rounds) were added to this CV after the TEST frame report (eval_views_frame.json) disagreed with the in-sample CALIB choice of the pano set for frames; informational - engine.locator.VIEWS_MIN_COVERAGE was not changed because of them"
+}

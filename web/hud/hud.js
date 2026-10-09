@@ -7,6 +7,8 @@
  *
  *   const hud = GeoscrHud.mount({css, onAction(name, arg)});  hud.update(view);  hud.destroy();
  *   actions: analyse, auto, look {heading, pitch, zoom}
+ *   view.fusion (moving games, the server's result.fusion): how many panoramas of the round the shown answer
+ *   fuses, whether the latest one changed the top country, the captures' own top countries.
  *
  * The HUD makes no network request: card images are shown only as data: URLs (the clue images
  * come from the local server's cache) or from Plonk It; a GeoGuessr image URL is never loaded.
@@ -49,6 +51,25 @@
   const sec = ms => (ms >= 10000 ? Math.round(ms / 1000) : Math.round(ms / 100) / 10) + ' с';
   const signed = x => (x < 0 ? '−' : '') + Math.abs(Math.round(x));
   const deg = x => (typeof x === 'number' && isFinite(x) ? x.toFixed(3) : esc(x));
+
+  // The moving line of the HUD: {text, changed, captures: [text]} for result.fusion, null without one (and for a
+  // single panorama unless the round is known to allow moving).
+  function fusionLine(f, auto, moving) {
+    if (!f || typeof f !== 'object' || !(f.n >= 1) || (f.n < 2 && !f.replaced && moving !== true)) return null;
+    const n = Math.round(f.n);
+    const caps = (Array.isArray(f.captures) ? f.captures : []).map((c, i) => {
+      const t = c && Array.isArray(c.countries) && c.countries[0];
+      return `${i + 1}: ${t ? `${countryName(t.code, t.code)} ${pct(+t.probability || 0)}` : '?'}`;
+    });
+    let text = `Панорам у відповіді: ${n}`, changed = false;
+    if (f.replaced) text += ' · та сама панорама, оновлено';
+    else if (n > 1 && f.changed_top === true) {
+      changed = true;
+      text += ` · остання змінила відповідь${f.prev_top ? ` (було ${countryName(f.prev_top, f.prev_top)})` : ''}`;
+    } else if (n > 1 && f.changed_top === false) text += ' · остання підтвердила відповідь';
+    else if (n === 1) text += auto ? ' · рухайтесь: нові панорами додаються самі' : ' · після руху Alt+G додасть панораму';
+    return { text, changed, captures: n > 1 ? caps : [] };
+  }
 
   function compassName(h) {
     return COMPASS[Math.round(norm360(h) / 45) % 8];
@@ -356,9 +377,12 @@
       if (view.score) h += `<div class="sec scorebox">Раунд: +${esc(view.score.points)} балів, ${esc(view.score.distance)} км · всього ${esc(view.score.total)}</div>`;
       if (!r) {
         if (view.mode === 'game' && view.auto && (view.status || {}).level !== 'busy')
-          h += '<div class="empty">Автоаналіз увімкнено: панорама аналізується на початку кожного раунду.</div>';
+          h += '<div class="empty">Автоаналіз увімкнено: панорама аналізується на початку кожного раунду й після кожного переходу.</div>';
         return h + footerHtml(compact);
       }
+      const fl = fusionLine(view.fusion, view.auto, view.moving);
+      if (fl) h += `<div class="sec fusion${fl.changed ? ' changed' : ''}"><div>${esc(fl.text)}</div>` +
+        (fl.captures.length ? `<div class="muted small">${esc(fl.captures.slice(compact ? -3 : -6).join(' · '))}</div>` : '') + '</div>';
       const hints = {};
       (r.hints || []).forEach((x, i) => { hints[x.country_code] = { hint: x, i }; });
       const countries = (r.countries || []).slice(0, compact ? 3 : 5);
@@ -426,7 +450,7 @@
         `<div class="head" data-drag="1" title="Перетягніть; подвійний клік — автоматичне місце">` +
         `<span class="logo"></span><span class="title">Локатор</span><span class="grow"></span>` +
         (game ? `<button class="btn primary" data-act="analyse" ${busy ? 'disabled' : ''} title="Аналізувати зараз (Alt+G)">${busy ? '…' : 'Аналіз'}</button>` +
-          `<button class="btn toggle ${view.auto ? 'on' : ''}" data-act="auto" title="Автоаналіз на початку раунду (Alt+A)">Авто</button>` : '') +
+          `<button class="btn toggle ${view.auto ? 'on' : ''}" data-act="auto" title="Автоаналіз на початку раунду й після переходів (Alt+A)">Авто</button>` : '') +
         `<button class="btn icon" data-act="collapse" title="${prefs.collapsed ? 'Розгорнути' : 'Згорнути'} (Alt+C)">${prefs.collapsed ? '+' : '−'}</button>` +
         `<button class="btn icon" data-act="hide" title="Сховати (Alt+H)">×</button></div>` +
         statusHtml() + (prefs.collapsed ? summary() : `<div class="body">${bodyHtml(compact)}</div>`);
@@ -563,5 +587,5 @@
   }
 
   return { api: API, mount, autoPlace, freeIntervals, mapReserve, cssLength, safeImage, normalizeDetected, compassName,
-    countryName, panelWidth, isCompact, esc };
+    countryName, panelWidth, isCompact, esc, fusionLine };
 });

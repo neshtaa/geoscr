@@ -202,6 +202,8 @@ span.lbl { margin: 0; }
 .guess .coords.copied { color: var(--green); }
 .score { color: var(--yellow); }
 .scorebox { color: var(--green); font-weight: 700; }
+.fusion { font-size: max(11px, .9em); }
+.fusion.changed > div:first-child { color: var(--yellow); }
 .timing { color: var(--muted); font-size: max(11px, .8em); padding-top: 6px; font-variant-numeric: tabular-nums; }
 .keys { color: rgba(255, 255, 255, .5); font-size: max(11px, .74em); padding-top: 6px; }
 

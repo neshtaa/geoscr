@@ -8,28 +8,27 @@ hints right away. Runtime: numpy + Pillow only, Python 3.8 compatible.
 
 ## State (branch `claude/sharp-keller-ztbilq`)
 TEST = 386 of the user's real World-map rounds (half of the games by hash; never used for fitting or
-calibration). Live mode = `tools/eval_live.py` (panorama rendered into the live grid of 10 views,
-car axis unknown, full locator incl. cards + region model):
+calibration). Live mode = panorama rendered into the live grid of 10 views (car axis unknown), full
+locator incl. cards + region model (`tools/train_model.py --views --eval-only`, `tools/eval_live.py`).
 
 | | top1 | top3 | top5 | pts/round (World formula) |
 |---|---|---|---|---|
 | prior only | 4.3% | 10% | 16% | 209 |
-| first working version (random Street View training data) | 17.9% | 34.0% | 46.0% | 1617 |
-| live mode, no map | 33.4% | 52.3% | 61.7% | 2195 |
-| live mode, map info | 30.6% | 53.6% | 61.9% | 2155 |
-| full panorama + map, country only (`train_model.py --eval-only`) | 30.1% | 55.4% | 64.5% | - |
+| first working version (17k random Street View panoramas) | 17.9% | 34.0% | 46.0% | 1617 |
+| live mode, 1 panorama (No Move) | 31.9% | 56.2% | 63.0% | 2276 |
+| live mode, 1 panorama + map info | 34.5% | 56.0% | 63.7% | 2279 |
+| Moving, 4 panoramas fused (`engine/fusion.py`, 366 rounds) | 44.0% | 62.6% | 72.1% | 2661 |
 
-Region given the right country (live): top1 24-25%, top3 43-47%. Real games played by the script
-(`--submit`, headless): daily 2026-10-07 13,013; daily 2026-10-06 6,435; Souvlaki World NMPZ 4,279.
+Moving: 1 -> 4 panoramas 2341 -> 2661 (+320 [+159, +484]) on simulated walks along Street View
+links (`tools/moving_calib.py`, rho fitted on CALIB). Region given the right country: top3 ~54%.
+Real games (one panorama per round, --submit): daily 2026-10-04 17,664 (26.7k model).
 
-Data: 26.7k training panoramas = 7k random Street View (world/balanced) + 19.7k panoramas of public
-ranked duels of other players (`tools/crawl_duels.py` GET /api/v4/game-history/{userId}; locations
-within 1 km of the user's rounds removed). The duel pools were the biggest lever (+425 pts).
+Data: 78k training panoramas = 7k random Street View (world/balanced) + 71k panoramas of public ranked
+duels (`tools/crawl_duels.py`, 260 player histories, GET only; `tools/stream_duels.py` keeps only the
+features of 51k of them, records marked pano_deleted; own rounds within 1 km excluded in load_records).
 GeoGuessr clue placements: 33k placements on 8.9k panoramas (`data/calibration/pano_clues.json`).
-
-Open lever: map info helps on full panoramas (2078 -> 2216 with the region model) but not in live
-mode (2195 -> 2155): the evidence weights / prior mix / map-prior mix are calibrated on CALIB
-full-panorama features. Calibrate them on CALIB features computed from the live grid instead.
+The "views" parameter set (calibrated on live-grid CALIB features) is disabled (`enabled: false` in
+model.json): 2-fold CV inside CALIB showed no gain.
 
 ## GeoGuessr's own analysis
 Not image recognition: the client calls `GET /api/v4/clues/{panoId}` and the server returns

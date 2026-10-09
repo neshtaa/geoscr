@@ -15,6 +15,7 @@
   "AS",
   "AT",
   "AU",
+  "AX",
   "BA",
   "BD",
   "BE",
@@ -132,24 +133,93 @@
  ],
  "weights": {
   "solar": 0.0,
-  "road": 0.02,
+  "road": 0.0,
   "landscape": 0.0,
   "vehicle": 0.0,
   "structure": 0.0,
-  "texture": 0.02,
-  "knn": 0.2,
+  "texture": 0.0,
+  "knn": 0.15,
   "glm": 0.8,
   "sun": 1.0,
-  "cards": 0.05
+  "cards": 0.1
  },
  "prior_mix": 0.25,
  "knn_k": 40,
  "loc_params": {
-  "bw": 4.0,
-  "floor": 0.3
+  "bw": 0.25,
+  "floor": 0.1
  },
  "region_params": {
   "bw": 0.25,
   "floor": 0.001
+ },
+ "fit_hash": "8365115e2075",
+ "param_sets": {
+  "views": {
+   "model": "e28b16ec64bb",
+   "weights": {
+    "solar": 0.0,
+    "road": 0.0,
+    "landscape": 0.0,
+    "vehicle": 0.0,
+    "structure": 0.0,
+    "texture": 0.0,
+    "knn": 0.2,
+    "glm": 0.8,
+    "sun": 1.0,
+    "cards": 0.1
+   },
+   "prior_mix": 0.25,
+   "loc_params": {
+    "bw": 8.0,
+    "floor": 0.001
+   },
+   "region_params": {
+    "bw": 0.25,
+    "floor": 0.001
+   },
+   "inputs": {
+    "model_fit": "8365115e2075",
+    "priors_counts": "ed7c7d522c77",
+    "regions_npz": "eaadde240661",
+    "clue_detectors_npz": "5adbf05f27f3"
+   },
+   "calib": {
+    "rounds": 516,
+    "loglik": -2.4205,
+    "loglik_pano_params": -2.4218,
+    "start": "pano set",
+    "features": "live grid renderings (tools/live_features.py, render f8b3d93efd72)",
+    "cards": true
+   },
+   "map": {
+    "weights": {
+     "solar": 0.0,
+     "road": 0.0,
+     "landscape": 0.0,
+     "vehicle": 0.0,
+     "structure": 0.0,
+     "texture": 0.0,
+     "knn": 0.15,
+     "glm": 0.8,
+     "sun": 1.0,
+     "cards": 0.1
+    },
+    "prior_mix": 0.0,
+    "mix": {
+     "map": 0.4,
+     "map_ranked": 0.2,
+     "ranked": 0.4
+    },
+    "alpha": 0.25,
+    "model": "e28b16ec64bb",
+    "calib_rounds": 516,
+    "calib_loglik": -2.3647,
+    "calib_loglik_ranked_only": -2.3936,
+    "calib_loglik_model_prior_bounds": -2.4203
+   },
+   "enabled": false,
+   "disabled_reason": "2-fold CV inside CALIB showed no gain over the panorama parameters (+36 [-20,+95] no map, -16 [-100,+65] map); kept for reference, re-enable with enabled=true"
+  }
  }
 }

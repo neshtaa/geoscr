@@ -182,7 +182,7 @@ def cmd_cells(args):
     clues = load_clues(args.clues)
     json.dump(clues, open(os.path.join(CACHE, "clues_used.json"), "w"))
     rounds = labelled_rounds(clues)
-    recs = {r["pano_id"]: r for r in load_records()}
+    recs = {r["pano_id"]: r for r in load_records(pixels=True)}  # cells need the image
     cache = CellCache()
     ids = cache_set(recs, rounds, args.extra, have=cache.index["ids"])
     todo = [p for p in ids if p not in cache and os.path.exists(pano_path(p))]
@@ -490,9 +490,11 @@ def cmd_calibrate(args):
         raise SystemExit("scores.npz is from other detectors - run `score` first")
     row = {p: i for i, p in enumerate(ids)}
     recs = {r["pano_id"]: r for r in load_records()}
-    split = np.array([split_of(recs[p]) for p in ids])
-    label = np.array([recs[p]["label"] for p in ids])
-    lab_train = np.array([rounds.get(p, {}).get("split") == "train" for p in ids])
+    # panoramas dropped from the records since scoring (e.g. training panoramas within 1 km of one of
+    # the user's rounds) take no part in the calibration
+    split = np.array([split_of(recs[p]) if p in recs else "excluded" for p in ids])
+    label = np.array([recs[p]["label"] if p in recs else "" for p in ids])
+    lab_train = np.array([p in recs and rounds.get(p, {}).get("split") == "train" for p in ids])
     trn = split == "train"
     fin = np.isfinite(Z)
     zmu = np.array([Z[lab_train & fin[:, d], d].mean() if (lab_train & fin[:, d]).any() else 0.0 for d in range(D)])
@@ -742,6 +744,8 @@ def window_angle(clues, recs, pid, stem, det, wrow, wcol):
     g = cd.grid(cd.CHANNELS[det["channel"]])
     a1 = np.radians([float(cd.window_yaw(g, wcol)), float(cd.window_pitch(g, wrow))])
     best = 180.0
+    if pid not in recs:
+        return best, g["fov"]
     for p in clues[pid]:
         if (clue_stem(p.get("title")) or p["id"].lower()) != stem:
             continue

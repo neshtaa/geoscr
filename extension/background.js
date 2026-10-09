@@ -1,8 +1,8 @@
 /*
  * Service worker of the GeoScr extension: the only part that talks to the local locator server
  * (default http://localhost:8080; WSL2 forwards localhost to Windows). Requests come from the content
- * script of www.geoguessr.com pages: predict (views + map settings), health, the bundled hud.css and
- * the auto-analyse switch. Clue-card images of the result are replaced by data: URLs from the
+ * script of www.geoguessr.com pages: predict (views + map settings + the round key of moving games),
+ * health, the bundled hud.css and the auto-analyse switch. Clue-card images of the result are replaced by data: URLs from the
  * server's offline cache (/hud/img), so the page never loads an image from GeoGuessr. Nothing here
  * talks to GeoGuessr.
  */
@@ -47,7 +47,11 @@ async function json(resp) {
   return data;
 }
 
-// Only the fields the server takes; never anything else from the page.
+// moving: game / challenge token + round number >= 1 (replays: + the page instance); never a location
+const ROUND_KEY = /^(game|challenge|replay):[A-Za-z0-9]{1,64}#[1-9][0-9]{0,3}(@[a-z0-9]{1,24})?$/;
+
+// Only the fields the server takes; never anything else from the page. fusion: the round key of a moving
+// game (token + round number), so the server fuses the round's panoramas.
 function predictBody(p) {
   const views = Array.isArray(p && p.views) ? p.views : [];
   if (!views.length || views.length > 40) throw new Error('немає кадрів');
@@ -61,6 +65,8 @@ function predictBody(p) {
     body.map = {};
     for (const k of ['id', 'slug', 'name', 'bounds', 'maxErrorDistance']) if (m[k] !== undefined && m[k] !== null) body.map[k] = m[k];
   }
+  const f = p.fusion;
+  if (f && typeof f === 'object' && typeof f.round === 'string' && ROUND_KEY.test(f.round)) body.fusion = { round: f.round };
   return body;
 }
 

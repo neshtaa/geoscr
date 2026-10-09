@@ -37,18 +37,26 @@ Admin-1 region posterior inside a country (classical discriminant analysis, nump
 region_posterior() takes the country probabilities of engine.model.GeoModel and returns
 P(region) = sum_c P(c) P(region | c, image) over the likely countries.  location_weights() turns
 it into GeoModel.locate() weights over the GeoModel's reference panoramas.
+
+Parameter sets by input kind (as engine.model.GeoModel.for_input): the exponents / prior / smoothing in
+regions.npz serve full panoramas ("pano"); data/model/regions_params.json may hold a "views" set calibrated
+on the CALIB rounds rendered into the live grid (tools/train_model.py --views), valid only for the
+regions.npz it was calibrated with (file hash).  RegionModel.params_for(kind) picks the set.
 """
 
 import json
 import math
 import os
+import sys
 
 import numpy as np
 
 from .geo import _regions, haversine_km, in_bounds, parse_bounds
+from .model import file_hash
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "model")
 REGIONS_FILE = "regions.npz"
+PARAMS_FILE = "regions_params.json"   # parameter sets of other input kinds ({"views": {"params", "regions_npz"}})
 SUN_LAT_GRID = np.arange(-60.0, 80.1, 1.0)
 QN_LEVELS = 129
 # country labels without admin-1 units of their own in the region raster -> their ISO 3166-2 unit
@@ -158,6 +166,12 @@ class RegionModel:
         self.params = dict(DEFAULT_PARAMS, **(params or {}))
         self.params["weights"] = dict(DEFAULT_PARAMS["weights"], **self.params.get("weights", {}))
         self.qn = None
+        self.param_sets = {}
+
+    def params_for(self, kind):
+        """Exponents / prior / smoothing for an input kind ("views": screenshots and live captures); the model's
+        own parameters ("pano") when the kind has no set of its own."""
+        return self.param_sets.get(kind) or self.params
 
     # ------------------------------------------------------------------ training
     def fit(self, X_by_group, country, region, lat, lng, duel, card_sets=(), prior_mask=None):
@@ -473,14 +487,15 @@ class RegionModel:
             lab[lab == ids[k]] = ids[int(np.argmax(d))]
         return np.unique(lab, return_inverse=True)[1]
 
-    def country_posterior(self, X_by_group, cc, sun_mix=None, E=None):
-        """(region indices of cc, (n, R_c) P(region | cc, image)); None if cc has no region model."""
+    def country_posterior(self, X_by_group, cc, sun_mix=None, E=None, params=None):
+        """(region indices of cc, (n, R_c) P(region | cc, image)); None if cc has no region model.  params:
+        overrides of self.params (e.g. params_for("views"))."""
         if cc not in self.cidx:
             return None
         e = self.embed(X_by_group, cc, E)
-        if sun_mix is None and self.params["weights"].get("sun"):
+        if sun_mix is None and (params or self.params)["weights"].get("sun"):
             sun_mix = sun_mixture(X_by_group)
-        return self.regions_of(cc), self.combine(self.components(e, cc, sun_mix), cc)
+        return self.regions_of(cc), self.combine(self.components(e, cc, sun_mix), cc, params)
 
     # ------------------------------------------------------------- persistence
     def save(self, path=MODEL_DIR):
@@ -524,7 +539,34 @@ class RegionModel:
         m.mu, m.ref_emb = z["mu"].astype(np.float64), z["ref_emb"].astype(np.float64)
         m.ref_lat, m.ref_lng = z["ref_lat"].astype(np.float64), z["ref_lng"].astype(np.float64)
         m._index()
+        m.param_sets = load_param_sets(f)
         return m
+
+
+def load_param_sets(npz_path):
+    """{kind: params} of PARAMS_FILE next to npz_path whose regions_npz hash matches that file (a set
+    calibrated for another regions.npz is dropped with a warning)."""
+    f = os.path.join(os.path.dirname(npz_path), PARAMS_FILE)
+    if not os.path.exists(f):
+        return {}
+    try:
+        sets = json.load(open(f))
+    except ValueError:
+        return {}
+    h, out = None, {}
+    for kind, e in sets.items():
+        if not isinstance(e, dict) or not e.get("params"):
+            continue
+        h = h or file_hash(npz_path)
+        if e.get("regions_npz") != h:
+            sys.stderr.write("%s: the %s region parameters were calibrated for another %s - %s inputs use the "
+                             "panorama parameters (run tools/train_model.py --views --save)\n"
+                             % (PARAMS_FILE, kind, REGIONS_FILE, kind))
+            continue
+        p = dict(DEFAULT_PARAMS, **e["params"])
+        p["weights"] = dict(DEFAULT_PARAMS["weights"], **e["params"].get("weights", {}))
+        out[kind] = p
+    return out
 
 
 def sun_mixture(X_by_group):
@@ -581,7 +623,7 @@ def _bounds_mask(model, cc, regs, bounds, margin=0.5):
 
 
 def region_posterior(features_by_group, country_probs, model=None, classes=None, top_countries=12,
-                     min_prob=1e-4, by_country=False, bounds=None):
+                     min_prob=1e-4, by_country=False, bounds=None, params=None):
     """P(admin-1 region) = sum_c P(c) P(region | c, image) over the top countries.
 
     features_by_group: {group: (d,) or (1, d)} feature vectors of one image (engine.features);
@@ -594,16 +636,18 @@ def region_posterior(features_by_group, country_probs, model=None, classes=None,
     less than 1); by_country=True: {country: {code: P(region | country)}}; by_country="both": the
     pair (mixture, per country) - the per-country form feeds location_weights.  bounds: map bounds
     (engine.geo.parse_bounds forms); regions with neither their centroid nor a reference panorama
-    inside get no mass (unless that empties the country)."""
+    inside get no mass (unless that empties the country).  params: overrides of the model's exponents /
+    prior / smoothing (RegionModel.params_for(kind) for a non-panorama input)."""
     model = model or load_region_model()
     _, codes, _, _, _ = _regions()
     items = sorted(_country_items(country_probs, classes), key=lambda t: -t[1])
     items = [t for t in items[:top_countries] if t[1] >= min_prob] or items[:1]
-    sun = sun_mixture(features_by_group) if model is not None and model.params["weights"].get("sun") else None
+    w = (params or model.params)["weights"] if model is not None else {}
+    sun = sun_mixture(features_by_group) if model is not None and w.get("sun") else None
     E = model.embed_all(features_by_group) if model is not None else None
     out, per = {}, {}
     for cc, pc in items:
-        res = model.country_posterior(features_by_group, cc, sun, E) if model is not None else None
+        res = model.country_posterior(features_by_group, cc, sun, E, params) if model is not None else None
         if res is None:
             regs = raster_regions(cc)
             if not regs:

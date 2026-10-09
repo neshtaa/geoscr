@@ -1,0 +1,1284 @@
+{
+ "note": "single NMPZ frames of the user's rounds (tools/live_features.py --kind frame: eval_live.py capture, seeded start yaw); CALIB is in-sample for BOTH parameter sets (pano: calibrated on the CALIB full panoramas, views: on the CALIB live grid; per-map counts include CALIB rounds) - out-of-sample CALIB comparisons: train_model.py --views --cv (eval_views_cv.json); TEST never used for fitting or calibration.  ci95: bootstrap over games (clusters), ci95_rounds: over rounds",
+ "kind": "frame",
+ "views_set": {
+  "model": "8a71f73f583a",
+  "weights": {
+   "solar": 0.0,
+   "road": 0.0,
+   "landscape": 0.0,
+   "vehicle": 0.0,
+   "structure": 0.0,
+   "texture": 0.0,
+   "knn": 0.15,
+   "glm": 0.8,
+   "sun": 1.0,
+   "cards": 0.1
+  },
+  "prior_mix": 0.1,
+  "loc_params": {
+   "bw": 2.0,
+   "floor": 0.03
+  },
+  "region_params": {
+   "bw": 0.25,
+   "floor": 0.001
+  },
+  "inputs": {
+   "model_fit": "6827763e55b7",
+   "priors_counts": "67c87006bca6",
+   "regions_npz": "2c241096ccc3",
+   "clue_detectors_npz": "bf340acb2447"
+  },
+  "calib": {
+   "rounds": 516,
+   "loglik": -2.4761,
+   "loglik_pano_params": -2.4998,
+   "start": "pano set",
+   "features": "live grid renderings (tools/live_features.py, render f8b3d93efd72)",
+   "cards": true
+  }
+ },
+ "views_map": {
+  "weights": {
+   "solar": 0.0,
+   "road": 0.0,
+   "landscape": 0.0,
+   "vehicle": 0.0,
+   "structure": 0.0,
+   "texture": 0.0,
+   "knn": 0.15,
+   "glm": 0.8,
+   "sun": 0.8,
+   "cards": 0.1
+  },
+  "prior_mix": 0.0,
+  "mix": {
+   "map": 0.4,
+   "map_ranked": 0.2,
+   "ranked": 0.4
+  },
+  "alpha": 0.25,
+  "model": "8a71f73f583a",
+  "calib_rounds": 516,
+  "calib_loglik": -2.4284,
+  "calib_loglik_ranked_only": -2.4585,
+  "calib_loglik_model_prior_bounds": -2.4759
+ },
+ "views_regions": null,
+ "calib": {
+  "pano_no_map": {
+   "n": 517,
+   "top1": 0.18568665377176016,
+   "top3": 0.34622823984526113,
+   "top5": 0.4758220502901354,
+   "mean_score": 1448.1252192686995,
+   "mean_points_map_formula": 1416.7117988394584,
+   "median_km": 3248.4482203105035,
+   "loglik": -3.568821843916941,
+   "region_top1_if_country_right": 0.28125,
+   "region_top3_if_country_right": 0.5208333333333334,
+   "with_map": false,
+   "params": "pano"
+  },
+  "pano_map": {
+   "n": 517,
+   "top1": 0.23017408123791103,
+   "top3": 0.38684719535783363,
+   "top5": 0.5087040618955513,
+   "mean_score": 1546.9358488628004,
+   "mean_points_map_formula": 1514.311411992263,
+   "median_km": 2709.4813346257824,
+   "loglik": -3.351314843639151,
+   "region_top1_if_country_right": 0.29411764705882354,
+   "region_top3_if_country_right": 0.5630252100840336,
+   "with_map": true,
+   "params": "pano"
+  },
+  "views_no_map": {
+   "n": 517,
+   "top1": 0.17988394584139264,
+   "top3": 0.34622823984526113,
+   "top5": 0.4506769825918762,
+   "mean_score": 1420.3196472817895,
+   "mean_points_map_formula": 1387.3462282398452,
+   "median_km": 3248.4482203105035,
+   "loglik": -3.57709890644856,
+   "region_top1_if_country_right": 0.2903225806451613,
+   "region_top3_if_country_right": 0.5483870967741935,
+   "with_map": false,
+   "params": "views"
+  },
+  "views_map": {
+   "n": 517,
+   "top1": 0.2127659574468085,
+   "top3": 0.3849129593810445,
+   "top5": 0.5029013539651838,
+   "mean_score": 1546.1592190525807,
+   "mean_points_map_formula": 1512.2920696324952,
+   "median_km": 2661.5154357848687,
+   "loglik": -3.347698605643124,
+   "region_top1_if_country_right": 0.2909090909090909,
+   "region_top3_if_country_right": 0.5545454545454546,
+   "with_map": true,
+   "params": "views"
+  },
+  "games": 113,
+  "paired": {
+   "views_no_map - pano_no_map": {
+    "points": {
+     "diff": -27.8056,
+     "ci95_rounds": [
+      -82.1914,
+      26.6578
+     ],
+     "ci95": [
+      -82.0393,
+      25.4781
+     ],
+     "clusters": 113
+    },
+    "points_map_formula": {
+     "diff": -29.3656,
+     "ci95_rounds": [
+      -83.7471,
+      24.9036
+     ],
+     "ci95": [
+      -83.2082,
+      23.3603
+     ],
+     "clusters": 113
+    },
+    "top1": {
+     "diff": -0.0058,
+     "ci95_rounds": [
+      -0.0213,
+      0.0097
+     ],
+     "ci95": [
+      -0.0206,
+      0.008
+     ],
+     "clusters": 113
+    },
+    "top3": {
+     "diff": 0.0,
+     "ci95_rounds": [
+      -0.0174,
+      0.0174
+     ],
+     "ci95": [
+      -0.0181,
+      0.0174
+     ],
+     "clusters": 113
+    },
+    "loglik": {
+     "diff": -0.0083,
+     "ci95_rounds": [
+      -0.0325,
+      0.0167
+     ],
+     "ci95": [
+      -0.0349,
+      0.0204
+     ],
+     "clusters": 113
+    }
+   },
+   "views_map - pano_map": {
+    "points": {
+     "diff": -0.7766,
+     "ci95_rounds": [
+      -56.6438,
+      54.3609
+     ],
+     "ci95": [
+      -54.515,
+      54.8215
+     ],
+     "clusters": 113
+    },
+    "points_map_formula": {
+     "diff": -2.0193,
+     "ci95_rounds": [
+      -58.363,
+      52.7809
+     ],
+     "ci95": [
+      -56.0111,
+      53.5593
+     ],
+     "clusters": 113
+    },
+    "top1": {
+     "diff": -0.0174,
+     "ci95_rounds": [
+      -0.0329,
+      -0.0039
+     ],
+     "ci95": [
+      -0.0311,
+      -0.0055
+     ],
+     "clusters": 113
+    },
+    "top3": {
+     "diff": -0.0019,
+     "ci95_rounds": [
+      -0.0155,
+      0.0116
+     ],
+     "ci95": [
+      -0.0157,
+      0.0113
+     ],
+     "clusters": 113
+    },
+    "loglik": {
+     "diff": 0.0036,
+     "ci95_rounds": [
+      -0.0132,
+      0.0219
+     ],
+     "ci95": [
+      -0.0127,
+      0.0199
+     ],
+     "clusters": 113
+    }
+   },
+   "pano_map - pano_no_map": {
+    "points": {
+     "diff": 98.8106,
+     "ci95_rounds": [
+      9.1138,
+      191.6268
+     ],
+     "ci95": [
+      6.5083,
+      188.8042
+     ],
+     "clusters": 113
+    },
+    "points_map_formula": {
+     "diff": 97.5996,
+     "ci95_rounds": [
+      9.1174,
+      189.9702
+     ],
+     "ci95": [
+      6.5418,
+      186.5697
+     ],
+     "clusters": 113
+    },
+    "top1": {
+     "diff": 0.0445,
+     "ci95_rounds": [
+      0.0232,
+      0.0677
+     ],
+     "ci95": [
+      0.0217,
+      0.0683
+     ],
+     "clusters": 113
+    },
+    "top3": {
+     "diff": 0.0406,
+     "ci95_rounds": [
+      0.0174,
+      0.0638
+     ],
+     "ci95": [
+      0.02,
+      0.0632
+     ],
+     "clusters": 113
+    },
+    "loglik": {
+     "diff": 0.2175,
+     "ci95_rounds": [
+      0.1814,
+      0.253
+     ],
+     "ci95": [
+      0.1822,
+      0.2529
+     ],
+     "clusters": 113
+    }
+   },
+   "views_map - views_no_map": {
+    "points": {
+     "diff": 125.8396,
+     "ci95_rounds": [
+      39.6762,
+      213.784
+     ],
+     "ci95": [
+      35.1717,
+      222.7415
+     ],
+     "clusters": 113
+    },
+    "points_map_formula": {
+     "diff": 124.9458,
+     "ci95_rounds": [
+      39.4461,
+      212.4001
+     ],
+     "ci95": [
+      35.0048,
+      221.0162
+     ],
+     "clusters": 113
+    },
+    "top1": {
+     "diff": 0.0329,
+     "ci95_rounds": [
+      0.0135,
+      0.0542
+     ],
+     "ci95": [
+      0.0115,
+      0.055
+     ],
+     "clusters": 113
+    },
+    "top3": {
+     "diff": 0.0387,
+     "ci95_rounds": [
+      0.0174,
+      0.0619
+     ],
+     "ci95": [
+      0.0173,
+      0.0607
+     ],
+     "clusters": 113
+    },
+    "loglik": {
+     "diff": 0.2294,
+     "ci95_rounds": [
+      0.2003,
+      0.2587
+     ],
+     "ci95": [
+      0.1999,
+      0.2595
+     ],
+     "clusters": 113
+    }
+   }
+  },
+  "by_map_group": {
+   "A Moving World": {
+    "n": 221,
+    "games": 42,
+    "pano": {
+     "points_no_map": 1387.6,
+     "map_minus_no_map": {
+      "diff": 96.81,
+      "ci95_rounds": [
+       -57.417,
+       257.3925
+      ],
+      "ci95": [
+       -43.7052,
+       236.7849
+      ],
+      "clusters": 42
+     },
+     "top1_map_minus_no_map": {
+      "diff": 0.0407,
+      "ci95_rounds": [
+       0.009,
+       0.0769
+      ],
+      "ci95": [
+       0.0048,
+       0.0769
+      ],
+      "clusters": 42
+     }
+    },
+    "views": {
+     "points_no_map": 1353.1,
+     "map_minus_no_map": {
+      "diff": 106.4299,
+      "ci95_rounds": [
+       -39.0147,
+       258.4855
+      ],
+      "ci95": [
+       -47.1069,
+       268.387
+      ],
+      "clusters": 42
+     },
+     "top1_map_minus_no_map": {
+      "diff": 0.0498,
+      "ci95_rounds": [
+       0.0136,
+       0.086
+      ],
+      "ci95": [
+       0.0141,
+       0.0877
+      ],
+      "clusters": 42
+     }
+    }
+   },
+   "The World": {
+    "n": 230,
+    "games": 61,
+    "pano": {
+     "points_no_map": 1386.7,
+     "map_minus_no_map": {
+      "diff": 159.4348,
+      "ci95_rounds": [
+       30.654,
+       288.7224
+      ],
+      "ci95": [
+       25.9776,
+       290.6889
+      ],
+      "clusters": 61
+     },
+     "top1_map_minus_no_map": {
+      "diff": 0.0565,
+      "ci95_rounds": [
+       0.0217,
+       0.0957
+      ],
+      "ci95": [
+       0.0182,
+       0.0962
+      ],
+      "clusters": 61
+     }
+    },
+    "views": {
+     "points_no_map": 1364.1,
+     "map_minus_no_map": {
+      "diff": 203.2609,
+      "ci95_rounds": [
+       80.0887,
+       328.9168
+      ],
+      "ci95": [
+       77.6639,
+       336.9696
+      ],
+      "clusters": 61
+     },
+     "top1_map_minus_no_map": {
+      "diff": 0.0261,
+      "ci95_rounds": [
+       -0.0043,
+       0.0565
+      ],
+      "ci95": [
+       -0.0044,
+       0.0609
+      ],
+      "clusters": 61
+     }
+    }
+   },
+   "World-type maps, ranked prior": {
+    "n": 66,
+    "games": 10,
+    "pano": {
+     "points_no_map": 1618.8,
+     "map_minus_no_map": {
+      "diff": -115.2424,
+      "ci95_rounds": [
+       -319.4705,
+       68.4883
+      ],
+      "ci95": [
+       -308.9968,
+       84.1695
+      ],
+      "clusters": 10
+     },
+     "top1_map_minus_no_map": {
+      "diff": 0.0152,
+      "ci95_rounds": [
+       0.0,
+       0.0455
+      ],
+      "ci95": [
+       0.0,
+       0.0517
+      ],
+      "clusters": 10
+     }
+    },
+    "views": {
+     "points_no_map": 1582.8,
+     "map_minus_no_map": {
+      "diff": -85.9697,
+      "ci95_rounds": [
+       -280.8848,
+       91.5337
+      ],
+      "ci95": [
+       -264.1666,
+       86.2545
+      ],
+      "clusters": 10
+     },
+     "top1_map_minus_no_map": {
+      "diff": 0.0,
+      "ci95_rounds": [
+       0.0,
+       0.0
+      ],
+      "ci95": [
+       0.0,
+       0.0
+      ],
+      "clusters": 10
+     }
+    }
+   }
+  },
+  "map_ablation": {
+   "pano_scale_bounds_only": {
+    "n": 517,
+    "top1": 0.18568665377176016,
+    "top3": 0.34622823984526113,
+    "top5": 0.4758220502901354,
+    "mean_score": 1447.8139241695053,
+    "mean_points_map_formula": 1416.3733075435202,
+    "median_km": 3248.4482203105035,
+    "loglik": -3.5637090280103227,
+    "region_top1_if_country_right": 0.28125,
+    "region_top3_if_country_right": 0.5208333333333334,
+    "with_map": true,
+    "params": "pano",
+    "points_minus_no_map": {
+     "diff": -0.3385,
+     "ci95_rounds": [
+      -13.9015,
+      10.9479
+     ],
+     "ci95": [
+      -12.4345,
+      10.8485
+     ],
+     "clusters": 113
+    }
+   },
+   "pano_ranked_for_all": {
+    "n": 517,
+    "top1": 0.19922630560928434,
+    "top3": 0.36750483558994196,
+    "top5": 0.4835589941972921,
+    "mean_score": 1443.9568686746136,
+    "mean_points_map_formula": 1410.8568665377177,
+    "median_km": 2995.616450508936,
+    "loglik": -3.4818193022920005,
+    "region_top1_if_country_right": 0.27184466019417475,
+    "region_top3_if_country_right": 0.5339805825242718,
+    "with_map": true,
+    "params": "pano",
+    "points_minus_no_map": {
+     "diff": -5.8549,
+     "ci95_rounds": [
+      -74.0129,
+      64.6797
+     ],
+     "ci95": [
+      -77.5028,
+      64.9058
+     ],
+     "clusters": 113
+    }
+   },
+   "views_scale_bounds_only": {
+    "n": 517,
+    "top1": 0.17988394584139264,
+    "top3": 0.34622823984526113,
+    "top5": 0.4506769825918762,
+    "mean_score": 1422.505399432414,
+    "mean_points_map_formula": 1389.7388781431334,
+    "median_km": 3248.4482203105035,
+    "loglik": -3.571977020190604,
+    "region_top1_if_country_right": 0.2903225806451613,
+    "region_top3_if_country_right": 0.5483870967741935,
+    "with_map": true,
+    "params": "views",
+    "points_minus_no_map": {
+     "diff": 2.3926,
+     "ci95_rounds": [
+      -14.491,
+      23.0643
+     ],
+     "ci95": [
+      -14.6396,
+      22.919
+     ],
+     "clusters": 113
+    }
+   },
+   "views_ranked_for_all": {
+    "n": 517,
+    "top1": 0.19148936170212766,
+    "top3": 0.36363636363636365,
+    "top5": 0.4738878143133462,
+    "mean_score": 1427.5316633184163,
+    "mean_points_map_formula": 1395.7543520309478,
+    "median_km": 3249.9758721783373,
+    "loglik": -3.4662290966302476,
+    "region_top1_if_country_right": 0.2727272727272727,
+    "region_top3_if_country_right": 0.5353535353535354,
+    "with_map": true,
+    "params": "views",
+    "points_minus_no_map": {
+     "diff": 8.4081,
+     "ci95_rounds": [
+      -54.8391,
+      72.3539
+     ],
+     "ci95": [
+      -50.2875,
+      65.1922
+     ],
+     "clusters": 113
+    }
+   }
+  },
+  "region_given_true_country": {
+   "pano": {
+    "n": 517,
+    "top1": 0.2592,
+    "top3": 0.4971,
+    "top5": 0.6132,
+    "logp": -2.6835
+   },
+   "views": {
+    "n": 517,
+    "top1": 0.2592,
+    "top3": 0.4971,
+    "top5": 0.6132,
+    "logp": -2.6835
+   }
+  },
+  "in_sample": true
+ },
+ "test": {
+  "pano_no_map": {
+   "n": 386,
+   "top1": 0.14248704663212436,
+   "top3": 0.33678756476683935,
+   "top5": 0.39896373056994816,
+   "mean_score": 1332.1209227462164,
+   "mean_points_map_formula": 1301.8367875647668,
+   "median_km": 3289.421793522457,
+   "loglik": -3.806909782498559,
+   "region_top1_if_country_right": 0.18181818181818182,
+   "region_top3_if_country_right": 0.36363636363636365,
+   "with_map": false,
+   "params": "pano"
+  },
+  "pano_map": {
+   "n": 386,
+   "top1": 0.15544041450777202,
+   "top3": 0.33678756476683935,
+   "top5": 0.41450777202072536,
+   "mean_score": 1431.1401660618747,
+   "mean_points_map_formula": 1397.7279792746115,
+   "median_km": 2728.954036746055,
+   "loglik": -3.710714475397512,
+   "region_top1_if_country_right": 0.16666666666666666,
+   "region_top3_if_country_right": 0.38333333333333336,
+   "with_map": true,
+   "params": "pano"
+  },
+  "views_no_map": {
+   "n": 386,
+   "top1": 0.15803108808290156,
+   "top3": 0.31088082901554404,
+   "top5": 0.40414507772020725,
+   "mean_score": 1419.6475301095197,
+   "mean_points_map_formula": 1389.5854922279793,
+   "median_km": 2860.54844490512,
+   "loglik": -3.7574866015005437,
+   "region_top1_if_country_right": 0.18032786885245902,
+   "region_top3_if_country_right": 0.3770491803278688,
+   "with_map": false,
+   "params": "views"
+  },
+  "views_map": {
+   "n": 386,
+   "top1": 0.16321243523316062,
+   "top3": 0.3238341968911917,
+   "top5": 0.40414507772020725,
+   "mean_score": 1463.5785960828532,
+   "mean_points_map_formula": 1431.5518134715026,
+   "median_km": 2725.1234248034025,
+   "loglik": -3.656848755604853,
+   "region_top1_if_country_right": 0.14285714285714285,
+   "region_top3_if_country_right": 0.36507936507936506,
+   "with_map": true,
+   "params": "views"
+  },
+  "games": 92,
+  "paired": {
+   "views_no_map - pano_no_map": {
+    "points": {
+     "diff": 87.5266,
+     "ci95_rounds": [
+      0.9902,
+      178.4924
+     ],
+     "ci95": [
+      4.0274,
+      173.4092
+     ],
+     "clusters": 92
+    },
+    "points_map_formula": {
+     "diff": 87.7487,
+     "ci95_rounds": [
+      2.1456,
+      178.5674
+     ],
+     "ci95": [
+      4.2265,
+      173.0869
+     ],
+     "clusters": 92
+    },
+    "top1": {
+     "diff": 0.0155,
+     "ci95_rounds": [
+      -0.0052,
+      0.0389
+     ],
+     "ci95": [
+      -0.0053,
+      0.0386
+     ],
+     "clusters": 92
+    },
+    "top3": {
+     "diff": -0.0259,
+     "ci95_rounds": [
+      -0.0492,
+      -0.0052
+     ],
+     "ci95": [
+      -0.0504,
+      -0.0027
+     ],
+     "clusters": 92
+    },
+    "loglik": {
+     "diff": 0.0494,
+     "ci95_rounds": [
+      0.0197,
+      0.0786
+     ],
+     "ci95": [
+      0.0204,
+      0.0773
+     ],
+     "clusters": 92
+    }
+   },
+   "views_map - pano_map": {
+    "points": {
+     "diff": 32.4384,
+     "ci95_rounds": [
+      -29.1325,
+      95.3562
+     ],
+     "ci95": [
+      -17.9652,
+      84.7205
+     ],
+     "clusters": 92
+    },
+    "points_map_formula": {
+     "diff": 33.8238,
+     "ci95_rounds": [
+      -27.3748,
+      96.5473
+     ],
+     "ci95": [
+      -16.0988,
+      85.5038
+     ],
+     "clusters": 92
+    },
+    "top1": {
+     "diff": 0.0078,
+     "ci95_rounds": [
+      -0.0052,
+      0.0207
+     ],
+     "ci95": [
+      -0.0075,
+      0.0233
+     ],
+     "clusters": 92
+    },
+    "top3": {
+     "diff": -0.013,
+     "ci95_rounds": [
+      -0.0285,
+      0.0026
+     ],
+     "ci95": [
+      -0.0289,
+      0.0024
+     ],
+     "clusters": 92
+    },
+    "loglik": {
+     "diff": 0.0539,
+     "ci95_rounds": [
+      0.0319,
+      0.0763
+     ],
+     "ci95": [
+      0.0322,
+      0.0769
+     ],
+     "clusters": 92
+    }
+   },
+   "pano_map - pano_no_map": {
+    "points": {
+     "diff": 99.0192,
+     "ci95_rounds": [
+      0.1027,
+      201.7075
+     ],
+     "ci95": [
+      6.3014,
+      200.7401
+     ],
+     "clusters": 92
+    },
+    "points_map_formula": {
+     "diff": 95.8912,
+     "ci95_rounds": [
+      -1.597,
+      196.7034
+     ],
+     "ci95": [
+      5.1265,
+      194.0053
+     ],
+     "clusters": 92
+    },
+    "top1": {
+     "diff": 0.013,
+     "ci95_rounds": [
+      -0.013,
+      0.0389
+     ],
+     "ci95": [
+      -0.0127,
+      0.0403
+     ],
+     "clusters": 92
+    },
+    "top3": {
+     "diff": 0.0,
+     "ci95_rounds": [
+      -0.0259,
+      0.0259
+     ],
+     "ci95": [
+      -0.0306,
+      0.028
+     ],
+     "clusters": 92
+    },
+    "loglik": {
+     "diff": 0.0962,
+     "ci95_rounds": [
+      0.0531,
+      0.1395
+     ],
+     "ci95": [
+      0.0505,
+      0.1405
+     ],
+     "clusters": 92
+    }
+   },
+   "views_map - views_no_map": {
+    "points": {
+     "diff": 43.9311,
+     "ci95_rounds": [
+      -46.9952,
+      140.5809
+     ],
+     "ci95": [
+      -53.0107,
+      138.3542
+     ],
+     "clusters": 92
+    },
+    "points_map_formula": {
+     "diff": 41.9663,
+     "ci95_rounds": [
+      -48.6384,
+      137.7968
+     ],
+     "ci95": [
+      -54.3982,
+      134.8415
+     ],
+     "clusters": 92
+    },
+    "top1": {
+     "diff": 0.0052,
+     "ci95_rounds": [
+      -0.0155,
+      0.0259
+     ],
+     "ci95": [
+      -0.0191,
+      0.0281
+     ],
+     "clusters": 92
+    },
+    "top3": {
+     "diff": 0.013,
+     "ci95_rounds": [
+      -0.0104,
+      0.0389
+     ],
+     "ci95": [
+      -0.013,
+      0.0381
+     ],
+     "clusters": 92
+    },
+    "loglik": {
+     "diff": 0.1006,
+     "ci95_rounds": [
+      0.0648,
+      0.1377
+     ],
+     "ci95": [
+      0.0613,
+      0.1384
+     ],
+     "clusters": 92
+    }
+   }
+  },
+  "by_map_group": {
+   "The World": {
+    "n": 192,
+    "games": 53,
+    "pano": {
+     "points_no_map": 1145.9,
+     "map_minus_no_map": {
+      "diff": 157.6719,
+      "ci95_rounds": [
+       32.6573,
+       290.7143
+      ],
+      "ci95": [
+       45.4915,
+       285.8499
+      ],
+      "clusters": 53
+     },
+     "top1_map_minus_no_map": {
+      "diff": 0.0208,
+      "ci95_rounds": [
+       -0.0052,
+       0.0521
+      ],
+      "ci95": [
+       -0.0052,
+       0.0513
+      ],
+      "clusters": 53
+     }
+    },
+    "views": {
+     "points_no_map": 1221.0,
+     "map_minus_no_map": {
+      "diff": 114.0417,
+      "ci95_rounds": [
+       -17.1203,
+       248.3195
+      ],
+      "ci95": [
+       -8.8083,
+       238.8178
+      ],
+      "clusters": 53
+     },
+     "top1_map_minus_no_map": {
+      "diff": 0.0052,
+      "ci95_rounds": [
+       -0.0156,
+       0.026
+      ],
+      "ci95": [
+       -0.0167,
+       0.0281
+      ],
+      "clusters": 53
+     }
+    }
+   },
+   "A Moving World": {
+    "n": 140,
+    "games": 28,
+    "pano": {
+     "points_no_map": 1383.3,
+     "map_minus_no_map": {
+      "diff": 86.1714,
+      "ci95_rounds": [
+       -103.2164,
+       280.7509
+      ],
+      "ci95": [
+       -64.0963,
+       256.5052
+      ],
+      "clusters": 28
+     },
+     "top1_map_minus_no_map": {
+      "diff": -0.0071,
+      "ci95_rounds": [
+       -0.0571,
+       0.0429
+      ],
+      "ci95": [
+       -0.0615,
+       0.0462
+      ],
+      "clusters": 28
+     }
+    },
+    "views": {
+     "points_no_map": 1497.1,
+     "map_minus_no_map": {
+      "diff": -42.45,
+      "ci95_rounds": [
+       -211.035,
+       120.18
+      ],
+      "ci95": [
+       -207.731,
+       119.3724
+      ],
+      "clusters": 28
+     },
+     "top1_map_minus_no_map": {
+      "diff": 0.0143,
+      "ci95_rounds": [
+       -0.0286,
+       0.0571
+      ],
+      "ci95": [
+       -0.037,
+       0.0645
+      ],
+      "clusters": 28
+     }
+    }
+   },
+   "World-type maps, ranked prior": {
+    "n": 54,
+    "games": 11,
+    "pano": {
+     "points_no_map": 1645.2,
+     "map_minus_no_map": {
+      "diff": -98.5741,
+      "ci95_rounds": [
+       -334.6074,
+       141.519
+      ],
+      "ci95": [
+       -324.3888,
+       163.3919
+      ],
+      "clusters": 11
+     },
+     "top1_map_minus_no_map": {
+      "diff": 0.037,
+      "ci95_rounds": [
+       -0.037,
+       0.1111
+      ],
+      "ci95": [
+       -0.0333,
+       0.1111
+      ],
+      "clusters": 11
+     }
+    },
+    "views": {
+     "points_no_map": 1710.1,
+     "map_minus_no_map": {
+      "diff": 4.5556,
+      "ci95_rounds": [
+       -240.2634,
+       238.5278
+      ],
+      "ci95": [
+       -227.9678,
+       248.8299
+      ],
+      "clusters": 11
+     },
+     "top1_map_minus_no_map": {
+      "diff": -0.0185,
+      "ci95_rounds": [
+       -0.0926,
+       0.037
+      ],
+      "ci95": [
+       -0.0727,
+       0.0417
+      ],
+      "clusters": 11
+     }
+    }
+   }
+  },
+  "map_ablation": {
+   "pano_scale_bounds_only": {
+    "n": 386,
+    "top1": 0.14248704663212436,
+    "top3": 0.33678756476683935,
+    "top5": 0.39896373056994816,
+    "mean_score": 1328.9041584026745,
+    "mean_points_map_formula": 1297.7331606217617,
+    "median_km": 3341.5088395628804,
+    "loglik": -3.8057926982868366,
+    "region_top1_if_country_right": 0.18181818181818182,
+    "region_top3_if_country_right": 0.36363636363636365,
+    "with_map": true,
+    "params": "pano",
+    "points_minus_no_map": {
+     "diff": -4.1036,
+     "ci95_rounds": [
+      -14.7515,
+      2.9897
+     ],
+     "ci95": [
+      -13.9652,
+      2.3952
+     ],
+     "clusters": 92
+    }
+   },
+   "pano_ranked_for_all": {
+    "n": 386,
+    "top1": 0.16580310880829016,
+    "top3": 0.31865284974093266,
+    "top5": 0.40414507772020725,
+    "mean_score": 1349.1692855780545,
+    "mean_points_map_formula": 1316.323834196891,
+    "median_km": 3019.1076960991477,
+    "loglik": -3.758005822215871,
+    "region_top1_if_country_right": 0.171875,
+    "region_top3_if_country_right": 0.375,
+    "with_map": true,
+    "params": "pano",
+    "points_minus_no_map": {
+     "diff": 14.487,
+     "ci95_rounds": [
+      -70.711,
+      98.7366
+     ],
+     "ci95": [
+      -59.9407,
+      89.7423
+     ],
+     "clusters": 92
+    }
+   },
+   "views_scale_bounds_only": {
+    "n": 386,
+    "top1": 0.15803108808290156,
+    "top3": 0.31088082901554404,
+    "top5": 0.40414507772020725,
+    "mean_score": 1418.3427304401123,
+    "mean_points_map_formula": 1388.2046632124352,
+    "median_km": 2892.1047044978095,
+    "loglik": -3.75592939329766,
+    "region_top1_if_country_right": 0.18032786885245902,
+    "region_top3_if_country_right": 0.3770491803278688,
+    "with_map": true,
+    "params": "views",
+    "points_minus_no_map": {
+     "diff": -1.3808,
+     "ci95_rounds": [
+      -7.0286,
+      2.2694
+     ],
+     "ci95": [
+      -7.184,
+      2.2668
+     ],
+     "clusters": 92
+    }
+   },
+   "views_ranked_for_all": {
+    "n": 386,
+    "top1": 0.16321243523316062,
+    "top3": 0.3290155440414508,
+    "top5": 0.4015544041450777,
+    "mean_score": 1398.9992029235427,
+    "mean_points_map_formula": 1365.8290155440413,
+    "median_km": 2933.194567376704,
+    "loglik": -3.7029897772138867,
+    "region_top1_if_country_right": 0.14285714285714285,
+    "region_top3_if_country_right": 0.38095238095238093,
+    "with_map": true,
+    "params": "views",
+    "points_minus_no_map": {
+     "diff": -23.7565,
+     "ci95_rounds": [
+      -93.592,
+      47.7075
+     ],
+     "ci95": [
+      -99.7757,
+      51.4521
+     ],
+     "clusters": 92
+    }
+   }
+  },
+  "region_given_true_country": {
+   "pano": {
+    "n": 386,
+    "top1": 0.2124,
+    "top3": 0.4456,
+    "top5": 0.5544,
+    "logp": -2.8299
+   },
+   "views": {
+    "n": 386,
+    "top1": 0.2124,
+    "top3": 0.4456,
+    "top5": 0.5544,
+    "logp": -2.8299
+   }
+  }
+ }
+}

@@ -2,14 +2,14 @@
  "split": "test",
  "mode": "10 rendered views (live grid 2x5, 112.7x90 deg), car axis unknown",
  "n": 386,
- "top1": 0.30569948186528495,
- "top3": 0.5362694300518135,
- "top5": 0.6191709844559585,
- "mean_score": 2155.2746164702357,
- "mean_points_map_formula": 2119.2512953367877,
+ "top1": 0.32642487046632124,
+ "top3": 0.5310880829015544,
+ "top5": 0.6139896373056994,
+ "mean_score": 2219.6865837529967,
+ "mean_points_map_formula": 2182.70725388601,
  "with_map": true,
- "median_km": 1092.073461786956,
- "region_top1_if_country_right": 0.2542372881355932,
- "region_top3_if_country_right": 0.4745762711864407,
- "analysis_ms": 1655.0
+ "median_km": 1039.553782664768,
+ "region_top1_if_country_right": 0.24603174603174602,
+ "region_top3_if_country_right": 0.46825396825396826,
+ "analysis_ms": 2926.5
 }

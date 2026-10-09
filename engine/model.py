@@ -23,8 +23,16 @@ Everything here is classical statistics / linear algebra (no neural networks):
   for other World-type maps) with the model prior.  The map bounds remove the countries with
   (almost) nothing inside them; on maps smaller than World-type ones the world-level priors are
   conditioned on the box (times each country's share inside it).  The guess stays inside the bounds.
+* parameter sets by input kind: "pano" (full panoramas; the default exponents, prior mix, kernels and
+  priors.json "params") and "views" (screenshots / live captures: the same quantities calibrated on the
+  CALIB rounds rendered into the live grid, tools/live_features.py + tools/train_model.py --views,
+  model.json "param_sets").  for_input() returns the model with the set of an input kind (the fitted
+  arrays are shared); without a "views" set every input uses "pano".  A set records the inputs it was
+  calibrated with (input_hashes: fitted arrays, priors.json counts, regions.npz, clue_detectors.npz);
+  when any of them changed it is ignored ("pano" for every input) until it is recalibrated.
 """
 
+import copy
 import hashlib
 import json
 import math
@@ -37,6 +45,9 @@ from .geo import (WORLD_SCORE_SCALE_KM, clip_to_bounds, country_area_inside, hav
                   parse_bounds, score_scale_km)
 
 SUN_LAT_GRID = np.arange(-60.0, 80.1, 1.0)
+# what a calibrated parameter set depends on besides its own numbers (GeoModel.input_hashes)
+INPUT_STAMP_KEYS = ("model_fit", "priors_counts", "regions_npz", "clue_detectors_npz")
+_FILE_HASHES = {}
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "model")
 PRIORS_FILE = "priors.json"
 BOUNDS_MARGIN_DEG = 0.5   # location kernel: reference panoramas this far outside the bounds still count
@@ -44,6 +55,28 @@ MASK_MIN_FRAC = 0.01      # share of its area or references inside the bounds a 
 
 
 # ----------------------------------------------------------------------------- utils
+def file_hash(path):
+    """sha1[:12] of a file's bytes (cached by path, size and mtime), None when it does not exist."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    key = (path, st.st_size, st.st_mtime_ns)
+    if key not in _FILE_HASHES:
+        h = hashlib.sha1()
+        with open(path, "rb") as f:
+            for b in iter(lambda: f.read(1 << 20), b""):
+                h.update(b)
+        _FILE_HASHES[key] = h.hexdigest()[:12]
+    return _FILE_HASHES[key]
+
+
+def priors_hash(priors):
+    """Hash of the empirical counts of priors.json (everything but the calibrated "params")."""
+    body = {k: v for k, v in (priors or {}).items() if k != "params"}
+    return hashlib.sha1(json.dumps(body, sort_keys=True).encode()).hexdigest()[:12]
+
+
 def _logsumexp(a, axis=-1):
     m = np.max(a, axis=axis, keepdims=True)
     return (m + np.log(np.sum(np.exp(a - m), axis=axis, keepdims=True))).squeeze(axis)
@@ -170,8 +203,18 @@ class SoftmaxGLM:
         self.lam, self.iters, self.lr = lam, iters, lr
 
     def design(self, Z):
-        M = np.isnan(Z)
-        return np.hstack([np.clip(np.where(M, 0.0, Z), -5, 5), M[:, self.mcols].astype(float), np.ones((len(Z), 1))])
+        """[clip(Z with NaN -> 0, -5, 5), missing indicators of mcols, 1], built in place (one (n, d) array:
+        the hstack of temporaries peaked > 3 GB on 78k training panoramas; same values)."""
+        n, dz = Z.shape
+        mc = np.flatnonzero(self.mcols)
+        F = np.empty((n, dz + len(mc) + 1))
+        F[:, :dz] = Z
+        M = np.isnan(F[:, :dz])
+        F[:, :dz][M] = 0.0
+        np.clip(F[:, :dz], -5, 5, out=F[:, :dz])
+        F[:, dz:dz + len(mc)] = M[:, mc]
+        F[:, -1] = 1.0
+        return F
 
     def fit(self, Z, yi, n_classes):
         self.mcols = np.isnan(Z).mean(0) > 0.02
@@ -210,10 +253,14 @@ class GeoModel:
         self.loc_params = {"bw": 1.0, "floor": 1e-3}
         self.region_params = {"bw": 1.0, "floor": 0.05}
         self.priors = {}
+        self.param_sets = {}   # {"views": {weights, prior_mix, loc_params, region_params, map, inputs, ...}}
+        self.param_set = "pano"
         self._inside, self._share = {}, {}
+        self._fit_hash = None
 
     # ------------------------------------------------------------------ training
     def fit(self, X_by_group, y, lat, lng, is_world, min_count=6, knn_k=40):
+        self._fit_hash = None
         y = np.asarray(y)
         classes = sorted(c for c in set(y) if (y == c).sum() >= min_count)
         self.classes = classes
@@ -473,6 +520,78 @@ class GeoModel:
                 "scale_km": score_scale_km((map_info or {}).get("maxErrorDistance")),
                 "bounds": parse_bounds((map_info or {}).get("bounds"))}
 
+    # ---------------------------------------------------------------- parameter sets
+    def fit_hash(self):
+        """Hash of the fitted arrays (as save() writes them to model.npz; a loaded model: model.json "fit_hash")."""
+        if self._fit_hash is None:
+            h = hashlib.sha1()
+            for k, v in sorted(self._arrays().items()):
+                a = np.ascontiguousarray(v)
+                h.update(("%s|%s|%s|" % (k, a.dtype, a.shape)).encode())
+                h.update(a.tobytes())
+            self._fit_hash = h.hexdigest()[:12]
+        return self._fit_hash
+
+    def input_hashes(self, keys=INPUT_STAMP_KEYS):
+        """What a calibrated parameter set depends on besides its own numbers: the fitted arrays, the
+        priors.json counts (map-aware prior) and the region-model / detector-bank files the locator loads
+        (engine.regions, engine.clue_detect; None when missing)."""
+        out = {}
+        for k in keys:
+            if k == "model_fit":
+                out[k] = self.fit_hash()
+            elif k == "priors_counts":
+                out[k] = priors_hash(self.priors)
+            elif k == "regions_npz":
+                from .regions import MODEL_DIR as RDIR, REGIONS_FILE
+                out[k] = file_hash(os.path.join(RDIR, REGIONS_FILE))
+            elif k == "clue_detectors_npz":
+                from .clue_detect import DETECTORS_PATH
+                out[k] = file_hash(DETECTORS_PATH)
+        return out
+
+    def stale_reason(self, ps):
+        """Why a parameter set does not belong to this model and its inputs (None when it does)."""
+        if ps.get("model") not in (None, self.fingerprint()):
+            return "calibrated for a model with other classes / feature groups"
+        stamp = ps.get("inputs") or {}
+        now = self.input_hashes([k for k in stamp if k in INPUT_STAMP_KEYS])
+        bad = [k for k in now if now[k] != stamp[k]]
+        return ("calibrated with other inputs (%s changed)" % ", ".join(bad)) if bad else None
+
+    def views_params(self):
+        """The calibrated "views" parameter set, None if missing or stale (stale_reason: another model, or
+        the fitted arrays, the priors.json counts, regions.npz or clue_detectors.npz changed since)."""
+        ps = self.param_sets.get("views")
+        if not ps or ps.get("enabled") is False:   # disabled: no out-of-fold gain on CALIB
+            return None
+        why = self.stale_reason(ps)
+        if why:
+            if getattr(self, "_warned_views", None) != why:
+                sys.stderr.write("model.json views parameters %s - screenshots use the panorama parameters (run "
+                                 "tools/live_features.py, then tools/train_model.py --views --save)\n" % why)
+                self._warned_views = why
+            return None
+        return ps
+
+    def for_input(self, kind):
+        """The model with the parameter set of an input kind: "views" for screenshots / live captures
+        (SphericalImage.source == "views"), anything else "pano".  A shallow copy sharing the fitted arrays
+        with the exponents, prior mix, location / region kernels and map-aware prior parameters of the set;
+        the model itself when the set is missing ("pano" parameters for every input)."""
+        ps = self.views_params() if kind == "views" else None
+        if not ps:
+            return self
+        m = copy.copy(self)
+        m.param_set = kind
+        m.weights = dict(ps.get("weights") or self.weights)
+        m.prior_mix = ps.get("prior_mix", self.prior_mix)
+        m.loc_params = dict(ps.get("loc_params") or self.loc_params)
+        m.region_params = dict(ps.get("region_params") or self.region_params)
+        if ps.get("map"):  # map-aware prior of the set (same counts, its own mixture and exponents)
+            m.priors = dict(self.priors, params=ps["map"])
+        return m
+
     # ---------------------------------------------------------------- location
     def ref_weights(self, logpost_row, d2_row, bw=None, floor=None, top_countries=12, bounds=None):
         """Posterior mass over reference panoramas: P(country) spread inside each country by a
@@ -534,21 +653,28 @@ class GeoModel:
         self._inside, self._share = {}, {}
 
     # ------------------------------------------------------------- persistence
-    def save(self, path=MODEL_DIR):
-        os.makedirs(path, exist_ok=True)
+    def _arrays(self):
+        """The fitted arrays as model.npz stores them."""
         arrays = {"ref_yi": self.ref_yi, "ref_lat": self.ref_lat, "ref_lng": self.ref_lng,
                   "ref_emb": self.ref_emb.astype(np.float32), "prior_world": self.prior_world,
                   "prior_uniform": self.prior_uniform, "train_freq": self.train_freq, "lat_hist": self.lat_hist}
-        arrays["glm.W"] = self.glm.W
-        arrays["glm.mcols"] = self.glm.mcols
+        if self.glm is not None:
+            arrays["glm.W"] = self.glm.W
+            arrays["glm.mcols"] = self.glm.mcols
         for g in self.groups:
             for k, v in self.gauss[g].to_dict().items():
                 arrays[f"g.{g}.{k}"] = v
-        np.savez_compressed(os.path.join(path, "model.npz"), **arrays)
-        json.dump({"groups": self.groups, "classes": self.classes, "weights": self.weights,
-                   "prior_mix": self.prior_mix, "knn_k": self.knn_k,
-                   "loc_params": self.loc_params, "region_params": self.region_params},
-                  open(os.path.join(path, "model.json"), "w"), indent=1)
+        return arrays
+
+    def save(self, path=MODEL_DIR):
+        os.makedirs(path, exist_ok=True)
+        np.savez_compressed(os.path.join(path, "model.npz"), **self._arrays())
+        meta = {"groups": self.groups, "classes": self.classes, "weights": self.weights,
+                "prior_mix": self.prior_mix, "knn_k": self.knn_k,
+                "loc_params": self.loc_params, "region_params": self.region_params, "fit_hash": self.fit_hash()}
+        if self.param_sets:
+            meta["param_sets"] = self.param_sets
+        json.dump(meta, open(os.path.join(path, "model.json"), "w"), indent=1)
 
     def save_priors(self, path=MODEL_DIR):
         json.dump(self.priors, open(os.path.join(path, PRIORS_FILE), "w"), indent=1)
@@ -562,6 +688,8 @@ class GeoModel:
         m.prior_mix, m.knn_k = meta["prior_mix"], meta["knn_k"]
         m.loc_params = meta.get("loc_params", {})
         m.region_params = meta.get("region_params", {})
+        m.param_sets = meta.get("param_sets") or {}
+        m._fit_hash = meta.get("fit_hash")
         pf = os.path.join(path, PRIORS_FILE)
         m.priors = json.load(open(pf)) if os.path.exists(pf) else {}
         for k in ("ref_yi", "ref_lat", "ref_lng", "ref_emb", "prior_world", "prior_uniform", "train_freq", "lat_hist"):

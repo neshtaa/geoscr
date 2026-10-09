@@ -148,13 +148,14 @@ test('capture and --submit only on single-player games; Play-Along and unknown t
 });
 
 test('gameFlags: unknown forbidRotating is probed, unknown forbidZooming keeps the player\'s zoom', () => {
-  const g = (r, z) => ({ game: { token: 't', forbidRotating: r, forbidZooming: z } });
-  assert.deepStrictEqual(L.gameFlags(g(true, false), false), { noRotate: true, zoomLocked: false });
-  assert.deepStrictEqual(L.gameFlags(g(false, true), false), { noRotate: false, zoomLocked: true });
-  assert.deepStrictEqual(L.gameFlags({}, false), { noRotate: null, zoomLocked: true });
-  assert.deepStrictEqual(L.gameFlags({}, true), { noRotate: true, zoomLocked: true });
-  assert.deepStrictEqual(L.gameFlags({ challenge: { forbidRotating: false, forbidZooming: false } }, false),
-    { noRotate: false, zoomLocked: false });
+  const g = (r, z, m) => ({ game: { token: 't', forbidRotating: r, forbidZooming: z, forbidMoving: m } });
+  assert.deepStrictEqual(L.gameFlags(g(true, false), false), { noRotate: true, zoomLocked: false, noMove: null });
+  assert.deepStrictEqual(L.gameFlags(g(false, true, false), false), { noRotate: false, zoomLocked: true, noMove: false });
+  assert.deepStrictEqual(L.gameFlags(g(false, true, true), false), { noRotate: false, zoomLocked: true, noMove: true });
+  assert.deepStrictEqual(L.gameFlags({}, false), { noRotate: null, zoomLocked: true, noMove: null });
+  assert.deepStrictEqual(L.gameFlags({}, true), { noRotate: true, zoomLocked: true, noMove: true });
+  assert.deepStrictEqual(L.gameFlags({ challenge: { forbidRotating: false, forbidZooming: false, forbidMoving: false } }, false),
+    { noRotate: false, zoomLocked: false, noMove: false });
 });
 
 test('clipProblem: the screenshot must be the whole, unstretched canvas', () => {
@@ -558,6 +559,288 @@ test('predictBody sends only views and map settings', () => {
   assert.deepStrictEqual(b, { views: [{ image_b64: 'data:image/jpeg;base64,AAA', yaw: 10, pitch: -40, hfov: 112.7, vfov: 90 }],
     map: { id: 'm', name: 'World' } });
   assert.ok(!('map' in L.predictBody([], null)));
+  // moving: only a well-formed round key passes
+  assert.deepStrictEqual(L.predictBody([], null, { round: 'game:abc123#2', extra: 1 }).fusion, { round: 'game:abc123#2' });
+  assert.ok(!('fusion' in L.predictBody([], null, { round: 'x"; drop' })));
+  assert.ok(!('fusion' in L.predictBody([], null, { round: 47.1 })));
+  for (const bad of ['game:abc#null', 'challenge:AbC#undefined', 'game:abc#0', 'page:abc#1', 'game:a.b#2', 'game:abc#2\n'])
+    assert.ok(!('fusion' in L.predictBody([], null, { round: bad })), bad);
+});
+
+test('moving helpers: round key without location data, idle rule, status note', () => {
+  assert.strictEqual(L.fusionKey('/game/abc123', 'abc123', 2, false, 'p1'), 'game:abc123#2');
+  assert.strictEqual(L.fusionKey('/challenge/CM0G', 'CM0G', 5, false, 'p1'), 'challenge:CM0G#5');
+  assert.strictEqual(L.fusionKey('/game/abc/replay', 'abc', 1, true, 'p1'), 'replay:abc#1@p1');
+  // no round number, no key (no fusion): captures of different rounds never mix
+  for (const r of [null, undefined, 0, -1, 1.5, '2', NaN])
+    assert.strictEqual(L.fusionKey('/challenge/AbC', 'AbC', r, false, 'p1'), null, String(r));
+  assert.strictEqual(L.fusionKey('/somewhere/AbC', 'AbC', 1, false, 'p1'), null);
+  const t = { now: 10000, panoAt: 8000, povAt: 0, inputAt: 0, mouseDown: false, blur: false };
+  assert.ok(L.moveReady(t));
+  assert.ok(!L.moveReady(Object.assign({}, t, { panoAt: 9000 })));          // moved 1 s ago
+  assert.ok(!L.moveReady(Object.assign({}, t, { povAt: 9500 })));           // still turning the camera
+  assert.ok(!L.moveReady(Object.assign({}, t, { inputAt: 9900 })));         // just released the mouse
+  assert.ok(!L.moveReady(Object.assign({}, t, { mouseDown: true })));       // dragging
+  assert.ok(!L.moveReady(Object.assign({}, t, { blur: true })));            // GeoGuessr's drag blur
+  assert.strictEqual(L.MOVE_IDLE_MS, 1500);
+  assert.strictEqual(L.fusionNote(null), '');
+  assert.strictEqual(L.fusionNote({ n: 1 }), '');
+  assert.strictEqual(L.fusionNote({ n: 3, changed_top: true }), ' (3 панорами, відповідь змінилась)');
+  assert.strictEqual(L.fusionNote({ n: 5, changed_top: false }), ' (5 панорам, відповідь та сама)');
+  assert.strictEqual(L.fusionNote({ n: 2, replaced: { seq: 1 } }), ' (2 панорами, та сама панорама, оновлено)');
+});
+
+// A single-player game page whose capture is stubbed: the controller's round / move logic with a fake server.
+function movingPage(game, { auto = true } = {}) {
+  const roundEl = { innerText: 'Round 1 / 5' };
+  const dom = { "[data-qa='round-number']": roundEl, "[data-qa='standard-round-result']": null };
+  const pg = fakePage('/game/abc123', { body: fakeGame(Object.assign({ token: 'abc123', type: 'standard' }, game)), canvas: true,
+    dom });
+  const { win } = pg;
+  let skew = 0;
+  win.performance.now = () => Date.now() + skew;
+  const S = win.__geoscr;
+  const sent = [], rounds = {};
+  let failNext = null;
+  S.capture = async () => {
+    if (failNext) { const e = failNext; failNext = null; throw e; }
+    return { views: [{ image_b64: 'data:image/jpeg;base64,AAAA', yaw: 0, pitch: 0, hfov: 100, vfov: 80 }], mode: 'sweep',
+      pano: S.panoChanges, ms: 1, wait_ms: 0, noRotate: false, canvas: {}, fov: { hfov: 100, vfov: 80 } };
+  };
+  const server = (type, payload) => {
+    if (type !== 'predict') return Promise.resolve({ ok: true });
+    sent.push(payload);
+    const k = payload.fusion && payload.fusion.round;
+    const r = rounds[k] = rounds[k] || [];
+    const top = ['BR', 'AR', 'CL'][r.length % 3];
+    const prev = r.length ? r[r.length - 1] : null;
+    r.push(top);
+    return Promise.resolve({ countries: [{ code: top, probability: 0.5 }], guess: { lat: 0, lng: 0 }, hints: [], observations: [],
+      fusion: { n: r.length, seq: r.length, top, prev_top: prev, changed_top: prev === null ? null : prev !== top,
+        captures: r.map(c => ({ countries: [{ code: c, probability: 0.5 }] })) } });
+  };
+  const pano = new win.google.maps.StreetViewPanorama({ contains: () => true });
+  return { pg, win, S, sent, pano, roundEl, dom, server, start: async () => {
+    await win.fetch('/api/v3/games/abc123');
+    await flush();
+    S.attach(server, { auto });
+  }, idle: ms => { skew += ms; }, fail: e => { failNext = e; } };
+}
+
+test('moving: a new panorama of the round is re-captured once the player stops and fused under the round key', async () => {
+  const m = movingPage({ forbidMoving: false, forbidRotating: false });
+  await m.start();
+  const { S, sent, pano } = m;
+  pano.setPano('start');
+  await S.ctl.tick();             // new round, auto-analyse
+  await S.ctl.busy;
+  assert.strictEqual(sent.length, 1);
+  assert.strictEqual(JSON.stringify(sent[0].fusion), JSON.stringify({ round: 'game:abc123#1' }));
+  assert.ok(noSecret(sent[0]));
+  assert.strictEqual(S.ctl.view.fusion.n, 1);
+  assert.strictEqual(S.ctl.view.moving, true);
+  // the player looks around without moving: nothing happens
+  pano.setPov({ heading: 90, pitch: 0 });
+  m.idle(2000);
+  await S.ctl.tick();
+  assert.strictEqual(sent.length, 1);
+  // the player moves: wait while not idle, while the mouse is held, while the panorama is blurred
+  pano.setPano('moved-1');
+  await S.ctl.tick();
+  assert.strictEqual(sent.length, 1);
+  assert.match(S.ctl.view.status.text, /перемістились/);
+  m.idle(2000);
+  S.mouseDown = true;
+  S.inputAt = m.win.performance.now();
+  await S.ctl.tick();
+  assert.strictEqual(sent.length, 1);
+  S.mouseDown = false;
+  m.idle(2000);
+  m.win.document.querySelector('canvas.widget-scene-canvas').style.filter = 'blur(16px)';
+  await S.ctl.tick();
+  assert.strictEqual(sent.length, 1);
+  m.win.document.querySelector('canvas.widget-scene-canvas').style.filter = '';
+  await S.ctl.tick();
+  await S.ctl.busy;
+  assert.strictEqual(sent.length, 2);
+  assert.strictEqual(JSON.stringify(sent[1].fusion), JSON.stringify({ round: 'game:abc123#1' }));
+  assert.strictEqual(sent[1].job.trigger, 'move');
+  assert.strictEqual(S.ctl.view.fusion.n, 2);
+  assert.strictEqual(S.ctl.view.fusion.changed_top, true);
+  assert.match(S.ctl.view.status.text, /2 панорами, відповідь змінилась/);
+  // the same panorama: no new capture
+  m.idle(5000);
+  await S.ctl.tick();
+  assert.strictEqual(sent.length, 2);
+  // a capture the player interrupts (moves on during the sweep) is taken again once idle
+  pano.setPano('moved-2');
+  m.idle(2000);
+  m.fail(new Error('панорама змінилася під час знімання'));
+  await S.ctl.tick();
+  await S.ctl.busy;
+  assert.strictEqual(S.ctl.view.status.level, 'warn');
+  assert.strictEqual(sent.length, 2);
+  pano.setPano('moved-3');
+  m.idle(2000);
+  await S.ctl.tick();
+  await S.ctl.busy;
+  assert.strictEqual(sent.length, 3);
+  assert.strictEqual(S.ctl.view.fusion.n, 3);
+  // the next round starts afresh under its own key
+  m.roundEl.innerText = 'Round 2 / 5';
+  pano.setPano('round-2');
+  await S.ctl.tick();
+  assert.strictEqual(S.ctl.view.fusion, null);
+  await S.ctl.busy;
+  assert.strictEqual(JSON.stringify(sent[3].fusion), JSON.stringify({ round: 'game:abc123#2' }));
+  assert.strictEqual(S.ctl.view.fusion.n, 1);
+});
+
+test('moving: no automatic re-capture with auto-analyse off or in rounds that forbid moving; Alt+G still fuses', async () => {
+  for (const [game, auto] of [[{ forbidMoving: false }, false], [{ forbidMoving: true }, true]]) {
+    const m = movingPage(game, { auto });
+    await m.start();
+    const { S, sent, pano } = m;
+    pano.setPano('start');
+    await S.ctl.tick();
+    await S.ctl.busy;
+    if (!auto) await S.ctl.analyse('manual');
+    const n0 = sent.length;
+    assert.strictEqual(n0, 1);
+    pano.setPano('moved');
+    m.idle(3000);
+    await S.ctl.tick();
+    await S.ctl.busy;
+    assert.strictEqual(sent.length, 1, JSON.stringify(game));
+    // auto-analyse off in a moving round: the HUD says how to add the new panorama
+    if (!auto) assert.match(S.ctl.view.status.text, /перемістились.*Alt\+G/);
+    else assert.doesNotMatch(S.ctl.view.status.text, /перемістились/);
+    await S.ctl.analyse('manual');   // Alt+G
+    assert.strictEqual(sent.length, 2);
+    assert.strictEqual(JSON.stringify(sent[1].fusion), JSON.stringify({ round: 'game:abc123#1' }));
+  }
+});
+
+test('moving: nothing is captured between the round\'s result screen and the next round number', async () => {
+  const m = movingPage({ forbidMoving: false, forbidRotating: false });
+  await m.start();
+  const { S, sent, pano, dom } = m;
+  pano.setPano('start');
+  await S.ctl.tick();
+  await S.ctl.busy;
+  assert.strictEqual(sent.length, 1);
+  dom["[data-qa='standard-round-result']"] = {};      // the player guessed: the result screen
+  await S.ctl.tick();
+  assert.strictEqual(S.ctl.resultKey, S.ctl.lastKey);
+  dom["[data-qa='standard-round-result']"] = null;    // next round's panorama, the round number not updated yet
+  pano.setPano('round-2');
+  m.idle(3000);
+  await S.ctl.tick();
+  await S.ctl.busy;
+  assert.strictEqual(sent.length, 1);                  // not fused into round 1
+  m.roundEl.innerText = 'Round 2 / 5';
+  await S.ctl.tick();
+  await S.ctl.busy;
+  assert.strictEqual(sent.length, 2);
+  assert.strictEqual(JSON.stringify(sent[1].fusion), JSON.stringify({ round: 'game:abc123#2' }));
+  assert.strictEqual(sent[1].job.trigger, 'auto');
+});
+
+// The real sweep (S.capture) on a fake 2D Street View: povs counts the script's camera changes, onPov(n) runs
+// after the n-th one.
+function sweepPage(onPov) {
+  const pg = fakePage('/game/abc123', { body: fakeGame({ token: 'abc123', type: 'standard' }), canvas: true });
+  const { win } = pg;
+  let skew = 0;
+  win.performance.now = () => Date.now() + skew;
+  win.requestAnimationFrame = cb => setTimeout(cb, 1);
+  win.document.createElement = () => ({ width: 0, height: 0, toDataURL: () => 'data:image/jpeg;base64,AAAA',
+    getContext: () => ({ drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(512).fill(200) }) }) });
+  const scene = win.document.querySelector('canvas.widget-scene-canvas');
+  scene.getContext = () => null;
+  const draw = () => { const c = new win.CanvasRenderingContext2D(); c.canvas = scene; c.drawImage(); };
+  const P = win.google.maps.StreetViewPanorama;
+  P.prototype.getStatus = () => 'OK';
+  const S = win.__geoscr;
+  const inside = { tagName: 'DIV' }, guessMap = { tagName: 'DIV' }, hud = { tagName: 'DIV' };
+  const pano = new P({ contains: t => t === scene || t === inside });
+  const log = { povs: 0, zooms: [] };
+  const setPov = pano.setPov;
+  pano.setPov = function (v) { setPov.call(this, v); draw(); log.povs++; onPov(log.povs, this); };
+  pano.setZoom = z => { log.zooms.push(z); };
+  pano.getZoom = () => 1.5;
+  pano.setPano('round1');
+  setPov.call(pano, { heading: 123, pitch: -7 });   // the player's camera
+  draw();
+  skew = 2000;   // the panorama has been still for longer than SETTLE_MS
+  const press = (target, type = 'mousedown') => { for (const f of pg.listeners[type] || []) f({ type, button: 0, target }); };
+  const release = () => { for (const f of pg.listeners.mouseup || []) f({ type: 'mouseup', button: 0, target: inside }); };
+  const key = k => { for (const f of pg.listeners.keydown || []) f({ type: 'keydown', key: k, target: { tagName: 'BODY' } }); };
+  return { pg, win, S, pano, log, inside, guessMap, hud, press, release, key };
+}
+
+test('a press anywhere or a Street View key during the sweep stops it and puts the player\'s camera back at once', async () => {
+  for (const how of ['guess-map', 'hud', 'panorama', 'key']) {
+    let page = null, at = null, after = 0;
+    const sp = sweepPage((n, pano) => {
+      if (at !== null) after++;
+      if (n === 4) {
+        if (how === 'key') page.key('ArrowLeft');
+        else page.press(how === 'guess-map' ? page.guessMap : how === 'hud' ? page.hud : page.inside);
+        at = JSON.stringify(pano.getPov());   // what the page's own handlers see when the event reaches them
+        after = 0;
+      }
+    });
+    page = sp;
+    const { S, pano } = sp;
+    await assert.rejects(S.capture('/game/abc123', { flags: { noRotate: false, zoomLocked: false } }), /ви рухаєте камеру/, how);
+    assert.strictEqual(at, JSON.stringify({ heading: 123, pitch: -7 }), how);  // restored synchronously in the listener
+    assert.strictEqual(after, 0, `${how}: the script moved the camera after the player took over`);
+    assert.strictEqual(JSON.stringify(pano.getPov()), JSON.stringify({ heading: 123, pitch: -7 }), how);
+    assert.strictEqual(sp.log.zooms[sp.log.zooms.length - 1], 1.5, how);     // the player's zoom too
+    assert.strictEqual(S.mouseDown, how === 'panorama', how);                   // only the panorama is "held"
+    assert.strictEqual(S.sweep, null);
+  }
+});
+
+test('the click that starts an analysis does not stop it; a held panorama is put back on release', async () => {
+  // a HUD click before the capture: the sweep runs until the next round's panorama arrives
+  let sp = sweepPage((n, pano) => { if (n === 3) pano.setPano('next-round'); });
+  sp.press(sp.hud);
+  sp.release();
+  await assert.rejects(sp.S.capture('/game/abc123', { flags: { noRotate: false, zoomLocked: false } }), /панорама змінилася/);
+  // the player grabs the panorama between two views: back to their camera at once, nothing more on release
+  let grabbed = false;
+  sp = sweepPage((n, pano) => {
+    if (n === 5 && !grabbed) {
+      grabbed = true;
+      sp.press(sp.inside, 'pointerdown');
+      pano.pov = { heading: 200, pitch: 10 };   // the player's drag
+    }
+  });
+  await assert.rejects(sp.S.capture('/game/abc123', { flags: { noRotate: false, zoomLocked: false } }), /ви рухаєте камеру/);
+  assert.ok(sp.S.held());
+  assert.strictEqual(JSON.stringify(sp.pano.getPov()), '{"heading":200,"pitch":10}');   // the drag is the player's, untouched
+  sp.release();
+  await new Promise(r => setTimeout(r, 250));
+  assert.strictEqual(JSON.stringify(sp.pano.getPov()), '{"heading":200,"pitch":10}');
+  assert.ok(!sp.S.held());
+});
+
+test('no sweep starts while the player holds the panorama; pressing elsewhere does not block it', async () => {
+  const sp = sweepPage((n, pano) => { if (n === 2) pano.setPano('next-round'); });
+  sp.press(sp.inside);
+  assert.ok(sp.S.held());
+  const t0 = Date.now();
+  const run = sp.S.capture('/game/abc123', { flags: { noRotate: false, zoomLocked: false } }).catch(e => e);
+  await new Promise(r => setTimeout(r, 700));
+  assert.strictEqual(sp.log.povs, 0);          // waiting for the release
+  sp.release();
+  sp.press(sp.guessMap);                        // a pin on the guess map does not hold the camera
+  assert.ok(!sp.S.held());
+  const e = await run;
+  assert.match(String(e && e.message), /панорама змінилася/);
+  assert.ok(sp.log.povs >= 2 && Date.now() - t0 < 10000);
 });
 
 test('pageCapture decodes the page\'s JPEG data URLs', () => {
@@ -649,6 +932,21 @@ test('the extension bundles the same HUD files as web/hud', () => {
   for (const f of ['hud.js', 'hud.css'])
     assert.strictEqual(fs.readFileSync(path.join(EXT, 'hud', f), 'utf8'), fs.readFileSync(path.join(__dirname, 'web', 'hud', f), 'utf8'),
       `extension/hud/${f} is stale: cp web/hud/${f} extension/hud/`);
+});
+
+test('HUD moving line: panoramas fused, whether the latest changed the answer', () => {
+  assert.strictEqual(H.fusionLine(null, true, true), null);
+  assert.strictEqual(H.fusionLine({ n: 1 }, true, false), null);         // no-move round: nothing to say
+  assert.strictEqual(H.fusionLine({ n: 1 }, true, null), null);
+  assert.match(H.fusionLine({ n: 1 }, true, true).text, /рухайтесь/);
+  assert.match(H.fusionLine({ n: 1 }, false, true).text, /Alt\+G/);
+  const l = H.fusionLine({ n: 3, changed_top: true, prev_top: 'BR', captures: [{ countries: [{ code: 'BR', probability: 0.4 }] },
+    { countries: [{ code: 'AR', probability: 0.5 }] }, { countries: [] }] }, true, true);
+  assert.ok(l.changed);
+  assert.match(l.text, /Панорам у відповіді: 3 · остання змінила відповідь \(було /);
+  assert.deepStrictEqual(l.captures.map(x => x.slice(0, 3)), ['1: ', '2: ', '3: ']);
+  assert.match(H.fusionLine({ n: 2, changed_top: false }, true, true).text, /підтвердила/);
+  assert.match(H.fusionLine({ n: 2, replaced: { seq: 1 } }, true, true).text, /та сама панорама/);
 });
 
 test('HUD reads the optional detected direction in any of its likely shapes', () => {
@@ -755,6 +1053,21 @@ test('extension service worker: views and map only, local server only, clue imag
   assert.strictEqual(cards[2].image_url, null);
   assert.ok(!/geoguessr\.com|evil\.example/.test(JSON.stringify(r.payload)));
   assert.ok(bgw.fetched.every(x => /^(http:\/\/localhost:8094\/|chrome-extension:)/.test(x.url)), bgw.fetched.map(x => x.url).join());
+  r = await bgw.send({ type: 'predict', payload: { views: [{ image_b64: img, yaw: 1, pitch: 2, hfov: 100, vfov: 80 }],
+    fusion: { round: 'game:abc123#3', lat: 1 } } });
+  assert.ok(r.ok, r.error);
+  let bodies = bgw.fetched.filter(x => x.url.endsWith('/api/predict')).map(x => JSON.parse(x.init.body));
+  assert.deepStrictEqual(bodies[bodies.length - 1].fusion, { round: 'game:abc123#3' });
+  r = await bgw.send({ type: 'predict', payload: { views: [{ image_b64: img, yaw: 1, pitch: 2, hfov: 100, vfov: 80 }],
+    fusion: { round: '<script>' } } });
+  bodies = bgw.fetched.filter(x => x.url.endsWith('/api/predict')).map(x => JSON.parse(x.init.body));
+  assert.ok(!('fusion' in bodies[bodies.length - 1]));
+  for (const bad of ['challenge:AbC#null', 'game:abc#undefined', 'game:abc#0', 'game:abc#2@X!']) {   // no round number: no fusion
+    r = await bgw.send({ type: 'predict', payload: { views: [{ image_b64: img, yaw: 1, pitch: 2, hfov: 100, vfov: 80 }],
+      fusion: { round: bad } } });
+    bodies = bgw.fetched.filter(x => x.url.endsWith('/api/predict')).map(x => JSON.parse(x.init.body));
+    assert.ok(!('fusion' in bodies[bodies.length - 1]), bad);
+  }
   r = await bgw.send({ type: 'predict', payload: { views: [{ image_b64: 'javascript:alert(1)' }] } });
   assert.ok(!r.ok);
   r = await bgw.send({ type: 'asset', name: 'hud.js' });
