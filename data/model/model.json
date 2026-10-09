@@ -139,7 +139,8 @@
   "texture": 0.02,
   "knn": 0.2,
   "glm": 0.8,
-  "sun": 1.0
+  "sun": 1.0,
+  "cards": 0.05
  },
  "prior_mix": 0.25,
  "knn_k": 40,

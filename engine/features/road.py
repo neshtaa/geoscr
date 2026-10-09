@@ -209,7 +209,7 @@ def estimate_axis(sph):
     px = (((A + 180.0) % 360.0) / 360.0 * s.w).astype(np.int64) % s.w
     py = np.clip(((90.0 - el) / 180.0 * s.h).astype(np.int64), 0, s.h - 1)
     ok = s.mask[py, px]
-    if ok.mean() < 0.4:
+    if ok.sum() < 0.15 * ok.size:   # a single in-game frame (~1/3 of the azimuths) is enough
         return None, 0.0
     lab = _lab_from_linear(_LIN[s.rgb[py, px]])
     vals = [lab[..., 0][ok], 2.0 * lab[..., 2][ok]]

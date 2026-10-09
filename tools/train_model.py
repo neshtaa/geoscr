@@ -5,6 +5,9 @@ Fit, calibrate and evaluate the country/location model.
   python3 tools/train_model.py [--groups solar,road,...] [--save]
   python3 tools/train_model.py --eval-only [--save]         saved model on calib/test, without and with map
   python3 tools/train_model.py --calibrate-maps [--save]    refit only the map-aware prior on calib
+  python3 tools/train_model.py --calibrate-cards [--save]   exponent of the GeoGuessr card detections
+                                                            (tools/build_clue_detectors.py) on calib
+  --no-cards                                                evaluate without the card evidence
 
 Order after new data: train_model.py --save (refit + calibration), tools/build_priors.py when the
 rounds behind the counts change, then train_model.py --calibrate-maps --save.
@@ -26,6 +29,7 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tools"))
+from build_clue_detectors import cached_loglik  # noqa: E402
 from build_priors import fold_of, game_split  # noqa: E402
 from calibrate import FEAT_DIR, load_records, split_of  # noqa: E402
 from engine.geo import geoguessr_points, geoguessr_score, haversine_km, region_index, resolve_map  # noqa: E402
@@ -131,12 +135,13 @@ def evaluate(model, ev, recs, rows, label, use_map=False, use=("map", "ranked"),
     return res
 
 
-def calibrate_maps(model, ev, recs, rows, iters=3):
+def calibrate_maps(model, ev, recs, rows, iters=3, only=None):
     """Map-aware prior on the CALIB rounds: evidence exponents, model-prior mix and the weights of
     the empirical priors by coordinate ascent on the mean log P(true country).  A CALIB round's
     per-map prior is built without its own fold of games (out-of-fold), so the mix is not fitted
     to rounds it has already seen.  'ranked' (World-type maps without their own prior) is fitted
-    as if no round had a per-map prior."""
+    as if no round had a per-map prior.  only: refit just these exponents on top of the saved
+    map parameters."""
     if not model.priors.get("ranked_world"):
         print("no data/model/priors.json - run tools/build_priors.py first; map-aware prior skipped")
         return None
@@ -177,9 +182,13 @@ def calibrate_maps(model, ev, recs, rows, iters=3):
         lp = model.combine(ev, w, prior=prior(pm, mix, all_ranked))
         return float(np.mean(lp[np.arange(len(yi)), yi]))
 
-    keys = model.groups + ["knn"] + [k for k in ("glm", "sun") if k in ev]
+    keys = model.groups + ["knn"] + [k for k in ("glm", "sun", "cards") if k in ev]
     w, pm = dict(model.weights), model.prior_mix
     mix = {"map": 0.5, "map_ranked": 0.0, "ranked": 0.5}
+    if only:
+        p = model.map_params() or {}
+        w, pm, mix = dict(p.get("weights", w)), p.get("prior_mix", pm), dict(p.get("mix", mix))
+        keys = [k for k in keys if k in only]
     best = obj(w, pm, mix)
     start = best
     grid = [0.0, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.65, 0.8, 1.0, 1.3, 1.7]
@@ -190,6 +199,9 @@ def calibrate_maps(model, ev, recs, rows, iters=3):
                 s = obj(dict(w, **{k: v}), pm, mix)
                 if s > best:
                     best, w = s, dict(w, **{k: v})
+        if only:
+            best_r = obj(w, pm, mix, True)
+            break
         for v in [0.0, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0]:
             s = obj(w, v, mix)
             if s > best:
@@ -271,6 +283,47 @@ def map_report(model, ev_ca, ev_te, recs, ca, te, ev_ot=None, ot=()):
     return out
 
 
+def add_cards(model, ev, recs, rows):
+    """ev["cards"]: card-detector log-likelihoods of the rows from the detection cache of
+    tools/build_clue_detectors.py (left out when the bank or the cache is missing or stale)."""
+    ll = cached_loglik([recs[i]["pano_id"] for i in rows], model.classes)
+    if ll is not None:
+        ev["cards"] = ll
+    elif model.weights.get("cards", 0.0) > 0:
+        sys.stderr.write("card evidence (weight %.2f in model.json) left out of this run\n" % model.weights["cards"])
+    return ev
+
+
+def calibrate_cards(model, ev, recs, rows):
+    """Exponent of the GeoGuessr card evidence on the CALIB rounds with the other exponents and the
+    priors fixed: 1-D grid on the mean log P(true country), with the model prior (model weights) and
+    with the map-aware prior (priors.json params)."""
+    if "cards" not in ev:
+        print("no card detections (tools/build_clue_detectors.py) - card exponent not calibrated")
+        return
+    cls = {c: i for i, c in enumerate(model.classes)}
+    yi = np.array([cls.get(recs[i]["label"], -1) for i in rows])
+    ok = yi >= 0
+    sub = {k: (v[ok] if isinstance(v, np.ndarray) else v) for k, v in ev.items()}
+    grid = [0.0, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.65, 0.8, 1.0, 1.3, 1.7]
+    ll = np.array([model.combine(sub, dict(model.weights, cards=v))[np.arange(ok.sum()), yi[ok]] for v in grid])
+    s = ll.mean(1)
+    model.weights["cards"] = grid[int(np.argmax(s))]
+    print("card exponent %.2f: calib loglik %.4f (without cards %.4f)" % (model.weights["cards"], max(s), s[0]))
+    # the in-sample gain above is >= 0 by construction: 2-fold cross-validation over CALIB games
+    fold = np.array([fold_of(recs[i]["game"], 2) for i in np.asarray(rows)[ok]])
+    gain = np.zeros(ok.sum())
+    for f in (0, 1):
+        v = int(np.argmax(ll[:, fold != f].mean(1)))
+        gain[fold == f] = ll[v, fold == f] - ll[0, fold == f]
+        print("  fold %d: exponent %.2f fitted on the other fold" % (f, grid[v]))
+    idx = np.random.RandomState(0).randint(0, len(gain), (4000, len(gain)))
+    print("card evidence, 2-fold cross-validated calib loglik gain %+.4f [%+.4f, %+.4f]" % (
+        gain.mean(), np.percentile(gain[idx].mean(1), 2.5), np.percentile(gain[idx].mean(1), 97.5)))
+    if model.map_params():
+        calibrate_maps(model, ev, recs, rows, only=("cards",))
+
+
 def calibrate_location(model, ev, recs, rows):
     """Grid search of the within-country kernel: location (mean points) and region
     (mean log P(true region)) parameters on the CALIB rounds."""
@@ -304,6 +357,9 @@ def main():
     ap.add_argument("--eval-only", action="store_true", help="evaluate the saved model on calib/test, no fitting")
     ap.add_argument("--calibrate-maps", action="store_true",
                     help="saved model: refit the map-aware prior parameters on calib (data/model/priors.json)")
+    ap.add_argument("--calibrate-cards", action="store_true",
+                    help="saved model: calibrate the exponent of the card detections on calib")
+    ap.add_argument("--no-cards", action="store_true", help="leave the card detections out")
     args = ap.parse_args()
     from engine import features
     groups = args.groups.split(",") if args.groups else [m.NAME for m in features.available()
@@ -319,18 +375,31 @@ def main():
     te = np.flatnonzero((split == "test") & have)
     print(f"groups={groups} train={len(tr)} calib={len(ca)} test={len(te)}")
     ot = np.flatnonzero((split == "other") & have)
-    if args.eval_only or args.calibrate_maps:
+    if args.eval_only or args.calibrate_maps or args.calibrate_cards:
         model = GeoModel.load()
         ev_ca, ev_te = (model.evidence({g: mats[g][rows] for g in model.groups}) for rows in (ca, te))
         ev_ot = model.evidence({g: mats[g][ot] for g in model.groups}) if len(ot) else None
+        if not args.no_cards:
+            add_cards(model, ev_ca, recs, ca)
+            add_cards(model, ev_te, recs, te)
+            if ev_ot is not None:
+                add_cards(model, ev_ot, recs, ot)
         if args.calibrate_maps:
             calibrate_maps(model, ev_ca, recs, ca)
+        if args.calibrate_cards:
+            calibrate_cards(model, ev_ca, recs, ca)
         out = map_report(model, ev_ca, ev_te, recs, ca, te, ev_ot, ot)
         if args.save:
-            if args.calibrate_maps:
+            if args.calibrate_maps or args.calibrate_cards:
                 model.save_priors()
+            if args.calibrate_cards:  # only the exponents change: model.json, not the fitted arrays
+                mj = os.path.join(MODEL_DIR, "model.json")
+                meta = json.load(open(mj))
+                meta["weights"]["cards"] = model.weights.get("cards", 0.0)
+                json.dump(meta, open(mj, "w"), indent=1)
             json.dump(out, open(os.path.join(MODEL_DIR, "eval_maps.json"), "w"), indent=1)
-            print("saved data/model/" + PRIORS_FILE + " params, eval_maps.json")
+            json.dump(out["test_no_map"], open(os.path.join(MODEL_DIR, "eval.json"), "w"), indent=1)
+            print("saved data/model/" + PRIORS_FILE + " params, eval_maps.json, eval.json")
         return
     t0 = time.time()
     model = GeoModel().fit({g: mats[g][tr] for g in groups}, [recs[i]["label"] for i in tr],
@@ -339,7 +408,8 @@ def main():
     print(f"fit {time.time() - t0:.1f}s, classes={len(model.classes)}")
 
     def ev_for(rows):
-        return model.evidence({g: mats[g][rows] for g in groups})
+        ev = model.evidence({g: mats[g][rows] for g in groups})
+        return ev if args.no_cards else add_cards(model, ev, recs, rows)
 
     ev_ca, ev_te, ev_ot = ev_for(ca), ev_for(te), (ev_for(ot) if len(ot) else None)
     cls = {c: i for i, c in enumerate(model.classes)}

@@ -274,8 +274,9 @@ class GeoModel:
             out[i] = np.log(self.lat_hist @ mix + 1e-9)
         return out
 
-    def evidence(self, X_by_group, sun_ll=None):
-        """Per-source (n, C) log-likelihood matrices (before weighting)."""
+    def evidence(self, X_by_group, sun_ll=None, cards_ll=None):
+        """Per-source (n, C) log-likelihood matrices (before weighting); cards_ll: (n, C) GeoGuessr
+        clue-card detections (engine.clue_detect.ClueDetectors.country_loglik), optional."""
         ev = {}
         if sun_ll is None and "solar" in X_by_group and hasattr(self, "lat_hist"):
             sun_ll = self.sun_loglik(X_by_group["solar"])
@@ -288,6 +289,8 @@ class GeoModel:
             ev["glm"] = self.glm.loglik(self._glm_input(X_by_group))
         if sun_ll is not None:
             ev["sun"] = sun_ll
+        if cards_ll is not None:
+            ev["cards"] = cards_ll
         return ev
 
     def _knn_loglr(self, emb, exclude=None):
@@ -328,11 +331,13 @@ class GeoModel:
             lp = lp + w.get("glm", 0.0) * ev["glm"]
         if "sun" in ev and ev["sun"] is not None:
             lp = lp + w.get("sun", 0.0) * np.nan_to_num(ev["sun"])
+        if "cards" in ev and ev["cards"] is not None:
+            lp = lp + w.get("cards", 0.0) * ev["cards"]
         return lp - _logsumexp(lp)[:, None]
 
     def calibrate(self, ev, yi, iters=4):
         """Coordinate ascent on the mean log-likelihood of the true class (calib split)."""
-        keys = self.groups + ["knn"] + [k for k in ("glm", "sun") if k in ev]
+        keys = self.groups + ["knn"] + [k for k in ("glm", "sun", "cards") if k in ev]
         w = dict(self.weights)
         pm = self.prior_mix
 

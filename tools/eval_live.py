@@ -26,6 +26,7 @@ from calibrate import DATASET, load_records, split_of  # noqa: E402
 
 _LOC = None
 STABILITY = False
+WITH_MAP = False
 
 
 def render_views(sph, start_yaw, hfov=112.715, size=(1112, 740)):
@@ -47,17 +48,21 @@ def _work(r):
         _LOC = Locator()
     sph = SphericalImage.from_equirect(os.path.join(DATASET, "panos", r["pano_id"] + ".jpg"), heading=r["heading"])
     rng = random.Random(r["pano_id"])
-    res = _LOC.analyze_views(render_views(sph, rng.uniform(0, 360)))
+    mp = r.get("map") if WITH_MAP else None   # the map name the player sees
+    res = _LOC.analyze_views(render_views(sph, rng.uniform(0, 360)), map_info=mp)
     codes = [c["code"] for c in res["countries"]]
     d = float(haversine_km(r["lat"], r["lng"], res["guess"]["lat"], res["guess"]["lng"]))
     from engine.geo import region_at
     reg = region_at(r["lat"], r["lng"])
     top_regions = [x["code"] for x in res["hints"][0]["regions"]] if res["hints"] else []
-    out = {"label": r["label"], "codes": codes, "km": d, "points": float(geoguessr_score(d)),
+    from engine.geo import geoguessr_points, resolve_map
+    rm = resolve_map(r.get("map")) or {}
+    pts_map = geoguessr_points(d, rm["maxErrorDistance"]) if rm.get("maxErrorDistance") else float(geoguessr_score(d))
+    out = {"label": r["label"], "codes": codes, "km": d, "points": float(geoguessr_score(d)), "points_map": float(pts_map),
            "ms": res["timing_ms"]["total"],
            "region_rank": top_regions.index(reg[0]) if reg and reg[0] in top_regions else 99}
     if STABILITY:  # a second capture of the same place from another start direction
-        res2 = _LOC.analyze_views(render_views(sph, rng.uniform(0, 360)))
+        res2 = _LOC.analyze_views(render_views(sph, rng.uniform(0, 360)), map_info=mp)
         out["same_top"] = res2["countries"][0]["code"] == codes[0]
     return out
 
@@ -68,9 +73,10 @@ def main():
     ap.add_argument("--n", type=int, default=0)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--stability", action="store_true", help="also capture each place twice")
+    ap.add_argument("--map", action="store_true", help="pass each round's map (as in the game) to the locator")
     args = ap.parse_args()
-    global STABILITY
-    STABILITY = args.stability
+    global STABILITY, WITH_MAP
+    STABILITY, WITH_MAP = args.stability, args.map
     recs = [r for r in load_records() if split_of(r) == args.split and r.get("heading") is not None]
     if args.n:
         recs = recs[: args.n]
@@ -80,6 +86,7 @@ def main():
     res = {"split": args.split, "mode": "10 rendered views (live grid 2x5, 112.7x90 deg), car axis unknown", "n": len(out),
            "top1": float(np.mean([k == 0 for k in rank])), "top3": float(np.mean([k < 3 for k in rank])),
            "top5": float(np.mean([k < 5 for k in rank])), "mean_score": float(np.mean([o["points"] for o in out])),
+           "mean_points_map_formula": float(np.mean([o["points_map"] for o in out])), "with_map": WITH_MAP,
            "median_km": float(np.median([o["km"] for o in out])),
            "region_top1_if_country_right": float(np.mean([o["region_rank"] == 0 for o, k in zip(out, rank) if k == 0] or [0])),
            "region_top3_if_country_right": float(np.mean([o["region_rank"] < 3 for o, k in zip(out, rank) if k == 0] or [0])),

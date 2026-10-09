@@ -11,17 +11,25 @@ Pipeline (no neural networks, no language models):
      GeoGuessr score; with a map (id / slug / name, bounds, maxErrorDistance; missing fields
      from data/maps.json) the prior, the score scale and the bounds are the map's;
   4. engine/hints.py turns the measurements into observations and picks the matching
-     clue cards from the GeoGuessr and Plonk It knowledge bases.
+     clue cards from the GeoGuessr and Plonk It knowledge bases;
+  5. engine/clue_detect.py slides classical detectors of GeoGuessr's clue cards over the sphere:
+     a calibrated country evidence source ("cards", only when >= 90% of the searched windows are
+     visible), a soft update of the regions of the top countries (off while its calibrated
+     exponent is 0) and, in the hints, the cards that lead / the directions worth pointing at
+     (each off unless it beat the plain ranking on CALIB).
 """
 
 import os
+import sys
 import time
 
 import numpy as np
 from PIL import Image
 
 from . import features
+from .clue_detect import clue_detectors
 from .geo import bounds_dict, region_info, resolve_map
+from .regions import load_region_model, location_weights, region_list, region_posterior
 from .hints import build_hints, clue_base
 from .model import MODEL_DIR, GeoModel
 from .panorama import SphericalImage
@@ -43,6 +51,10 @@ class Locator:
             raise FileNotFoundError("trained model not found in %s - run tools/train_model.py --save" % model_dir)
         self.model = GeoModel.load(model_dir)
         self.modules = {m: features.load(m) for m in self.model.groups}
+        self.cards = clue_detectors()
+        if self.cards is None and self.model.weights.get("cards", 0.0) > 0:
+            sys.stderr.write("model.json weights the card evidence but data/model/clue_detectors.npz is missing "
+                             "- run tools/build_clue_detectors.py all; card evidence left out\n")
 
     # ------------------------------------------------------------------ core
     def analyze(self, sph, top_k=5, n_hint_countries=3, map_info=None, debug_dir=None):
@@ -68,37 +80,64 @@ class Locator:
         m = self.model
         setup = m.map_setup(mp)
         where = {"score_scale_km": setup["scale_km"], "bounds": setup["bounds"]}
-        ev = m.evidence(X)
+        t1 = time.time()
+        det = cards_ll = None
+        if self.cards is not None:
+            try:
+                det = self.cards.detect(sph)
+                det["zt"] = self.cards.zt(det["z"])
+                cards_ll = self.cards.country_evidence(det, m.classes)
+                evidence["cards"] = {"coverage": round(det["coverage"], 3), "used": cards_ll is not None}
+            except Exception as e:  # a failing detector bank only removes its evidence
+                det, evidence["cards"] = None, {"error": repr(e)}
+        t_cards = time.time() - t1
+        ev = m.evidence(X, cards_ll=cards_ll)
         lp = m.combine(ev, setup["weights"], prior=setup["prior"])[0]
         post = np.exp(lp)
         order = np.argsort(-post)
         kb = clue_base()
         countries = [{"code": m.classes[i], "name": kb.country_name(m.classes[i]),
                       "probability": round(float(post[i]), 4)} for i in order[:top_k]]
-        guess = m.locate(lp, ev["_d2"][0], **where)
-        pr = m.region_posterior(lp, ev["_d2"][0], bounds=setup["bounds"])
-        regions = []
-        for i in np.argsort(-pr)[:400]:
-            if pr[i] <= 0:
-                break
-            code, name, cc = region_info(int(i))
-            regions.append({"code": code, "name": name, "country": cc, "probability": round(float(pr[i]), 5)})
-        # best point inside the most probable country (the global guess may hedge between countries)
+        d2 = ev["_d2"][0]
         top = order[0]
         lp_top = np.full_like(lp, -1e9)
         lp_top[top] = 0.0
-        g_top = m.locate(lp_top, ev["_d2"][0], **where)
+        rmodel = load_region_model()
+        if rmodel is not None:
+            # within-country region model (engine/regions.py): regions, and the guess placed on the
+            # reference mass of the likely regions
+            mix, per = region_posterior(X, post, classes=m.classes, by_country="both", bounds=setup["bounds"])
+            regions = region_list(mix)
+            guess = m.locate(lp, d2, w=location_weights(m, lp, d2, per, bounds=setup["bounds"]), **where)
+            g_top = m.locate(lp_top, d2, w=location_weights(m, lp_top, d2, per, bounds=setup["bounds"]), **where)
+        else:
+            guess = m.locate(lp, d2, **where)
+            # best point inside the most probable country (the global guess may hedge between countries)
+            g_top = m.locate(lp_top, d2, **where)
+            pr = m.region_posterior(lp, d2, bounds=setup["bounds"])
+            if det is not None:  # regional cards found on the panorama sharpen the regions of the top countries
+                pr = self._card_regions(pr, [m.classes[i] for i in order[:n_hint_countries]], det["zt"])
+            regions = []
+            for i in np.argsort(-pr)[:400]:
+                if pr[i] <= 0:
+                    break
+                code, name, cc = region_info(int(i))
+                regions.append({"code": code, "name": name, "country": cc, "probability": round(float(pr[i]), 5)})
         # how much each evidence source moved the top country against the prior
         prior = setup["prior"]
         contrib = {}
         for c in order[:n_hint_countries]:
             row = {}
-            for g in m.groups + ["knn"] + [k for k in ("glm", "sun") if k in ev]:
+            for g in m.groups + ["knn"] + [k for k in ("glm", "sun", "cards") if k in ev]:
                 w = setup["weights"].get(g, 0.0)
                 e = ev[g][0]
                 row[g] = round(float(w * (e[c] - np.dot(prior, e))), 2)
             contrib[m.classes[c]] = row
-        hints = build_hints(flat, [(m.classes[i], post[i]) for i in order], n_hint_countries, regions)
+        detected = None
+        if det is not None:
+            detected = {m.classes[i]: self.cards.detected_cards(m.classes[i], det) for i in order[:n_hint_countries]}
+        hints = build_hints(flat, [(m.classes[i], post[i]) for i in order], n_hint_countries, regions,
+                            detected=detected)
         return {
             "countries": countries,
             "regions": regions[:5],
@@ -117,8 +156,28 @@ class Locator:
             "input": {"source": sph.source, "coverage": round(sph.coverage(), 3),
                       "true_heading_known": sph.heading is not None,
                       "car_axis_known": sph.car_heading is not None},
-            "timing_ms": {"features": int(t_feat * 1000), "total": int((time.time() - t0) * 1000)},
+            "timing_ms": {"features": int(t_feat * 1000), "cards": int(t_cards * 1000),
+                          "total": int((time.time() - t0) * 1000)},
         }
+
+    def _card_regions(self, pr, countries, zt):
+        """Region posterior (all countries) with the card update of engine.clue_detect applied inside
+        each of the given countries (their total mass unchanged)."""
+        nz = np.flatnonzero(pr > 0)
+        by_cc = {}
+        for i in nz:
+            code, _, cc = region_info(int(i))
+            by_cc.setdefault(cc, []).append((code, int(i)))
+        pr = pr.copy()
+        for cc in countries:
+            items = by_cc.get(cc)
+            if not items:
+                continue
+            tot = float(sum(pr[i] for _, i in items))
+            up = self.cards.update_regions(cc, zt, {code: pr[i] / tot for code, i in items})
+            for code, i in items:
+                pr[i] = tot * up[code]
+        return pr
 
     # ------------------------------------------------------------ front-ends
     def analyze_image(self, image, heading=None, hfov=None, pitch=0.0, map_info=None, debug_dir=None):

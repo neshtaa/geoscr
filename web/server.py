@@ -16,15 +16,22 @@ POST /api/predict  JSON, one of:
 POST /api/evaluate_round  {"lat", "lng", "guess_lat", "guess_lng", "pred_code", "map"?}
 GET  /api/maps     known maps (data/maps.json)
 GET  /api/health
+GET  /hud/<file>   the live HUD files (web/hud/: hud.js, hud.css)
+GET  /hud/img?u=<image_url>   a clue-card image from the offline cache scratch/hud_img/
+      (tools/fetch_hud_images.py); never fetched from the network here
+CORS: only the Chrome extension (chrome-extension://...) and local pages (http://localhost:*,
+http://127.0.0.1:*); other web origins, www.geoguessr.com included, get no CORS headers.
 """
 import argparse
 import base64
+import hashlib
 import io
 import json
 import os
 import sys
 import tempfile
 import traceback
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 import threading
@@ -40,6 +47,10 @@ from engine.locator import distance_report, get_locator  # noqa: E402
 
 LOCK = threading.Lock()
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+HUD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hud")
+HUD_TYPES = {".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".svg": "image/svg+xml"}
+HUD_IMG_DIR = os.path.join(ROOT, "scratch", "hud_img")
+HUD_IMG_TYPES = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 
 
 def _img(b64):
@@ -121,31 +132,83 @@ def evaluate_round(req):
     return out
 
 
+def hud_file(path):
+    """/hud/<name> -> (bytes, content type) of a file directly in web/hud/, else None."""
+    name = path.split("?", 1)[0][len("/hud/"):]
+    ext = os.path.splitext(name)[1]
+    if not name or "/" in name or "\\" in name or name.startswith(".") or ext not in HUD_TYPES:
+        return None
+    full = os.path.join(HUD_DIR, name)
+    if not os.path.isfile(full):
+        return None
+    with open(full, "rb") as f:
+        return f.read(), HUD_TYPES[ext]
+
+
+def hud_image(path):
+    """/hud/img?u=<url> -> (bytes, content type) of the cached image (tools/fetch_hud_images.py), else None."""
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(path).query)
+    url = (q.get("u") or [""])[0]
+    if not url.startswith("https://"):
+        return None
+    key = hashlib.sha1(url.encode("utf-8")).hexdigest()[:24]
+    for ext, ctype in HUD_IMG_TYPES.items():
+        full = os.path.join(HUD_IMG_DIR, key + ext)
+        if os.path.isfile(full):
+            with open(full, "rb") as f:
+                return f.read(), ctype
+    return None
+
+
+def cors_origin(origin):
+    """The origin to allow (the extension's service worker, pages on this machine) or None."""
+    if origin.startswith("chrome-extension://"):
+        return origin
+    u = urllib.parse.urlsplit(origin)
+    return origin if u.scheme == "http" and u.hostname in ("localhost", "127.0.0.1") else None
+
+
 def list_maps():
     return {"maps": [{k: m.get(k) for k in ("id", "slug", "name", "world", "maxErrorDistance", "bounds")}
                      for m in load_maps()]}
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, code, body, ctype="application/json"):
+    def _cors(self):
+        allow = cors_origin(self.headers.get("Origin") or "")
+        if allow:
+            self.send_header("Access-Control-Allow-Origin", allow)
+        self.send_header("Vary", "Origin")
+
+    def _send(self, code, body, ctype="application/json", cache=None):
         data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False, default=str).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype + ("; charset=utf-8" if ctype.startswith(("text", "application/json")) else ""))
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        if cache:
+            self.send_header("Cache-Control", cache)
+        self._cors()
         self.end_headers()
         self.wfile.write(data)
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self._cors()
+        if cors_origin(self.headers.get("Origin") or ""):
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             return self._send(200, open(PAGE, "rb").read(), "text/html")
+        if self.path.startswith("/hud/img?"):
+            f = hud_image(self.path)
+            return self._send(200, f[0], f[1], cache="max-age=86400") if f else self._send(404, {"error": "not cached"})
+        if self.path.startswith("/hud/"):
+            f = hud_file(self.path)
+            return self._send(200, f[0], f[1], cache="no-cache") if f else self._send(404, {"error": "not found"})
         if self.path == "/api/maps":
             return self._send(200, list_maps())
         if self.path == "/api/health":

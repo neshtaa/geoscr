@@ -740,7 +740,8 @@
    "texture": 0.0,
    "knn": 0.2,
    "glm": 0.8,
-   "sun": 1.0
+   "sun": 1.0,
+   "cards": 0.05
   },
   "prior_mix": 0.0,
   "mix": {
@@ -751,8 +752,8 @@
   "alpha": 0.25,
   "model": "8a71f73f583a",
   "calib_rounds": 516,
-  "calib_loglik": -2.3894,
-  "calib_loglik_ranked_only": -2.4251,
-  "calib_loglik_model_prior_bounds": -2.4606
+  "calib_loglik": -2.3649,
+  "calib_loglik_ranked_only": -2.3992,
+  "calib_loglik_model_prior_bounds": -2.4244
  }
 }

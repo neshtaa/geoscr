@@ -7,26 +7,29 @@ libraries), using the two scraped knowledge bases (GeoGuessr clue catalogue, Plo
 hints right away. Runtime: numpy + Pillow only, Python 3.8 compatible.
 
 ## State (branch `claude/sharp-keller-ztbilq`)
-Working end to end. TEST = 530 of the user's real World-map rounds (half of the games, never used
-for fitting or calibration):
+TEST = 386 of the user's real World-map rounds (half of the games by hash; never used for fitting or
+calibration). Live mode = `tools/eval_live.py` (panorama rendered into the live grid of 10 views,
+car axis unknown, full locator incl. cards + region model):
 
-| | top1 | top3 | top5 | pts/round |
+| | top1 | top3 | top5 | pts/round (World formula) |
 |---|---|---|---|---|
 | prior only | 4.3% | 10% | 16% | 209 |
-| old `deterministic_locator` (removed) | 3.4% | 6.6% | - | 450 |
-| new, full panorama | 18.9% | 35.3% | 44.7% | 1653 |
-| new, 12 rendered views, car axis unknown (`tools/eval_live.py`) | 17.9% | 34.0% | 46.0% | 1617 |
+| first working version (random Street View training data) | 17.9% | 34.0% | 46.0% | 1617 |
+| live mode, no map | 33.4% | 52.3% | 61.7% | 2195 |
+| live mode, map info | 30.6% | 53.6% | 61.9% | 2155 |
+| full panorama + map, country only (`train_model.py --eval-only`) | 30.1% | 55.4% | 64.5% | - |
 
-Model trained on 17.1k panoramas (world 2.3k, balanced quota 150 per country, 118 classes).
-The first version on 10k panoramas gave 1515 pts/round; more data is still the clearest lever.
+Region given the right country (live): top1 24-25%, top3 43-47%. Real games played by the script
+(`--submit`, headless): daily 2026-10-07 13,013; daily 2026-10-06 6,435; Souvlaki World NMPZ 4,279.
 
-Pipeline: `engine/locator.py` (SphericalImage -> 6 feature modules -> `engine/model.py` ->
-score-optimal guess -> `engine/hints.py`). Entry points: `geoguessr_locator.py` (CLI),
-`web/server.py` (+ `web/index.html`), `play_live_visual.js` (live HUD, `setPov` only).
-Gemini (`vlm_engine`) and all old heuristic engines are deleted.
+Data: 26.7k training panoramas = 7k random Street View (world/balanced) + 19.7k panoramas of public
+ranked duels of other players (`tools/crawl_duels.py` GET /api/v4/game-history/{userId}; locations
+within 1 km of the user's rounds removed). The duel pools were the biggest lever (+425 pts).
+GeoGuessr clue placements: 33k placements on 8.9k panoramas (`data/calibration/pano_clues.json`).
 
-Regions (admin-1) when the country is right: top1 14.7%, top3 31.6% (live mode); the same top
-country from two captures with different start yaw: 94.2%.
+Open lever: map info helps on full panoramas (2078 -> 2216 with the region model) but not in live
+mode (2195 -> 2155): the evidence weights / prior mix / map-prior mix are calibrated on CALIB
+full-panorama features. Calibrate them on CALIB features computed from the live grid instead.
 
 ## GeoGuessr's own analysis
 Not image recognition: the client calls `GET /api/v4/clues/{panoId}` and the server returns
@@ -67,14 +70,55 @@ card frequency, the kNN / region parts are within noise of it (frequency only 0.
 - Street View download: `_parse_pano` now returns None for removed panoramas so history rounds
   fall back to a 100 m search.
 
+## Clue-card detectors (`engine/clue_detect.py`, `tools/build_clue_detectors.py`)
+Classical sliding-window detectors trained on GeoGuessr's own placements (card X visible in
+panorama P at heading/pitch/zoom): per zoom channel (1.5 / 2 / 3.5) HOG-style cells (9 orientations,
+gradient energy, mean Lab), 6x6-cell windows = one placement view; one whitened-LDA template per
+card with >= 3 duel-round placements and >= 1 in each cross-fitting fold, rarer cards share a
+(country, type) template; 2024 detectors, 4.7 MB, ~0.2 s per sphere. Only public duel rounds train
+detectors, presence / direction / country models (out-of-fold scores); CALIB sets the thresholds and
+the weight; TEST is only scored.
+- Detectors are weak: present-vs-absent AUC 0.64 (train OOF) / 0.63 (TEST); the best window lies
+  within half a window of a placement for 15% (train) / 21% (TEST) of present cards.
+- Country evidence "cards" (weight 0.05 on CALIB, 2-fold CV loglik gain on CALIB +0.037
+  [+0.019, +0.054]). TEST, with - without cards (paired bootstrap): map info loglik +0.008
+  [-0.014, +0.030], top1 30.1 vs 29.5%, top3 55.4 vs 54.1%, points -9 [-89, +72]; no map loglik
+  +0.019 [-0.003, +0.042], top1 29.5 vs 27.7%, top3 54.1 vs 52.1% (+2.1 [+0.5, +3.9]), points +92
+  [+11, +176] (not seen on CALIB: -8 [-67, +51], nor with map info). Live grid (eval_live
+  rendering, no map, paired): CALIB top3 +2.7 [+1.0, +4.6], top5 +2.9 [+1.0, +5.0], points +13
+  [-31, +62]; TEST top1 33.4 vs 31.1% (+2.3 [+0.5, +4.2]), top3 +0.8 [-1.6, +3.1], points +0
+  [-84, +83]; +0.17 s per round. In short: a small log-likelihood gain, country accuracy +1-3
+  points in some conditions, points within noise.
+  Skipped when < 90% of the searched windows are visible (one frame: maxima drop and would read
+  as "no cards").
+- Hints: "detected cards first" and the detector's direction are both off (thresholds 1.01): the
+  order did not beat the clue-index ranking on CALIB (bootstrap lower bound <= 0) and no threshold on
+  P(direction right) gave >= 50% correct directions (best 14-17% on CALIB). The code paths stay
+  (`hints[i].geoguessr[j].detected` = {heading, pitch, score, probability = P(direction right |
+  country), true_north}) and switch on by themselves if a better bank passes the CALIB bars.
+- Region update by regional cards: any positive exponent lowered CALIB log P(true region) -> 0.
+- Rebuild order (after `train_model.py --save` / `build_clue_index.py`): `build_clue_detectors.py
+  cells` (freezes the labels in scratch/cards/clues_used.json), `fit`, `score`, `calibrate`, then
+  `train_model.py --calibrate-cards --save`; rerun the last one after every `train_model.py --save`
+  (it needs scratch/cards/scores.npz; without it the card evidence is left out with a warning).
+  Cache scratch/cards/ ~1.4 GB, of which cells/ (1.2 GB) is only needed for fit / score.
+
 ## Rebuild
 See README "Навчання й калібрування". Dataset in `scratch/` (git-ignored), ~17k panoramas (~7 GB).
 Feature extraction ~9 pano/s on 4 cores; `train_model.py` ~2 min.
 
 ## Ideas not done
-- Text/sign/plate recognition is out of scope for closed-form maths; bollards and pole types
-  would need dedicated detectors.
-- Live script: capture checked on the real site only through `--replay` of a finished game
+- Script recognition spike (`engine/script_detect.py`, `tools/script_spike.py`): classical text
+  detection + glyph statistics on GeoGuessr language / sign placements at 0.03 deg/px; non-Latin
+  recall 130/631, CALIB gain indistinguishable from 0 -> dropped (not integrated).
+- Text/sign/plate recognition is out of scope for closed-form maths. Bollards, poles etc. have
+  classical template detectors now (above), but they localise the card only ~1 time in 5; the
+  limit looks like 2048-px panoramas + one template per card (multi-component / part models and
+  higher-resolution tiles around candidate windows are the untried next steps).
+- Live script: tested on real single-player challenges (`--challenge <t> --submit`; see State).
+  Fixed on the real site: single in-game frame (NMPZ) -> road axis estimator gave up below 40%
+  azimuth coverage (now 15%); Street View navigation arrows were drawn on the road in the captures
+  (now `linksControl` off during capture, restored after). Earlier capture checks: `--replay`
   (`tools/rebuild_views.py` registration: measured FOV exact, s = 1.000). The FOV comes from
   Google's projection matrix or a two-frame registration (tan(hfov/2) = 2^(1-zoom), vertical FOV
   capped at 90; the old `180 / 2^zoom` was right only at zoom 1). Not yet exercised on a live

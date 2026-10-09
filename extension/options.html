@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoScr: налаштування</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 32px 16px; background: #10101c; color: #fff; font: 15px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-style: italic; text-transform: uppercase; font-size: 22px; margin: 0 0 4px; }
+  .sub { color: rgba(255,255,255,.62); margin: 0 0 24px; }
+  .card { background: #171235; border: 1px solid rgba(143,134,230,.3); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  input[type=url] { width: 100%; box-sizing: border-box; padding: 9px 11px; border-radius: 8px; border: 1px solid rgba(255,255,255,.2);
+    background: #211a4c; color: #fff; font: inherit; }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  button { font: inherit; font-weight: 700; color: #fff; background: #7950e5; border: 0; border-radius: 999px; padding: 7px 16px; cursor: pointer; }
+  button.ghost { background: rgba(255,255,255,.1); }
+  .check { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; font-weight: 400; }
+  .check input { margin-top: 4px; }
+  .muted { color: rgba(255,255,255,.62); font-size: 13px; }
+  #health { font-weight: 600; }
+  .ok { color: #97e851; } .bad { color: #f75c5f; }
+  kbd { background: #211a4c; border: 1px solid rgba(255,255,255,.2); border-radius: 4px; padding: 0 5px; font-size: 13px; }
+  ul { margin: 6px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>GeoScr локатор</h1>
+  <p class="sub">Математичний локатор без ШІ для одиночних ігор GeoGuessr. Аналіз робить локальний сервер.</p>
+
+  <section class="card">
+    <label for="server">Адреса сервера локатора</label>
+    <input id="server" type="url" placeholder="http://localhost:8080" spellcheck="false">
+    <div class="row">
+      <button id="save">Зберегти</button>
+      <button id="test" class="ghost">Перевірити з’єднання</button>
+      <span id="health" class="muted"></span>
+    </div>
+    <p class="muted">Сервер запускається у WSL: <code>python3 web/server.py</code> (порт 8080). WSL2 сам пересилає localhost у Windows. Дозволено лише цей комп’ютер або локальну мережу.</p>
+  </section>
+
+  <section class="card">
+    <label class="check"><input id="auto" type="checkbox"> <span>Автоаналіз на початку кожного раунду<br>
+      <span class="muted">Інакше — лише вручну: <kbd>Alt</kbd>+<kbd>G</kbd> або кнопка «Аналіз» у HUD. Під час знімання камера кілька секунд оглядає панораму швидше, ніж людина. GeoGuessr записує рухи камери в повтор і звичайних ігор, і челенджів, тож цей огляд видно в повторі будь-якої гри.</span></span></label>
+    <label class="check"><input id="replay" type="checkbox"> <span>Режим перевірки на повторах завершених ігор<br>
+      <span class="muted">Дозволяє аналіз на сторінках <code>/game/&lt;токен&gt;/replay</code> (лише завершені ігри). Після зміни перезавантажте сторінку.</span></span></label>
+  </section>
+
+  <section class="card">
+    <label>Клавіші на сторінці гри</label>
+    <ul class="muted">
+      <li><kbd>Alt</kbd>+<kbd>G</kbd> — аналізувати панораму зараз</li>
+      <li><kbd>Alt</kbd>+<kbd>H</kbd> — сховати / показати HUD</li>
+      <li><kbd>Alt</kbd>+<kbd>1</kbd>..<kbd>3</kbd> — розгорнути країну 1–3</li>
+      <li><kbd>Alt</kbd>+<kbd>A</kbd> — автоаналіз, <kbd>Alt</kbd>+<kbd>C</kbd> — згорнути</li>
+      <li>HUD можна перетягнути за заголовок; подвійний клік по заголовку повертає автоматичне місце.</li>
+    </ul>
+  </section>
+</main>
+<script src="options.js"></script>
+</body>
+</html>

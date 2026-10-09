@@ -1,18 +1,26 @@
 /*
  * Live GeoGuessr helper: points the round's own Street View camera, captures what a player can
  * see, asks the local pure-math locator (python3 web/server.py) and shows countries, regions,
- * observations and GeoGuessr / Plonk It hints in an on-screen HUD.
+ * observations and GeoGuessr / Plonk It hints in the shared HUD (web/hud/hud.js). The page-world
+ * part (hooks, capture, round controller) is extension/page.js, the same file the Chrome extension
+ * injects, so watch mode behaves like the extension: Alt+G / the HUD button analyse the current
+ * panorama, optional auto-analyse at the start of each round (off by default, as in the extension).
  *
  *   node play_live_visual.js                       watch: play yourself, hints on /challenge/<t> and /game/<t>
+ *     ... --auto                                   also analyse at the start of each round (Alt+A toggles it)
  *   node play_live_visual.js --challenge <token>   open /challenge/<token> (you press Play; the page joins)
  *   node play_live_visual.js --game <token>        open /game/<token>
- *     ... --submit                                 also submit the locator's guess (single-player pages only)
+ *     ... --submit                                 also submit the locator's guess (single-player pages only; implies --auto)
  *   node play_live_visual.js --replay <finishedGameToken> --round N    safe test on a finished game
+ *     ... --extension                              run the capture through the unpacked extension (extension/)
  *
- * Options: --hfov <deg> widest horizontal FOV wanted (default 125; Google caps the vertical FOV at 90;
- *          only used when the game allows zooming), --webgl (software WebGL, so the FOV is read from
- *          Google's projection matrix), --headless, --keep-open; replay only: --fov-table (FOV for a
- *          range of zooms), --player-zoom <z> (start at zoom z and keep it, as in a no-zoom game).
+ * Options: --capture page|screenshot  page (default): the canvas is read in the page, as in the
+ *          extension; screenshot: puppeteer screenshots of the isolated canvas (FOV registration probe
+ *          for the 2D renderer), --hfov <deg> widest horizontal FOV wanted (default 125; Google caps the
+ *          vertical FOV at 90; only used when the game allows zooming), --webgl (software WebGL, so
+ *          the FOV is read from Google's projection matrix), --headless, --keep-open; replay only:
+ *          --fov-table (FOV for a range of zooms, screenshot capture), --player-zoom <z> (start at
+ *          zoom z and keep it, as in a no-zoom game).
  *
  * Fair play: the round's location is never read. The script never requests the game, clue or
  * location endpoints and never queries the panorama id or position. Map, time limit, round number,
@@ -21,7 +29,8 @@
  * from the DOM. Only single-player /challenge/<t> and /game/<t> pages (game type standard or
  * challenge) are captured. The pass-through hooks that must exist before the game builds its
  * panorama are injected into every page, but do nothing outside those pages; multiplayer pages are
- * never captured or automated and only get a "not supported" notice.
+ * never captured or automated and show nothing. The HUD gets card images only as data: URLs from
+ * the local server's cache (GET /hud/img), never from www.geoguessr.com.
  * --replay takes the finished round from data/calibration/history_rounds.json and makes no API call.
  * Every capture is saved to scratch/live/<game>_r<round>/ (views, views.json, meta, response).
  * Cookie: data/session_cookie.txt (_ncfa value) or env GEOGUESSR_COOKIE.
@@ -31,6 +40,7 @@ require('dns').setDefaultResultOrder('ipv4first');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const P = require('./extension/page.js');
 
 const ROOT = __dirname;
 const SITE = 'https://www.geoguessr.com';
@@ -38,181 +48,34 @@ const SERVER = process.env.LOCATOR_URL || 'http://localhost:8080';
 const OUT_ROOT = path.join(ROOT, 'scratch', 'live');
 const FOV_CACHE = path.join(OUT_ROOT, 'fov_cache.json');
 const HISTORY = path.join(ROOT, 'data', 'calibration', 'history_rounds.json');
+const EXTENSION_DIR = path.join(ROOT, 'extension');
+const PAGE_SRC = fs.readFileSync(path.join(EXTENSION_DIR, 'page.js'), 'utf8');
+const HUD_JS = path.join(ROOT, 'web', 'hud', 'hud.js');
+const HUD_CSS = path.join(ROOT, 'web', 'hud', 'hud.css');
+const GG_IMAGE = /^https:\/\/www\.geoguessr\.com\//;
 const RAD = Math.PI / 180;
-const OVERLAP = 0.10;          // minimum overlap of neighbouring views
-const PITCH_LIMIT = 85;        // the sweep covers -85..+85 deg
 const PROBE_YAW = 20;          // largest yaw step between the two frames of the photometric FOV probe
 const PROBE_OK = 0.3;          // probe accepted when its best MAD is below 0.3 x the median MAD
-const MAX_VFOV = 90;           // Google clamps the vertical FOV (measured in both renderers)
 const SETTLE_MS = 1000;        // a new panorama is captured no earlier than this after its pano change
-const ALLOWED_PATHS = [/^\/challenge\/[A-Za-z0-9]+$/, /^\/game\/[A-Za-z0-9]+$/];
-const REPLAY_PATH = /^\/game\/[A-Za-z0-9]+\/replay$/;
-const SINGLE_PLAYER_TYPES = ['standard', 'challenge'];
 const TILE_RE = /streetviewpixels|\/cbk\?|GeoPhotoService|photometa|ggpht\.com|googleusercontent\.com/;
-const NOT_SUPPORTED = 'Тут не підтримується (мультиплеєр або інша сторінка). Підказки працюють лише в одиночних /challenge/… та /game/….';
+const { ALLOWED_PATHS, REPLAY_PATH, isAllowedPath, mergeMeta, serverMap, captureVerdict, gameFlags, challengeMeta,
+  hfovFromVfov, vfovFromHfov, hfovForZoom, zoomForHfov, formulaFov, planGrid, predictBody } = P;
+const MAX_VFOV = P.MAX_VFOV;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ------------------------------------------------------------------ fair-play metadata whitelist
-// These functions are also injected into the page (keep them self-contained). They read only the
-// whitelisted keys; nothing below touches rounds, coordinates, pano ids or streak codes.
-
-function isAllowedPath(pathname) {
-  return ALLOWED_PATHS.some(re => re.test(pathname));
-}
-
-function safeBounds(b) {
-  if (!b || !b.min || !b.max) return null;
-  const n = x => (typeof x === 'number' && isFinite(x) ? x : null);
-  const out = { min: { lat: n(b.min.lat), lng: n(b.min.lng) }, max: { lat: n(b.max.lat), lng: n(b.max.lng) } };
-  return [out.min.lat, out.min.lng, out.max.lat, out.max.lng].every(v => v !== null) ? out : null;
-}
-
-function safeMapMeta(m) {
-  if (!m || typeof m !== 'object') return null;
-  const s = x => (typeof x === 'string' ? x : null);
-  return { id: s(m.id), slug: s(m.slug), name: s(m.name), bounds: safeBounds(m.bounds),
-    maxErrorDistance: typeof m.maxErrorDistance === 'number' ? m.maxErrorDistance : null };
-}
-
-// Copies only game settings and progress.
-function safeGameMeta(g) {
-  if (!g || typeof g !== 'object' || typeof g.token !== 'string') return null;
-  const out = {};
-  for (const k of ['token', 'type', 'mode', 'state', 'round', 'roundCount', 'timeLimit',
-    'forbidMoving', 'forbidZooming', 'forbidRotating', 'mapName', 'guessMapType']) {
-    const v = g[k];
-    if (v !== undefined && (v === null || typeof v !== 'object')) out[k] = v;
-  }
-  if (typeof g.map === 'string') out.mapId = g.map;
-  else if (g.map && typeof g.map === 'object') out.map = safeMapMeta(g.map);
-  const b = safeBounds(g.bounds);
-  if (b) out.bounds = b;
-  const guesses = g.player && Array.isArray(g.player.guesses) ? g.player.guesses : null;
-  if (guesses) {
-    out.guessCount = guesses.length;
-    const last = guesses[guesses.length - 1];
-    if (last) out.lastGuess = { points: Number(last.roundScoreInPoints), distanceMeters: Number(last.distanceInMeters),
-      timedOut: !!last.timedOut };
-  }
-  return out;
-}
-
-// GET /api/v3/challenges/<token>: challenge settings and the map.
-function challengeMeta(json) {
-  if (!json || typeof json !== 'object') return null;
-  const c = json.challenge && typeof json.challenge === 'object' ? json.challenge : {};
-  const challenge = {};
-  for (const k of ['token', 'mapSlug', 'roundCount', 'timeLimit', 'forbidMoving', 'forbidZooming',
-    'forbidRotating', 'gameMode']) {
-    if (c[k] !== undefined && (c[k] === null || typeof c[k] !== 'object')) challenge[k] = c[k];
-  }
-  return { challenge, map: safeMapMeta(json.map) };
-}
-
-// Any JSON the page receives (game object, challenge, Next.js page data) -> whitelisted metadata.
-function extractMeta(json) {
-  if (!json || typeof json !== 'object') return null;
-  const pp = (json.props && json.props.pageProps) || json.pageProps || null;
-  const candidates = [json, json.game, pp && pp.initialGame, pp && pp.gameSnapshot, pp && pp.game];
-  const dq = pp && pp.dehydratedState && Array.isArray(pp.dehydratedState.queries) ? pp.dehydratedState.queries : [];
-  for (const q of dq) {
-    if (q && Array.isArray(q.queryKey) && q.queryKey[0] === 'classic-game' && q.state) candidates.push(q.state.data);
-  }
-  let game = null;
-  for (const g of candidates) {
-    if (g && typeof g === 'object' && typeof g.token === 'string' && 'roundCount' in g) {
-      game = safeGameMeta(g);
-      break;
-    }
-  }
-  const mapObj = (pp && pp.map && typeof pp.map === 'object' && pp.map) ||
-    (json.map && typeof json.map === 'object' && json.map) || null;
-  const ch = (pp && pp.challenge) || json.challenge;
-  const challenge = ch && typeof ch === 'object' && 'roundCount' in ch ? challengeMeta({ challenge: ch }).challenge : null;
-  const map = safeMapMeta(mapObj);
-  if (!game && !map && !challenge) return null;
-  return { game, map, challenge };
-}
-
-function mergeMeta(meta, add) {
-  if (!add) return meta;
-  const out = Object.assign({}, meta);
-  for (const k of ['game', 'map', 'challenge']) {
-    if (!add[k]) continue;
-    const prev = k === 'game' && out.game && out.game.token !== add.game.token ? {} : (out[k] || {});
-    const merged = Object.assign({}, prev);
-    for (const [kk, v] of Object.entries(add[k])) if (v !== null && v !== undefined) merged[kk] = v;
-    out[k] = merged;
-  }
-  return out;
-}
-
-// The page a response of the site's own API (or Next.js page data) belongs to: /game/<t>, /challenge/<t>,
-// map:<id> for the map details (GET /api/maps/<id>) or null.
-function metaKey(url, origin) {
-  let u;
-  try { u = new URL(url, origin); } catch (e) { return null; }
-  if (u.origin !== origin) return null;
-  let m = /^\/api\/v3\/(games|challenges)\/([A-Za-z0-9]+)(\/game)?$/.exec(u.pathname);
-  if (m) return `/${m[1] === 'games' ? 'game' : 'challenge'}/${m[2]}`;
-  m = /^\/api\/maps\/([A-Za-z0-9-]+)$/.exec(u.pathname);
-  if (m) return `map:${m[1]}`;
-  m = /^\/_next\/data\/[^/]+\/(game|challenge)\/([A-Za-z0-9]+)(\/replay)?\.json$/.exec(u.pathname);
-  return m ? `/${m[1]}/${m[2]}` : null;
-}
-
-// The "map" object of POST /api/predict.
-function serverMap(meta) {
-  const m = (meta && meta.map) || {}, g = (meta && meta.game) || {}, c = (meta && meta.challenge) || {};
-  const gm = g.map || {};
-  const gameSlug = g.mapId && !/^[0-9a-f]{24}$/.test(g.mapId) ? g.mapId : null;  // games carry an id or a slug
-  const out = {
-    id: m.id || gm.id || g.mapId || c.mapSlug || null,
-    slug: m.slug || gm.slug || c.mapSlug || gameSlug,
-    name: m.name || gm.name || g.mapName || null,
-    bounds: m.bounds || gm.bounds || g.bounds || null,
-    maxErrorDistance: m.maxErrorDistance || gm.maxErrorDistance || null,
-  };
-  return Object.values(out).some(v => v !== null) ? out : null;
-}
-
-function parseRound(text) {
-  const m = /(\d+)\s*\/\s*(\d+)/.exec(text || '');
-  return m ? { round: +m[1], of: +m[2] } : null;
-}
-
-// Whether a page may be captured: {ok}, {wait: why} (game data not seen yet) or {refuse: why}.
-// /game/<t> also hosts Play-Along games, so there the game type must be known and single-player.
-function captureVerdict(pathname, meta) {
-  if (!isAllowedPath(pathname)) return { refuse: 'not a single-player /challenge/<t> or /game/<t> page' };
-  const g = (meta && meta.game) || {};
-  if (g.type && !SINGLE_PLAYER_TYPES.includes(g.type)) return { refuse: `game type "${g.type}" is not single-player` };
-  if (pathname.startsWith('/game/')) {
-    if (!g.type) return { wait: 'game type not known yet' };
-    if (g.token !== pathname.split('/')[2]) return { wait: 'game data of this page not seen yet' };
-  }
-  return { ok: true };
-}
+// ------------------------------------------------------------------ fair-play checks (node side)
 
 // Why --submit must not post on this page (null when it may).
 function submitProblem(pathname, meta) {
   const v = captureVerdict(pathname, meta);
   if (!v.ok) return v.refuse || v.wait;
   const g = (meta && meta.game) || {};
-  if (!SINGLE_PLAYER_TYPES.includes(g.type)) return 'game type not known yet (press Play so the page loads the game)';
+  if (!P.SINGLE_PLAYER_TYPES.includes(g.type)) return 'game type not known yet (press Play so the page loads the game)';
   if (g.mode !== 'standard') return `game mode ${g.mode || 'unknown'} is not supported`;
   if (g.state !== 'started') return `game state is ${g.state || 'unknown'}`;
   if (!g.token) return 'game token not known yet';
   return null;
-}
-
-// forbidRotating (null = unknown, probe the camera) and whether the zoom must stay as the player has it.
-function gameFlags(meta, nmpz) {
-  const g = (meta && meta.game) || {}, c = (meta && meta.challenge) || {};
-  const flag = k => (typeof g[k] === 'boolean' ? g[k] : typeof c[k] === 'boolean' ? c[k] : null);
-  const rotate = flag('forbidRotating');
-  return { noRotate: rotate !== null ? rotate : nmpz ? true : null, zoomLocked: flag('forbidZooming') !== false };
 }
 
 // The screenshot must be the whole canvas, undistorted: the per-view FOV describes the full canvas.
@@ -240,331 +103,21 @@ function replayRound(rows, token, n) {
     map: r.map ? { name: r.map } : null };
 }
 
-// ------------------------------------------------------------------ camera geometry
+// ------------------------------------------------------------------ injected scripts
 
-// GeoGuessr's own test for Google's projection matrix (uniformMatrix4fv): row norms give the focal lengths.
-function fovFromMatrix(r) {
-  if (!r || r.length < 16 || Math.abs(r[14] + 0.6667) > 0.01 || Math.abs(r[15]) > 0.01) return null;
-  const row = i => Math.sqrt(r[i] * r[i] + r[i + 4] * r[i + 4] + r[i + 8] * r[i + 8] + r[i + 12] * r[i + 12]);
-  const w = row(3);
-  if (!(w > 10)) return null;
-  const vfov = 2 * Math.atan(w / row(1)) * 180 / Math.PI;
-  const hfov = 2 * Math.atan(w / row(0)) * 180 / Math.PI;
-  return vfov > 5 && vfov < 170 ? { vfov, hfov } : null;
+// extension/page.js with its config (only the switches; the allowed paths are fixed in page.js).
+function pageScript(cfg = {}) {
+  const c = { replay: !!cfg.replay, preserve: cfg.preserve !== false, submit: !!cfg.submit };
+  return `window.__geoscrConfig = ${JSON.stringify(c)};\n${PAGE_SRC}`;
+}
+const PAGE_SCRIPT = pageScript({});
+
+function hudScript() {
+  return `window.__geoscrHudCss = ${JSON.stringify(fs.readFileSync(HUD_CSS, 'utf8'))};\n${fs.readFileSync(HUD_JS, 'utf8')}`;
 }
 
-const hfovFromVfov = (vfov, aspect) => 2 * Math.atan(Math.tan(vfov * RAD / 2) * aspect) / RAD;
-const vfovFromHfov = (hfov, aspect) => 2 * Math.atan(Math.tan(hfov * RAD / 2) / aspect) / RAD;
-// Google Street View (measured, WebGL and 2D): tan(hfov / 2) = 2^(1 - zoom) until the vertical FOV
-// reaches 90 deg. Only a fallback and a first guess.
-const hfovForZoom = z => 2 * Math.atan(Math.pow(2, 1 - z)) / RAD;
-const zoomForHfov = h => 1 - Math.log2(Math.tan(h * RAD / 2));
-function formulaFov(zoom, aspect) {
-  const vfov = Math.min(MAX_VFOV, vfovFromHfov(hfovForZoom(zoom), aspect));
-  return { hfov: hfovFromVfov(vfov, aspect), vfov, method: 'formula' };
-}
-
-function inFrustum(azDeg, elDeg, pitchDeg, tx, ty) {
-  const a = azDeg * RAD, e = elDeg * RAD, p = pitchDeg * RAD;
-  const dx = Math.sin(a) * Math.cos(e), dy = Math.cos(a) * Math.cos(e), dz = Math.sin(e);
-  const zc = dy * Math.cos(p) + dz * Math.sin(p);
-  if (zc <= 1e-6) return false;
-  return Math.abs(dx / zc) <= tx && Math.abs((dz * Math.cos(p) - dy * Math.sin(p)) / zc) <= ty;
-}
-
-// Azimuth half-width (deg) that a camera pitched by `pitch` covers at elevation `el`.
-function halfWidth(el, pitch, tx, ty) {
-  if (!inFrustum(0, el, pitch, tx, ty)) return 0;
-  let a = 0;
-  while (a < 180 && inFrustum(a + 0.25, el, pitch, tx, ty)) a += 0.25;
-  return a;
-}
-
-// Rows of pitches covering -85..85 and, per row, enough yaws that neighbours overlap by >= 10 %.
-function planGrid(hfov, vfov, startYaw = 0) {
-  const tx = Math.tan(hfov * RAD / 2), ty = Math.tan(vfov * RAD / 2);
-  const span = 2 * PITCH_LIMIT - vfov;
-  let rows = 2;
-  while (rows < 9 && span / (rows - 1) > vfov * (1 - OVERLAP)) rows++;
-  const pitches = [];
-  for (let i = 0; i < rows; i++) pitches.push(-PITCH_LIMIT + vfov / 2 + i * Math.max(0, span) / (rows - 1));
-  const grid = [];
-  pitches.forEach((p, i) => {
-    const lo = i === 0 ? -PITCH_LIMIT : (p + pitches[i - 1]) / 2;
-    const hi = i === rows - 1 ? PITCH_LIMIT : (p + pitches[i + 1]) / 2;
-    // the band edge nearest the horizon is the narrowest; near the poles the views overlap anyway
-    const el = Math.abs(lo) < Math.abs(hi) ? lo : hi;
-    const w = halfWidth(Math.max(-60, Math.min(60, el)), p, tx, ty);
-    const n = w >= 180 ? 1 : Math.max(1, Math.ceil(360 / (2 * w * (1 - OVERLAP))));
-    for (let k = 0; k < n; k++) {
-      grid.push({ yaw: Math.round(((startYaw + k * 360 / n) % 360 + 360) % 360 * 100) / 100,
-        pitch: Math.round(p * 100) / 100 });
-    }
-  });
-  return grid;
-}
-
-// ------------------------------------------------------------------ page-side hooks
-
-// Runs in every page before any script and must stay pass-through: outside the allowed paths
-// nothing is remembered, recorded or read. On allowed pages it remembers the StreetViewPanorama
-// (constructor + prototype hook; GeoGuessr builds it from the global google.maps), counts pano
-// changes and draws, records Google's projection matrix and keeps the whitelisted metadata of the
-// page's own game / challenge responses (the full bodies never leave the page).
-function installPageHooks(pathSources) {
-  if (window.__geoscr) return;
-  const paths = pathSources.map(s => new RegExp(s));
-  const allowed = () => paths.some(re => re.test(location.pathname));
-  const S = window.__geoscr = { id: Math.random().toString(36).slice(2), panos: [], seq: 0, hidden: [], store: {},
-    panoChanges: 0, panoAt: 0, mark: null };
-  const panoChanged = () => {
-    const c = S.canvas();
-    S.panoChanges++;
-    S.panoAt = performance.now();
-    S.mark = { seq: S.seq, canvas: c, draws: c ? c.__geoscrDraws || 0 : 0 };
-  };
-  const remember = inst => {
-    if (!inst || typeof inst !== 'object' || !allowed()) return;
-    if (!S.panos.includes(inst)) {
-      S.panos.push(inst);
-      try { inst.addListener('pano_changed', panoChanged); } catch (e) { /* not an MVCObject */ }
-    }
-    inst.__geoscrUsed = performance.now();
-  };
-  const hookStreetView = () => {
-    const g = window.google;
-    if (!g || !g.maps || !g.maps.StreetViewPanorama) return false;
-    const P = g.maps.StreetViewPanorama;
-    if (P.__geoscrHooked) return true;
-    const proto = P.prototype;
-    for (const m of ['setPov', 'setZoom', 'setVisible', 'setOptions', 'getPov', 'getZoom', 'setPano', 'setPosition']) {
-      const orig = proto[m];
-      if (typeof orig !== 'function') continue;
-      proto[m] = function () {
-        remember(this);
-        if (m === 'setPano' && allowed()) panoChanged();
-        return orig.apply(this, arguments);
-      };
-    }
-    const Hooked = function () {
-      const inst = new P(...arguments);
-      if (allowed()) {
-        inst.__geoscrDiv = arguments[0];
-        remember(inst);
-      }
-      return inst;
-    };
-    Hooked.prototype = proto;
-    Object.setPrototypeOf(Hooked, P);
-    Hooked.__geoscrHooked = true;
-    P.__geoscrHooked = true;
-    try { g.maps.StreetViewPanorama = Hooked; } catch (e) { /* read-only: the prototype hook still works */ }
-    return true;
-  };
-  let tries = 0;
-  const tick = () => {
-    try { if (hookStreetView()) return; } catch (e) { /* retry */ }
-    setTimeout(tick, ++tries < 4000 ? 5 : 50);
-  };
-  tick();
-
-  for (const C of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
-    if (!C || typeof C.prototype.uniformMatrix4fv !== 'function') continue;
-    const orig = C.prototype.uniformMatrix4fv;
-    C.prototype.uniformMatrix4fv = function (loc, transpose, data) {
-      try {
-        const f = data && data.length === 16 && allowed() ? fovFromMatrix(data) : null;
-        if (f && this.canvas) {
-          f.seq = ++S.seq;
-          this.canvas.__geoscrFov = f;
-        }
-      } catch (e) { /* never break the renderer */ }
-      return orig.apply(this, arguments);
-    };
-  }
-
-  // 2D renderer: count draws per canvas, so a capture can wait until the new view is painted
-  const C2 = window.CanvasRenderingContext2D;
-  for (const m of C2 ? ['drawImage', 'putImageData'] : []) {
-    const orig = C2.prototype[m];
-    if (typeof orig !== 'function') continue;
-    C2.prototype[m] = function () {
-      try {
-        if (this.canvas && allowed()) this.canvas.__geoscrDraws = (this.canvas.__geoscrDraws || 0) + 1;
-      } catch (e) { /* never break the page */ }
-      return orig.apply(this, arguments);
-    };
-  }
-
-  const note = (key, m) => {
-    if (!key || !m) return;
-    S.store[key] = mergeMeta(S.store[key] || {}, m);
-    if (m.game && m.game.token) {
-      const gk = '/game/' + m.game.token;
-      S.store[gk] = mergeMeta(S.store[gk] || {}, { game: m.game, map: m.map });
-    }
-  };
-  const origFetch = window.fetch;
-  if (typeof origFetch === 'function') {
-    window.fetch = function (input) {
-      const p = origFetch.apply(window, arguments);
-      try {
-        const url = input && typeof input === 'object' && 'url' in input ? input.url : String(input);
-        const key = allowed() ? metaKey(url, location.origin) : null;
-        if (key) {
-          p.then(r => {
-            if (r && r.ok && /json/.test(r.headers.get('content-type') || '')) {
-              r.clone().json().then(j => note(key, key.startsWith('map:') ? { map: safeMapMeta(j) } : extractMeta(j)), () => null);
-            }
-          }, () => null);
-        }
-      } catch (e) { /* never break the page */ }
-      return p;
-    };
-  }
-  const readNextData = () => {
-    if (!allowed()) return;
-    const el = document.getElementById('__NEXT_DATA__');
-    if (!el) return;
-    try {
-      const j = JSON.parse(el.textContent);
-      const m = /^\/(game|challenge)\/\[token\]/.exec(String(j.page || ''));
-      const token = j.query && typeof j.query.token === 'string' ? j.query.token : null;
-      if (m && token && /^[A-Za-z0-9]+$/.test(token)) note(`/${m[1]}/${token}`, extractMeta(j));
-    } catch (e) { /* no page data */ }
-  };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', readNextData);
-  else readNextData();
-
-  S.metaFor = p => {
-    const m = /^\/(game|challenge)\/([A-Za-z0-9]+)/.exec(p || '');
-    if (!m || p !== location.pathname || !allowed()) return null;
-    let out = S.store[`/${m[1]}/${m[2]}`] || null;
-    const gt = m[1] === 'challenge' && out && out.game && out.game.token;
-    if (gt && S.store['/game/' + gt]) out = mergeMeta(out, S.store['/game/' + gt]);
-    const mid = out && ((out.game && out.game.mapId) || (out.challenge && out.challenge.mapSlug));
-    if (mid && S.store['map:' + mid]) out = mergeMeta(S.store['map:' + mid], out);
-    return out;
-  };
-  S.here = p => location.pathname === p && allowed();
-  S.canvas = () => {
-    let best = null, area = 0;
-    for (const c of document.querySelectorAll('canvas.widget-scene-canvas')) {
-      const r = c.getBoundingClientRect();
-      if (r.width * r.height > area) { best = c; area = r.width * r.height; }
-    }
-    return best;
-  };
-  S.tilesCanvas = () => {
-    const c = document.querySelector('canvas.renderCanvas');
-    return c && c.getBoundingClientRect().width > 0 ? c : null;
-  };
-  S.pano = () => {
-    const canv = S.canvas();
-    const live = S.panos.filter(p => { try { return p.getVisible() !== false; } catch (e) { return false; } });
-    return live.find(p => canv && p.__geoscrDiv && p.__geoscrDiv.contains(canv)) ||
-      live.sort((a, b) => (b.__geoscrUsed || 0) - (a.__geoscrUsed || 0))[0] || null;
-  };
-  S.state = () => {
-    const canv = S.canvas(), p = S.pano();
-    let pov = null, zoom = null, status = null;
-    if (p) {
-      try { const v = p.getPov(); pov = { heading: v.heading, pitch: v.pitch }; zoom = p.getZoom(); } catch (e) { /* not ready */ }
-      try { status = p.getStatus ? p.getStatus() : null; } catch (e) { /* not ready */ }
-    }
-    const r = canv ? canv.getBoundingClientRect() : null;
-    const rn = document.querySelector("[data-qa='round-number']");
-    const draws = canv ? canv.__geoscrDraws || 0 : 0;
-    const mk = S.mark;
-    return {
-      id: S.id, path: location.pathname,
-      renderer: S.tilesCanvas() ? 'tiles' : p && canv ? 'google' : canv ? 'google-unhooked' : 'none',
-      pov, zoom, status, seq: S.seq, draws,
-      fov: canv && canv.__geoscrFov ? canv.__geoscrFov : null,
-      panoChanges: S.panoChanges, sincePano: S.panoAt ? performance.now() - S.panoAt : null,
-      drawnSincePano: !mk || S.seq > mk.seq || (canv === mk.canvas ? draws > mk.draws : draws > 0),
-      blur: !!(canv && /blur/.test(canv.style.filter || '')),
-      nmpz: !!document.querySelector("[data-qa='panorama'][class*='playingNmpz']"),
-      canvas: canv ? { width: canv.width, height: canv.height, cssWidth: r.width, cssHeight: r.height } : null,
-      roundText: rn ? rn.innerText.replace(/\s+/g, ' ').trim() : null,
-      result: !!document.querySelector("[data-qa='standard-round-result'], [data-qa='close-round-result']"),
-    };
-  };
-  S.setView = (v, p) => {
-    const pano = S.here(p) ? S.pano() : null;
-    if (!pano) return false;
-    if (v.zoom !== undefined && v.zoom !== null) pano.setZoom(v.zoom);
-    if (v.heading !== undefined && v.heading !== null) pano.setPov({ heading: v.heading, pitch: v.pitch || 0 });
-    return true;
-  };
-  // forbidRotating unknown: GeoGuessr puts the camera back 25 ms after any change in no-rotate rounds
-  S.rotateLocked = async p => {
-    const pano = S.here(p) ? S.pano() : null;
-    if (!pano) return null;
-    const v0 = pano.getPov(), target = (v0.heading + 5) % 360;
-    pano.setPov({ heading: target, pitch: v0.pitch });
-    await new Promise(r => setTimeout(r, 150));
-    const v1 = pano.getPov();
-    const locked = Math.abs(((v1.heading - target) % 360 + 540) % 360 - 180) > 2;
-    if (!locked) pano.setPov({ heading: v0.heading, pitch: v0.pitch });
-    return locked;
-  };
-  S.loadPano = (v, p) => {   // replay of a finished round only
-    const pano = S.here(p) ? S.pano() : null;
-    if (!pano) return false;
-    pano.setPano(v.pano);
-    pano.setPov({ heading: v.heading, pitch: v.pitch });
-    pano.setZoom(v.zoom);
-    return true;
-  };
-  S.post = async (url, body, p) => {   // --submit: the guess, answered with whitelisted metadata only
-    if (!S.here(p)) return { status: 0, error: 'page changed' };
-    const r = await origFetch.call(window, url, { method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!r.ok) return { status: r.status, error: (await r.text()).slice(0, 150) };
-    let meta = null;
-    try { meta = extractMeta(await r.json()); } catch (e) { /* no JSON */ }
-    note(metaKey(url, location.origin), meta);
-    return { status: r.status, meta };
-  };
-  // Hide everything but the panorama canvas and its ancestors (HUD, game UI, Google logo and
-  // attribution); returns the screenshot clip. isolate(false) restores the page.
-  S.isolate = (on, p) => {
-    for (const [el, v, prio] of S.hidden) {
-      if (v) el.style.setProperty('visibility', v, prio); else el.style.removeProperty('visibility');
-    }
-    S.hidden = [];
-    const canv = S.canvas();
-    if (!on || !canv || !S.here(p)) return null;
-    const keep = new Set();
-    for (let e = canv; e; e = e.parentElement) keep.add(e);
-    for (const el of document.body.querySelectorAll('*')) {
-      if (keep.has(el)) continue;
-      S.hidden.push([el, el.style.getPropertyValue('visibility'), el.style.getPropertyPriority('visibility')]);
-      el.style.setProperty('visibility', 'hidden', 'important');
-    }
-    const box = el => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; };
-    const cut = (a, b) => {
-      const x = Math.max(a.x, b.x), y = Math.max(a.y, b.y);
-      return { x, y, width: Math.max(0, Math.min(a.x + a.width, b.x + b.width) - x),
-        height: Math.max(0, Math.min(a.y + a.height, b.y + b.height) - y) };
-    };
-    const cont = document.querySelector('#panorama-container') || document.querySelector("[data-qa='panorama']");
-    const inCont = !!(cont && cont.contains(canv));
-    const canvasBox = box(canv);
-    let clip = inCont ? cut(canvasBox, box(cont)) : canvasBox;
-    clip = cut(clip, { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight });
-    clip = { x: Math.ceil(clip.x), y: Math.ceil(clip.y), width: Math.floor(clip.width), height: Math.floor(clip.height) };
-    return { clip, canvasBox, dpr: window.devicePixelRatio || 1,
-      clipTo: inCont ? (cont.id ? '#' + cont.id : "[data-qa='panorama']") : 'canvas.widget-scene-canvas' };
-  };
-}
-
-function pageScript(paths) {
-  return `(() => { ${safeBounds} ${safeMapMeta} ${safeGameMeta} ${challengeMeta} ${extractMeta} ${mergeMeta} ${metaKey}
-    ${fovFromMatrix} (${installPageHooks})(${JSON.stringify(paths.map(re => re.source))}); })();`;
-}
-const PAGE_SCRIPT = pageScript(ALLOWED_PATHS);
+// The round controller of page.js talks to this process (window.__geoscrNode).
+const attachScript = settings => `(function () { if (window.__geoscr) window.__geoscr.attach(null, ${JSON.stringify(settings)}); })();`;
 
 // --webgl: Maps JS draws Street View with a 2D canvas when WebGL is software (SwiftShader); hiding
 // the renderer name on the allowed pages makes it use WebGL, whose projection matrix gives the exact FOV.
@@ -590,10 +143,10 @@ function getCookie() {
 }
 
 let lastRequestAt = 0, rateLimited = false;
-// The script's own GeoGuessr requests: >= 1.2 s apart, stop at the first 429.
+// The script's own GeoGuessr requests: >= 1.3 s apart, stop at the first 429.
 async function requestSlot() {
   if (rateLimited) throw new Error('GeoGuessr returned 429 earlier: no more requests');
-  const wait = lastRequestAt + 1200 - Date.now();
+  const wait = lastRequestAt + 1300 - Date.now();
   if (wait > 0) await sleep(wait);
   lastRequestAt = Date.now();
 }
@@ -644,6 +197,19 @@ function trackTiles(page) {
 const pageState = page => page.evaluate(() => (window.__geoscr ? window.__geoscr.state() : null));
 const isolate = (page, on, p) => page.evaluate((on, p) => (window.__geoscr ? window.__geoscr.isolate(on, p) : null), on, p);
 
+// HUD state through the page's round controller.
+async function hudShow(page, patch) {
+  await page.evaluate(s => {
+    const S = window.__geoscr;
+    if (!S || !S.ctl) return;
+    if (s.status && s.status.level === 'busy' && S.ctl.view.status && S.ctl.view.status.level === 'busy')
+      s.status.since = S.ctl.view.status.since;
+    else if (s.status && s.status.level === 'busy') s.status.since = Date.now();
+    S.ctl.show(s);
+  }, patch).catch(() => null);
+}
+const hudStatus = (page, text, level = 'busy', extra = {}) => hudShow(page, { status: Object.assign({ text, level }, extra) });
+
 // Every camera action is bound to the page the capture started on.
 function assertPath(ctx) {
   let p = null;
@@ -666,6 +232,8 @@ function matrixFov(st, f) {
   const aspect = st.canvas.width / st.canvas.height;
   return { hfov: hfovFromVfov(f.vfov, aspect), vfov: f.vfov, hfovMatrix: f.hfov, method: 'webgl-matrix' };
 }
+
+// ------------------------------------------------------------------ screenshot capture (--capture screenshot)
 
 // Point the camera, wait for the tiles, read back POV / zoom / projection and take the frame.
 // With the WebGL renderer a fresh projection matrix also proves that the new view was drawn.
@@ -817,34 +385,75 @@ async function captureSingle(ctx) {
   }
 }
 
+// views.json + view_XX.jpg + meta.json in scratch/live/<game>_r<round>/ (input of tools/rebuild_views.py).
 function saveCapture(dir, cap, info, meta) {
   fs.mkdirSync(dir, { recursive: true });
-  const dpr = cap.iso.dpr;
   const views = cap.views.map((v, i) => {
     v.file = `view_${String(i).padStart(2, '0')}.jpg`;
     fs.writeFileSync(path.join(dir, v.file), v.buf);
-    return { file: v.file, yaw: v.yaw, pitch: v.pitch, hfov: v.hfov, vfov: v.vfov, zoom: v.zoom, fov_method: v.fov_method };
+    return { file: v.file, yaw: v.yaw, pitch: v.pitch, hfov: v.hfov, vfov: v.vfov, zoom: v.zoom, fov_method: v.fov_method,
+      read: v.read };
   });
   const json = {
-    game: info.key, round: info.round, mode: cap.mode, captured_at: new Date().toISOString(), zoom_locked: cap.zoomLocked,
-    fov: cap.fov, grid: cap.grid, canvas: cap.canvas, canvas_box: cap.iso.canvasBox, clip: cap.iso.clip,
-    clip_to: cap.iso.clipTo, dpr, image: [Math.round(cap.iso.clip.width * dpr), Math.round(cap.iso.clip.height * dpr)], views,
+    game: info.key, round: info.round, mode: cap.mode, capture: cap.source || 'screenshot', captured_at: new Date().toISOString(),
+    zoom_locked: cap.zoomLocked, fov: cap.fov, grid: cap.grid, canvas: cap.canvas, views,
   };
+  if (cap.iso) {
+    const dpr = cap.iso.dpr;
+    Object.assign(json, { canvas_box: cap.iso.canvasBox, clip: cap.iso.clip, clip_to: cap.iso.clipTo, dpr,
+      image: [Math.round(cap.iso.clip.width * dpr), Math.round(cap.iso.clip.height * dpr)] });
+  } else if (cap.views[0]) json.image = [cap.views[0].width, cap.views[0].height];
   fs.writeFileSync(path.join(dir, 'views.json'), JSON.stringify(json, null, 1));
   fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ map: serverMap(meta), game: meta.game || null,
     challenge: meta.challenge || null }, null, 1));
 }
 
+// A capture made in the page (views with JPEG data URLs) in the same layout as a screenshot capture.
+function pageCapture(payload) {
+  const c = payload.capture || {};
+  const views = (payload.views || []).map(v => Object.assign({}, v, {
+    buf: Buffer.from(String(v.image_b64).replace(/^data:image\/\w+;base64,/, ''), 'base64') }));
+  return { views, mode: c.mode || 'sweep', fov: c.fov || null, grid: c.grid || null, canvas: c.canvas || null,
+    zoomLocked: !!c.zoomLocked, source: 'page' };
+}
+
 async function predict(views, map) {
-  const body = { views: views.map(v => ({ image_b64: v.buf.toString('base64'), yaw: v.yaw, pitch: v.pitch,
-    hfov: v.hfov, vfov: v.vfov })) };
-  if (map) body.map = map;
+  const body = predictBody(views.map(v => ({ image_b64: v.buf ? v.buf.toString('base64') : v.image_b64, yaw: v.yaw,
+    pitch: v.pitch, hfov: v.hfov, vfov: v.vfov })), map);
   const resp = await fetch(`${SERVER}/api/predict`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
   const data = await resp.json();
   if (data.error) throw new Error(data.error);
   return data;
+}
+
+// The result as the HUD gets it: GeoGuessr clue images become data: URLs from the server's offline
+// cache (tools/fetch_hud_images.py) or are dropped; the page never loads them from GeoGuessr.
+async function inlineImages(result) {
+  const out = JSON.parse(JSON.stringify(result));
+  const cards = [];
+  for (const h of out.hints || []) for (const k of (h && h.geoguessr) || []) if (k && k.image_url) cards.push(k);
+  await Promise.all(cards.map(async k => {
+    const url = String(k.image_url);
+    k.image_url = null;
+    if (!GG_IMAGE.test(url)) return;
+    try {
+      const r = await fetch(`${SERVER}/hud/img?u=${encodeURIComponent(url)}`);
+      const type = (r.headers.get('content-type') || '').split(';')[0];
+      if (r.ok && /^image\/(jpeg|png|webp)$/.test(type)) k.image_url = `data:${type};base64,${Buffer.from(await r.arrayBuffer()).toString('base64')}`;
+    } catch (e) { /* no image */ }
+  }));
+  return out;
+}
+
+function logResult(info, result, tCap, map, dir) {
+  console.log(`[${info.label}] ${result.countries.map(x => `${x.code} ${(x.probability * 100).toFixed(0)}%`).join(', ')}` +
+    `  -> ${result.guess.lat}, ${result.guess.lng}  (capture ${(tCap / 1000).toFixed(1)} s, map ${map ? map.name || map.id : '?'})`);
+  console.log('   видно: ' + result.observations.map(o => o.text).join('; '));
+  if (result.hints[0] && result.hints[0].regions.length)
+    console.log('   регіон: ' + result.hints[0].regions.map(x => `${x.name} ${Math.round(x.probability * 100)}%`).join(', '));
+  console.log(`   збережено: ${path.relative(ROOT, dir)}`);
 }
 
 // GeoGuessr reuses one StreetViewPanorama for all rounds and getStatus() stays 'OK' through setPano,
@@ -877,14 +486,13 @@ async function waitPanorama(ctx, since, timeoutMs = 20000) {
   }
 }
 
+// --capture screenshot: the whole round in this process (the page's controller waits for the result).
 async function analyseRound(ctx, info) {
   const { page } = ctx;
   ctx.capturePath = info.path;
   const dir = path.join(OUT_ROOT, `${info.key}_r${info.round}`);
-  const hud = s => showHud(page, Object.assign({ round: info.label }, s), info.path);
-  await hud({ status: 'Чекаю панораму…' });
+  await hudStatus(page, 'Чекаю панораму…');
   const st = await waitPanorama(ctx, info.since);
-  ctx.lastMark = { id: st.id, panoChanges: st.panoChanges };
   const flags = gameFlags(info.meta, st.nmpz);
   let noRotate = flags.noRotate;
   if (noRotate === null) {
@@ -893,73 +501,76 @@ async function analyseRound(ctx, info) {
     console.log(`   forbidRotating невідомий; перевірка камери: ${noRotate ? 'без обертання' : 'обертання дозволене'}`);
   }
   const zoomLocked = info.freeZoom ? false : flags.zoomLocked;
-  await hud({ status: noRotate ? 'Без обертання: знімаю поточний кадр…' : 'Знімаю панораму…' });
+  await hudStatus(page, noRotate ? 'Без обертання: знімаю поточний кадр…' : 'Знімаю панораму…');
   const t0 = Date.now();
   const cap = noRotate ? await captureSingle(ctx) : await captureSweep(ctx, st, dir, zoomLocked);
   const map = serverMap(info.meta);
   saveCapture(dir, cap, info, info.meta);
   const tCap = Date.now() - t0;
-  await hud({ status: 'Аналіз…' });
+  await hudStatus(page, 'Аналіз…');
+  const t1 = Date.now();
   const result = await predict(cap.views, map);
   fs.writeFileSync(path.join(dir, 'response.json'), JSON.stringify(result, null, 1));
-  const top = result.countries[0];
-  console.log(`[${info.label}] ${result.countries.map(x => `${x.code} ${(x.probability * 100).toFixed(0)}%`).join(', ')}` +
-    `  -> ${result.guess.lat}, ${result.guess.lng}  (capture ${(tCap / 1000).toFixed(1)} s, map ${map ? map.name || map.id : '?'})`);
-  console.log('   видно: ' + result.observations.map(o => o.text).join('; '));
-  if (result.hints[0] && result.hints[0].regions.length)
-    console.log('   регіон: ' + result.hints[0].regions.map(x => `${x.name} ${Math.round(x.probability * 100)}%`).join(', '));
-  console.log(`   збережено: ${path.relative(ROOT, dir)}`);
-  await hud({ status: `Найімовірніше: ${top.name}`, result });
-  return { result, dir };
+  logResult(info, result, tCap, map, dir);
+  return { result, dir, noRotate: !!noRotate, timing: { capture_ms: tCap, server_ms: result.timing_ms ? result.timing_ms.total : null,
+    request_ms: Date.now() - t1, views: cap.views.length, mode: cap.mode, fov: cap.fov } };
 }
 
-// ------------------------------------------------------------------ HUD
+// ------------------------------------------------------------------ bridge to the page's round controller
 
-async function showHud(page, state, expectPath = null) {
-  try {
-    await page.evaluate((s, expectPath) => {
-      if (expectPath && location.pathname !== expectPath) return;
-      let hud = document.getElementById('geoscr-hud');
-      if (!hud) {
-        hud = document.createElement('div');
-        hud.id = 'geoscr-hud';
-        hud.style.cssText = 'position:fixed;top:16px;right:16px;width:380px;max-height:86vh;overflow-y:auto;' +
-          'background:rgba(15,23,42,.94);border:2px solid #10b981;border-radius:12px;padding:14px;color:#f8fafc;' +
-          'font:13px/1.4 system-ui,sans-serif;z-index:99999999;box-shadow:0 12px 32px rgba(0,0,0,.6)';
-        document.body.appendChild(hud);
-      }
-      const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-      let h = `<div style="display:flex;justify-content:space-between;font-weight:800;color:#10b981;margin-bottom:8px">
-        <span>Локатор (без ШІ)</span><span>${esc(s.round || '')}</span></div>
-        <div style="color:${s.error ? '#f87171' : '#94a3b8'};margin-bottom:8px">${esc(s.status || '')}</div>`;
-      const r = s.result;
-      if (r) {
-        for (const c of r.countries) {
-          const w = Math.max(2, Math.round(c.probability * 100));
-          h += `<div style="display:flex;align-items:center;gap:6px;margin:3px 0"><span style="width:150px">${esc(c.name)}</span>
-            <div style="height:7px;width:${w}%;max-width:150px;background:#10b981;border-radius:4px"></div>
-            <span>${(c.probability * 100).toFixed(1)}%</span></div>`;
-        }
-        h += `<div style="color:#94a3b8;margin:6px 0">Здогадка ${esc(r.guess.lat)}, ${esc(r.guess.lng)} · ~${esc(r.guess.expected_score)} балів</div>`;
-        if (r.observations.length) {
-          h += `<div style="margin:8px 0 4px;color:#94a3b8;font-weight:600">ЩО ВИДНО</div>` +
-            r.observations.slice(0, 8).map(o => `<span style="display:inline-block;border:1px solid #0284c7;color:#38bdf8;border-radius:6px;padding:2px 7px;margin:2px;font-size:11px">${esc(o.text)}</span>`).join('');
-        }
-        for (const c of r.hints) {
-          h += `<div style="margin-top:10px;font-weight:700">${esc(c.country)} — ${(c.probability * 100).toFixed(1)}%</div>`;
-          if (c.regions && c.regions.length) h += `<div style="color:#f59e0b;font-size:11px">Регіон: ${c.regions.map(x => `${esc(x.name)} ${Math.round(x.probability * 100)}%`).join(', ')}</div>`;
-          for (const k of c.geoguessr.slice(0, 2)) h += `<div style="border-left:3px solid #10b981;padding:4px 8px;margin-top:4px;background:#1e293b;border-radius:4px"><b>${esc(k.title)}</b><div style="color:#cbd5e1;font-size:11px">${esc(k.text)}</div></div>`;
-          for (const k of c.plonkit.slice(0, 1)) h += `<div style="border-left:3px solid #f59e0b;padding:4px 8px;margin-top:4px;background:#1e293b;border-radius:4px;color:#cbd5e1;font-size:11px">Plonk It: ${esc(k.text)}</div>`;
-        }
-      }
-      if (s.score) h += `<div style="margin-top:10px;padding:8px;background:#064e3b;border-radius:8px">Раунд: +${esc(s.score.points)} балів, ${esc(s.score.distance)} км · всього ${esc(s.score.total)}</div>`;
-      hud.innerHTML = h;
-    }, state, expectPath);
-  } catch (e) { /* page navigated */ }
-}
-
-async function hideHud(page) {
-  await page.evaluate(() => { const h = document.getElementById('geoscr-hud'); if (h) h.remove(); }).catch(() => null);
+// Requests of extension/page.js (window.__geoscrNode): meta, set, health, predict, capture, log.
+async function bridge(ctx, type, payload) {
+  payload = payload || {};
+  if (type === 'health') {
+    const r = await fetch(`${SERVER}/api/health`).then(x => x.json()).catch(() => null);
+    if (!r || !r.ok) throw new Error(`Сервер локатора недоступний (${SERVER}). Запустіть: python3 web/server.py`);
+    return r;
+  }
+  if (type === 'meta') {
+    const p = String(payload.path || '');
+    return mergeMeta(ctx.metaCache[p] || {}, ctx.extraMeta[p] || null);
+  }
+  if (type === 'set') {
+    if (typeof payload.auto === 'boolean') {
+      ctx.settings.auto = payload.auto;
+      console.log(`Автоаналіз на початку раунду: ${payload.auto ? 'увімкнено' : 'вимкнено'}`);
+    }
+    return ctx.settings;
+  }
+  if (type === 'log') { console.log('   [page] ' + String(payload.text || '').slice(0, 300)); return null; }
+  const job = payload.job || payload;
+  const p = String(job.path || '');
+  const meta = mergeMeta(mergeMeta(ctx.metaCache[p] || {}, job.meta || null), ctx.extraMeta[p] || null);
+  const info = { key: String(job.key || 'page').replace(/[^A-Za-z0-9]/g, '') || 'page', round: +job.round || 0,
+    label: job.label || '', path: p, meta, trigger: job.trigger };
+  let out;
+  if (type === 'predict') {
+    const dir = path.join(OUT_ROOT, `${info.key}_r${info.round}`);
+    const cap = pageCapture(payload);
+    saveCapture(dir, cap, info, meta);
+    const result = await predict(cap.views, payload.map || serverMap(meta));
+    fs.writeFileSync(path.join(dir, 'response.json'), JSON.stringify(result, null, 1));
+    const c = payload.capture || {};
+    console.log(`   знімання в сторінці: ${cap.views.length} кадр., ${cap.views[0] ? cap.views[0].read : '?'}, ` +
+      `FOV ${cap.fov ? `${cap.fov.hfov.toFixed(2)} x ${cap.fov.vfov.toFixed(2)} (${cap.fov.method})` : '?'}`);
+    logResult(info, result, c.ms || 0, payload.map, dir);
+    out = await inlineImages(result);
+  } else if (type === 'capture') {
+    ctx.capturePath = p;
+    const st = await pageState(ctx.page);
+    info.since = job.since && st ? { id: st.id, panoChanges: job.since.panoChanges } : null;
+    info.freeZoom = ctx.freeZoom;
+    const r = await analyseRound(ctx, info);
+    out = { result: await inlineImages(r.result), timing: r.timing, noRotate: r.noRotate };
+  } else throw new Error(`unknown request ${type}`);
+  if (ctx.opts.submit && job.trigger === 'auto') {
+    const result = out.result || out;
+    setTimeout(() => submitAndContinue(ctx, result, info).catch(async e => {
+      console.error('[!] ' + e.message);
+      await hudStatus(ctx.page, e.message, 'error');
+    }), 300);
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ modes
@@ -980,6 +591,7 @@ async function submitGuess(ctx, guess, p) {
 
 async function submitAndContinue(ctx, result, info) {
   const { page } = ctx;
+  ctx.capturePath = info.path;
   const last = await submitGuess(ctx, result.guess, info.path);
   const pts = last ? last.points : 0;
   const km = last ? Math.round(last.distanceMeters / 100) / 10 : null;
@@ -987,59 +599,18 @@ async function submitAndContinue(ctx, result, info) {
   console.log(`   результат: ${pts} балів, ${km} км (всього ${ctx.total})`);
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
   await page.waitForSelector("[data-qa='close-round-result']", { timeout: 20000 });
-  await showHud(page, { round: info.label, status: 'Результат', result, score: { points: pts, distance: km, total: ctx.total } }, info.path);
+  await hudShow(page, { mode: 'game', round: info.label, result, status: { text: 'Результат', level: 'ok' },
+    score: { points: pts, distance: km, total: ctx.total } });
   await sleep(4000);
   if (/^\/game\//.test(info.path))
     console.log('   (якщо з’явиться вікно квитка, закрийте його, не натискайте Play: це витрачає квиток)');
   assertPath(ctx);
-  const st = await pageState(page);
-  if (st) ctx.lastMark = { id: st.id, panoChanges: st.panoChanges };
+  // the next round is captured only after its own pano change (after this result screen)
+  await page.evaluate(() => {
+    const S = window.__geoscr;
+    if (S && S.ctl && S.ctl.lastKey) { S.ctl.resultKey = S.ctl.lastKey; S.ctl.resultMark = S.panoChanges; }
+  });
   await page.click("[data-qa='close-round-result']");
-}
-
-async function watchLoop(ctx) {
-  const { page, opts } = ctx;
-  let lastKey = null, notice = null;
-  console.log('Режим спостереження: грайте у вікні браузера, підказки з’являтимуться на кожному раунді.');
-  for (;;) {
-    await sleep(800);
-    if (page.isClosed()) return;
-    let url;
-    try { url = new URL(page.url()); } catch (e) { continue; }
-    if (url.hostname !== 'www.geoguessr.com') continue;
-    const p = url.pathname;
-    if (!isAllowedPath(p)) {
-      if (notice !== p) { notice = p; await showHud(page, { status: NOT_SUPPORTED }); }
-      continue;
-    }
-    const meta = await readMeta(ctx, p);
-    const verdict = captureVerdict(p, meta);
-    if (!verdict.ok) {
-      const msg = verdict.refuse ? `Тут не підтримується: ${verdict.refuse}` : `Чекаю дані гри (${verdict.wait})…`;
-      if (notice !== p + msg) { notice = p + msg; await showHud(page, { status: msg, error: !!verdict.refuse }, p); }
-      continue;
-    }
-    if (notice) { notice = null; await hideHud(page); }
-    let st;
-    try { st = await pageState(page); } catch (e) { continue; }
-    if (!st || st.path !== p || st.result || st.renderer === 'none') continue;
-    const pr = parseRound(st.roundText);
-    const round = pr ? pr.round : meta.game && meta.game.round;
-    if (!round) continue;
-    const key = `${p}#${round}`;
-    if (key === lastKey) continue;
-    lastKey = key;
-    const of = pr ? pr.of : meta.game && meta.game.roundCount;
-    const info = { key: p.split('/')[2], round, label: `Раунд ${round}${of ? '/' + of : ''}`, path: p, meta,
-      since: ctx.lastMark && ctx.lastMark.id === st.id ? ctx.lastMark : null };
-    try {
-      const { result } = await analyseRound(ctx, info);
-      if (opts.submit) await submitAndContinue(ctx, result, info);
-    } catch (e) {
-      console.error('[!] ' + e.message);
-      await showHud(page, { round: info.label, status: e.message, error: true }, p);
-    }
-  }
 }
 
 async function fovTable(ctx, dir) {
@@ -1066,21 +637,43 @@ async function fovTable(ctx, dir) {
   fs.writeFileSync(path.join(dir, 'fov_table.json'), JSON.stringify({ canvas: st.canvas, rows }, null, 1));
 }
 
+// The unpacked extension's settings (server URL, replay test mode) through its service worker.
+async function configureExtension(browser, settings) {
+  const target = await browser.waitForTarget(t => t.type() === 'service_worker' && /^chrome-extension:\/\//.test(t.url()),
+    { timeout: 20000 });
+  const worker = await target.worker();
+  await worker.evaluate(s => chrome.storage.local.set(s), settings);
+  return target.url().split('/')[2];
+}
+
+// Waits for the page controller to finish the analysis it is running (or has finished).
+async function controllerResult(page, timeoutMs = 120000) {
+  const t0 = Date.now();
+  for (;;) {
+    const v = await page.evaluate(() => {
+      const S = window.__geoscr;
+      if (!S || !S.ctl) return null;
+      return { busy: !!S.ctl.busy, level: S.ctl.view.status && S.ctl.view.status.level, text: S.ctl.view.status && S.ctl.view.status.text,
+        result: S.ctl.view.result || null, timing: S.ctl.view.timing || null };
+    }).catch(() => null);
+    if (v && !v.busy && (v.level === 'ok' || v.level === 'error') && (v.result || v.level === 'error')) return v;
+    if (Date.now() - t0 > timeoutMs) throw new Error('no result from the page controller' + (v ? `: ${v.text}` : ''));
+    await sleep(300);
+  }
+}
+
 async function runReplay(ctx, fin) {
   const { page, opts } = ctx;
   const n = fin.round;
-  await page.setRequestInterception(true);
-  page.on('request', req => {
-    let host = '';
-    try { host = new URL(req.url()).hostname; } catch (e) { /* data: urls */ }
-    if (/(^|\.)geoguessr\.com$/.test(host) && !['GET', 'HEAD', 'OPTIONS'].includes(req.method())) {
-      console.log(`   [replay] заблоковано ${req.method()} ${req.url().slice(0, 100)}`);
-      return req.abort();
-    }
-    return req.continue();
-  });
   const p = `/game/${opts.replay}/replay`;
   ctx.capturePath = p;
+  ctx.extraMeta[p] = { map: fin.map };
+  if (opts.extension) {
+    // the extension's content script mirrors the replay test switch into localStorage on a GeoGuessr page;
+    // page.js reads it at document_start of the next load (as after "reload the page" in its options)
+    await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForFunction(() => localStorage.getItem('__geoscr_cfg') !== null, { timeout: 20000 });
+  }
   await page.goto(`${SITE}${p}?round=${n}&step=0`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForSelector('canvas.widget-scene-canvas', { timeout: 30000 });
   await sleep(3000);
@@ -1090,16 +683,49 @@ async function runReplay(ctx, fin) {
     console.log('   повтор не записано: показую панораму завершеного раунду в панорамі сторінки');
     if (!(await page.evaluate((v, p) => window.__geoscr.loadPano(v, p), fin.view, p))) throw new Error('no panorama to load the round into');
   }
-  const meta = mergeMeta({ map: fin.map }, await readMeta(ctx, p));
-  const info = { key: opts.replay, round: n, label: `Повтор ${n}`, path: p, meta, since: null, freeZoom: opts.playerZoom === null };
+  const info = { key: opts.replay, round: n, label: `Повтор ${n}`, path: p, meta: { map: fin.map }, since: null };
   const dir = path.join(OUT_ROOT, `${info.key}_r${info.round}`);
   if (opts.fovTable) await fovTable(ctx, dir);
-  const { result } = await analyseRound(ctx, info);
+  let result;
+  if (opts.extension) {
+    // as the user would: Alt+G in the page, the extension captures and asks the server
+    await page.waitForFunction(() => window.__geoscr && window.__geoscr.ctl && window.__geoscr.ctl.attached, { timeout: 20000 });
+    await page.waitForFunction(() => window.GeoscrHud && window.__geoscr.ctl.hud, { timeout: 20000 }).catch(() => null);
+    const t0 = Date.now();
+    await page.keyboard.down('Alt');
+    await page.keyboard.press('KeyG');
+    await page.keyboard.up('Alt');
+    await sleep(500);
+    const v = await controllerResult(page);
+    if (!v.result) throw new Error('extension: ' + v.text);
+    result = v.result;
+    const last = await page.evaluate(() => {
+      const c = window.__geoscr.ctl.last;
+      return c && c.capture ? { views: c.capture.views, capture: { mode: c.capture.mode, fov: c.capture.fov, grid: c.capture.grid,
+        canvas: c.capture.canvas, zoomLocked: c.capture.zoomLocked, ms: c.capture.ms } } : null;
+    });
+    if (last) {
+      const cap = pageCapture(last);
+      saveCapture(dir, cap, info, info.meta);
+      fs.writeFileSync(path.join(dir, 'response.json'), JSON.stringify(result, null, 1));
+      console.log(`   розширення: ${cap.views.length} кадр., читання ${cap.views[0] && cap.views[0].read}, ` +
+        `FOV ${cap.fov ? `${cap.fov.hfov.toFixed(2)} x ${cap.fov.vfov.toFixed(2)} (${cap.fov.method})` : '?'}`);
+      logResult(info, result, last.capture.ms || 0, serverMap(info.meta), dir);
+    }
+    console.log(`   розширення: аналіз за ${((Date.now() - t0) / 1000).toFixed(1)} с (timing ${JSON.stringify(v.timing)})`);
+  } else {
+    result = await page.evaluate(() => window.__geoscr.ctl.analyse('replay'));
+    if (!result) {
+      const s = await page.evaluate(() => window.__geoscr.ctl.view.status);
+      throw new Error((s && s.text) || 'no result');
+    }
+  }
   const resp = await fetch(`${SERVER}/api/evaluate_round`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ lat: fin.truth.lat, lng: fin.truth.lng, guess_lat: result.guess.lat, guess_lng: result.guess.lng,
-      pred_code: result.countries[0].code, map: serverMap(meta) }),
+      pred_code: result.countries[0].code, map: serverMap(info.meta) }),
   }).then(r => r.json()).catch(e => ({ error: e.message }));
+  fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'evaluation.json'), JSON.stringify(resp, null, 1));
   console.log(`   перевірка (завершений раунд): справжня країна ${resp.true_code}, топ-1 ${resp.pred_code}, ` +
     `${resp.distance_km} км, ${resp.points} балів`);
@@ -1113,6 +739,8 @@ function parseArgs(argv) {
     submit: has('--submit'), headless: has('--headless'), webgl: has('--webgl'), fovTable: has('--fov-table'),
     keepOpen: has('--keep-open'), hfov: Math.min(125, Math.max(60, parseFloat(val('--hfov', '125')))),
     playerZoom: val('--player-zoom') === null ? null : Math.min(3, Math.max(0, parseFloat(val('--player-zoom')) || 0)),
+    auto: has('--auto') || has('--submit'), extension: has('--extension'),
+    capture: val('--capture', 'page') === 'screenshot' ? 'screenshot' : 'page',
   };
 }
 
@@ -1122,6 +750,7 @@ async function main() {
     if (opts[k] && !/^[A-Za-z0-9]+$/.test(opts[k])) { console.error(`[!] bad --${k} token`); process.exit(1); }
   }
   if (opts.submit && opts.replay) { console.error('[!] --submit cannot be used with --replay'); process.exit(1); }
+  if (opts.extension && !opts.replay) { console.error('[!] --extension is a test of the extension on --replay'); process.exit(1); }
   let fin = null;
   if (opts.replay) {
     try {
@@ -1137,17 +766,41 @@ async function main() {
   const puppeteer = require('puppeteer');
   const args = ['--no-sandbox', '--window-size=1400,900'];
   if (opts.webgl || opts.headless) args.push('--use-angle=swiftshader', '--enable-unsafe-swiftshader');
+  if (opts.extension) args.push(`--disable-extensions-except=${EXTENSION_DIR}`, `--load-extension=${EXTENSION_DIR}`);
   const browser = await puppeteer.launch({ headless: opts.headless, args,
+    ignoreDefaultArgs: opts.extension ? ['--disable-extensions'] : [],
     defaultViewport: opts.headless ? { width: 1400, height: 800 } : null });
   browser.on('disconnected', () => process.exit(process.exitCode || 0));
   const page = (await browser.pages())[0] || await browser.newPage();
   const paths = opts.replay ? ALLOWED_PATHS.concat([REPLAY_PATH]) : ALLOWED_PATHS;
-  await page.evaluateOnNewDocument(pageScript(paths));
+  const ctx = { page, opts, metaCache: {}, extraMeta: {}, fovCache: loadFovCache(), zoomChoice: {}, total: 0,
+    capturePath: null, waitTiles: trackTiles(page), settings: { auto: opts.auto && !opts.replay },
+    freeZoom: !!opts.replay && opts.playerZoom === null };
+  if (opts.replay) {
+    await page.setRequestInterception(true);
+    page.on('request', req => {
+      let host = '';
+      try { host = new URL(req.url()).hostname; } catch (e) { /* data: urls */ }
+      if (/(^|\.)geoguessr\.com$/.test(host) && !['GET', 'HEAD', 'OPTIONS'].includes(req.method())) {
+        console.log(`   [replay] заблоковано ${req.method()} ${req.url().slice(0, 100)}`);
+        return req.abort();
+      }
+      return req.continue();
+    });
+  }
+  if (opts.extension) {
+    const id = await configureExtension(browser, { server: SERVER, replay: true, auto: false });
+    console.log(`Розширення ${id} завантажено; сервер ${SERVER}, режим перевірки на повторах увімкнено`);
+  } else {
+    await page.exposeFunction('__geoscrNode', (type, payload) => bridge(ctx, type, payload));
+    await page.evaluateOnNewDocument(pageScript({ replay: !!opts.replay, submit: opts.submit }));
+    await page.evaluateOnNewDocument(hudScript());
+    await page.evaluateOnNewDocument(attachScript({ node: true, auto: ctx.settings.auto, capture: opts.capture,
+      keepZoom: opts.playerZoom !== null }));
+  }
   if (opts.webgl) await page.evaluateOnNewDocument(`(${maskSoftwareGl})(${JSON.stringify(paths.map(re => re.source))});`);
   const cookie = getCookie();
   if (cookie) await page.setCookie({ name: '_ncfa', value: cookie, domain: '.geoguessr.com' });
-  const ctx = { page, opts, metaCache: {}, fovCache: loadFovCache(), zoomChoice: {}, total: 0, lastMark: null,
-    capturePath: null, waitTiles: trackTiles(page) };
   let failed = false;
   try {
     if (opts.replay) await runReplay(ctx, fin);
@@ -1162,7 +815,9 @@ async function main() {
         start = `${SITE}/challenge/${opts.challenge}`;
       } else if (opts.game) start = `${SITE}/game/${opts.game}`;
       await page.goto(start, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      await watchLoop(ctx);
+      console.log('Режим спостереження: грайте у вікні браузера. Alt+G або кнопка «Аналіз» у HUD — аналіз панорами; ' +
+        `автоаналіз на початку раунду ${ctx.settings.auto ? 'увімкнено' : 'вимкнено'} (Alt+A).`);
+      await new Promise(() => null);   // the page's controller does the rest; exits with the browser
     }
   } catch (e) {
     failed = true;
@@ -1173,11 +828,9 @@ async function main() {
   if (failed) process.exitCode = 1;
 }
 
-module.exports = {
-  isAllowedPath, safeBounds, safeMapMeta, safeGameMeta, challengeMeta, extractMeta, mergeMeta, metaKey, serverMap,
-  parseRound, captureVerdict, submitProblem, gameFlags, clipProblem, replayRound, fovFromMatrix, hfovFromVfov,
-  vfovFromHfov, hfovForZoom, zoomForHfov, formulaFov, inFrustum, planGrid, pageScript, PAGE_SCRIPT, ALLOWED_PATHS,
-  REPLAY_PATH, trackTiles, waitPanorama,
-};
+module.exports = Object.assign({}, P, {
+  submitProblem, clipProblem, replayRound, pageScript, hudScript, attachScript, PAGE_SCRIPT, trackTiles, waitPanorama,
+  pageCapture, bridge, inlineImages,
+});
 
 if (require.main === module) main();

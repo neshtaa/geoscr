@@ -294,6 +294,17 @@ def look_text(ctype, pitch, zoom):
     return "Подивіться %sна %s" % (where, obj)
 
 
+def detected_look_text(d):
+    """A detector's best window as a hedged suggestion: 'можливо, азимут 230°, вниз'."""
+    p = d.get("pitch") or 0.0
+    where = "вниз" if p <= -9 else "трохи вниз" if p <= -4 else "вгору" if p >= 9 else "трохи вгору" if p >= 4 else ""
+    if d.get("true_north"):
+        az = "азимут %d°" % (int(round(d["heading"])) % 360)
+    else:
+        az = "%+d° від центру знімка" % int(round((d["heading"] + 180.0) % 360.0 - 180.0))
+    return "можливо, %s, %s" % (az, where) if where else "можливо, %s" % az
+
+
 class ClueIndex:
     """GeoGuessr's own clue placements on labelled panoramas (tools/build_clue_index.py): per
     panorama its country, admin-1 region, clue cards and (when features were cached) a robust-
@@ -582,12 +593,27 @@ class ClueBase:
         ranked.sort(key=lambda r: r[:3], reverse=True)
         return [(s, c, why, seen) for s, _, _, c, why, seen in ranked]
 
-    def for_country(self, cc, tags, n_gg=3, n_plonkit=2, region_probs=None, emb=None):
+    def for_country(self, cc, tags, n_gg=3, n_plonkit=2, region_probs=None, emb=None, detected=None):
+        """detected: card detections of engine.clue_detect ([{stem, prob, p_dir, score, heading, pitch,
+        true_north, first, direction}], most probable first): those with "first" lead, the ranking above
+        fills the rest; a shown card whose detection has "direction" gets it as "detected" (probability =
+        P(the window shows the card | this country)) and as a hedged suffix of its placement "look"."""
         cc = cc.upper()
         res = {"country_code": cc, "country": self.country_name(cc), "geoguessr": [], "plonkit": []}
         side = (self.rules.get(cc) or {}).get("driving_side")
         res["driving_side"] = side
-        for s, c, why, seen in self.rank_cards(cc, tags, region_probs, emb)[:n_gg]:
+        found, dirs = {}, {}
+        for d in detected or []:
+            c = self._cards.get((cc, d["stem"]))
+            if c is None:
+                continue
+            dirs.setdefault(c["id"], d)
+            if d.get("first") and c["id"] not in found:
+                found[c["id"]] = (c, d)
+        ranked = [(c, ["_likely"], [], d) for c, d in found.values()]
+        ranked += [(c, why, seen, dirs.get(c["id"])) for s, c, why, seen in self.rank_cards(cc, tags, region_probs, emb)
+                   if c["id"] not in found]
+        for c, why, seen, d in ranked[:n_gg]:
             card = {"id": c["id"], "title": c.get("title"), "text": (c.get("description") or "").strip(),
                     "category": c.get("category"), "image_url": c.get("image_url"), "regions": c.get("regions") or [],
                     "matched": [REASONS.get(t) or TAGS[t][0] for t in why],
@@ -597,6 +623,11 @@ class ClueBase:
                 card["look"] = look_text(c.get("category"), v["pitch"], v["zoom"])
                 card["view"] = {"pitch": round(v["pitch"], 1), "zoom": round(v["zoom"], 2),
                                 "fov": round(zoom_fov(v["zoom"]))}
+            if d is not None and d.get("direction"):
+                card["detected"] = {"heading": d["heading"], "pitch": d["pitch"], "score": round(d["score"], 2),
+                                    "probability": round(d.get("p_dir", 0.0), 3), "true_north": d["true_north"]}
+                hint = "детектор: " + detected_look_text(d)
+                card["look"] = "%s (%s)" % (card["look"], hint) if card.get("look") else hint[0].upper() + hint[1:]
             res["geoguessr"].append(card)
         tips = (self.plonkit.get(cc) or {}).get("tips") or []
         ranked = []
@@ -612,7 +643,8 @@ class ClueBase:
 
 
 REASONS = {"_region": "Імовірний регіон", "_similar": "Є на схожих панорамах",
-           "_regional": "Часта в імовірному регіоні", "_frequent": "Часта картка країни"}
+           "_regional": "Часта в імовірному регіоні", "_frequent": "Часта картка країни",
+           "_likely": "Імовірна за частотою в країні й детектором"}
 
 _BASE = None
 
@@ -631,10 +663,11 @@ def region_probs_for(regions, cc):
     return {k: v / tot for k, v in rp.items()} if tot > 0 else {}
 
 
-def build_hints(F, top_countries, n_countries=3, regions=None, n_cards=3, kb=None):
+def build_hints(F, top_countries, n_countries=3, regions=None, n_cards=3, kb=None, detected=None):
     """F: {'module.feature': value}; top_countries: [(code, prob), ...];
     regions: [{"code", "name", "country", "probability"}, ...] (posterior over admin-1 regions);
-    n_cards: GeoGuessr cards per country; kb: a ClueBase (default: the shared one)."""
+    n_cards: GeoGuessr cards per country; kb: a ClueBase (default: the shared one);
+    detected: {country: [card detections of engine.clue_detect.ClueDetectors.detected_cards]}."""
     tags = observations(F)
     kb = kb or clue_base()
     emb = kb.index.embed(F) if kb.index is not None else None
@@ -644,7 +677,7 @@ def build_hints(F, top_countries, n_countries=3, regions=None, n_cards=3, kb=Non
     cards = []
     for cc, p in top_countries[:n_countries]:
         rp = region_probs_for(regions, cc)
-        c = kb.for_country(cc, tags, n_gg=n_cards, region_probs=rp, emb=emb)
+        c = kb.for_country(cc, tags, n_gg=n_cards, region_probs=rp, emb=emb, detected=(detected or {}).get(cc))
         c["regions"] = [{"code": k, "name": names[k], "probability": round(v, 3)}
                         for k, v in sorted(rp.items(), key=lambda kv: -kv[1])[:3]]
         c["probability"] = round(float(p), 3)
