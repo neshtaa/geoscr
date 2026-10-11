@@ -139,22 +139,27 @@
   "structure": 0.0,
   "texture": 0.0,
   "knn": 0.15,
-  "glm": 0.65,
-  "sun": 0.8,
-  "cards": 0.1
+  "glm": 0.4,
+  "sun": 0.65,
+  "glm_qn": 0.4,
+  "cards": 0.05
  },
- "prior_mix": 0.1,
+ "prior_mix": 0.25,
  "knn_k": 40,
  "loc_params": {
   "bw": 0.25,
-  "floor": 0.3
+  "floor": 0.03
  },
  "region_params": {
   "bw": 0.25,
   "floor": 0.001
  },
- "fit_hash": "43571a4dc594",
+ "fit_hash": "b4858d02dbdf",
  "glm": {
+  "lam": 0.0003,
+  "iters": 1200
+ },
+ "glm_qn": {
   "lam": 0.0003,
   "iters": 1200
  },

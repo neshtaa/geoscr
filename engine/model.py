@@ -4,6 +4,7 @@ Calibrated Bayesian country model + score-optimal guess.
 Everything here is classical statistics / linear algebra (no neural networks):
 
   P(country | image) ∝ prior(country) · Π_g P(features_g | country)^w_g · LR_knn(country)^w_knn · P(sun | country)^w_sun
+                       · GLM(country)^w_glm · GLM_qn(country)^w_glm_qn
 
 * every feature group g (one engine.features module) gets a Gaussian class-conditional
   density with a shared, shrinkage-regularised covariance; class means are shrunk
@@ -250,6 +251,82 @@ class SoftmaxGLM:
         return A - A.max(1, keepdims=True)
 
 
+def probit(u):
+    """Inverse standard normal CDF (Acklam's rational approximation as implemented here: monotone, ~1e-5 in the
+    tails; the fitted glm_qn uses exactly this transform)."""
+    a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02,
+         -3.066479806614716e+01, 2.506628277459239e+00]
+    b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01,
+         -1.328068155288572e+01]
+    c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549671010336036e+00,
+         4.374664141464968e+00, 2.938163982698783e+00]
+    d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00]
+    u = np.asarray(u, np.float64)
+    out = np.empty_like(u)
+    pl = 0.02425
+    lo, hi = u < pl, u > 1 - pl
+    mid = ~(lo | hi)
+    q = u[mid] - 0.5
+    r = q * q
+    out[mid] = ((((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+                (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1))
+    for sel, sign in ((lo, 1.0), (hi, -1.0)):
+        if sel.any():
+            q = np.sqrt(-2 * np.log(u[sel] if sign > 0 else 1 - u[sel]))
+            out[sel] = sign * ((((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+                               ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1))
+    return out
+
+
+class QuantileNormal:
+    """Per-feature rank-Gaussianisation fitted on the training panoramas: z = probit(mid-ECDF(x)) through K quantile
+    knots (tied knots averaged), NaN kept.  The second GLM (GeoModel.glm_qn) works on these values: heavy tails and
+    skewed features enter as ranks instead of clipped robust z-scores."""
+
+    def __init__(self, K=1001, eps=1e-3):
+        self.K, self.eps = K, eps
+
+    def fit(self, X):
+        p = np.linspace(self.eps, 1 - self.eps, self.K)
+        self.knots = []
+        for j in range(X.shape[1]):
+            v = X[:, j]
+            v = v[np.isfinite(v)]
+            if len(v) < 10:
+                self.knots.append((np.array([0.0]), np.array([0.5])))
+                continue
+            q = np.quantile(v, p)
+            uq, inv = np.unique(q, return_inverse=True)
+            self.knots.append((uq, np.bincount(inv, weights=p) / np.bincount(inv)))
+        return self
+
+    def transform(self, X):
+        Z = np.full(X.shape, np.nan)
+        for j, (uq, up) in enumerate(self.knots):
+            x = X[:, j]
+            f = np.isfinite(x)
+            if len(uq) == 1:
+                Z[f, j] = 0.0
+                continue
+            Z[f, j] = probit(np.interp(x[f], uq, up, left=self.eps / 2, right=1 - self.eps / 2))
+        return Z
+
+    def to_arrays(self):
+        n = np.array([len(k[0]) for k in self.knots])
+        return {"qn.x": np.concatenate([k[0] for k in self.knots]), "qn.p": np.concatenate([k[1] for k in self.knots]),
+                "qn.n": n, "qn.eps": np.array([self.eps, self.K])}
+
+    @classmethod
+    def from_arrays(cls, z):
+        eps, K = (float(v) for v in z["qn.eps"])
+        q = cls(K=int(K), eps=eps)
+        # read each array once (every z[key] of an npz decompresses a new copy, and a slice keeps its copy alive)
+        x, p = np.asarray(z["qn.x"]), np.asarray(z["qn.p"])
+        off = np.concatenate([[0], np.cumsum(z["qn.n"])])
+        q.knots = [(x[a:b], p[a:b]) for a, b in zip(off[:-1], off[1:])]
+        return q
+
+
 class GeoModel:
     def __init__(self):
         self.groups = []
@@ -282,6 +359,7 @@ class GeoModel:
         self.ref_lat, self.ref_lng = np.asarray(lat)[keep], np.asarray(lng)[keep]
         self.ref_emb = self._embed({g: X_by_group[g][keep] for g in self.groups})
         self.glm = SoftmaxGLM().fit(self._glm_input({g: X_by_group[g][keep] for g in self.groups}), yi, len(classes))
+        self.fit_glm_qn({g: X_by_group[g][keep] for g in self.groups}, yi)
         world = np.asarray(is_world)[keep]
         cw = np.bincount(yi[world], minlength=len(classes)).astype(float)
         self.prior_world = (cw + 0.5) / (cw + 0.5).sum()
@@ -301,6 +379,22 @@ class GeoModel:
 
     def _glm_input(self, X_by_group):
         return np.concatenate([self.gauss[g].transform(X_by_group[g]) for g in self.groups], axis=1)
+
+    def _qn_input(self, X_by_group):
+        return self.qn.transform(np.concatenate([np.asarray(X_by_group[g], float) for g in self.groups], axis=1))
+
+    def fit_glm_qn(self, X_by_group, yi, lam=3e-4, iters=1200):
+        """The second multinomial logit (same design, ridge and class balance as glm) on the rank-Gaussianised raw
+        features (QuantileNormal).  Its evidence "glm_qn" gets its own exponent.  Chosen on CALIB (2-fold by game, live
+        grid, exponents refitted per fold): log P(true country) +0.069 [+0.036, +0.101] over the saved sources; on the
+        real live captures of the world_calib games (exponents out of fold by game, World prior) +0.045 [+0.002,
+        +0.085], No Move points +138 [+17, +276]."""
+        raw = np.concatenate([np.asarray(X_by_group[g], float) for g in self.groups], axis=1)
+        self.qn = QuantileNormal().fit(raw)
+        del raw
+        self.glm_qn = SoftmaxGLM(lam=lam, iters=iters).fit(self._qn_input(X_by_group), yi, len(self.classes))
+        self._fit_hash = None
+        return self
 
     def _embed(self, X_by_group):
         parts = []
@@ -341,6 +435,8 @@ class GeoModel:
         ev["knn"], ev["_d2"] = self._knn_loglr(emb)
         if getattr(self, "glm", None) is not None:
             ev["glm"] = self.glm.loglik(self._glm_input(X_by_group))
+        if getattr(self, "glm_qn", None) is not None:
+            ev["glm_qn"] = self.glm_qn.loglik(self._qn_input(X_by_group))
         if sun_ll is not None:
             ev["sun"] = sun_ll
         if cards_ll is not None:
@@ -383,6 +479,8 @@ class GeoModel:
         lp = lp + w.get("knn", 0.0) * ev["knn"]
         if "glm" in ev:
             lp = lp + w.get("glm", 0.0) * ev["glm"]
+        if "glm_qn" in ev:
+            lp = lp + w.get("glm_qn", 0.0) * ev["glm_qn"]
         if "sun" in ev and ev["sun"] is not None:
             lp = lp + w.get("sun", 0.0) * np.nan_to_num(ev["sun"])
         if "cards" in ev and ev["cards"] is not None:
@@ -391,7 +489,7 @@ class GeoModel:
 
     def calibrate(self, ev, yi, iters=4):
         """Coordinate ascent on the mean log-likelihood of the true class (calib split)."""
-        keys = self.groups + ["knn"] + [k for k in ("glm", "sun", "cards") if k in ev]
+        keys = self.groups + ["knn"] + [k for k in ("glm", "glm_qn", "sun", "cards") if k in ev]
         w = dict(self.weights)
         pm = self.prior_mix
 
@@ -707,6 +805,10 @@ class GeoModel:
         if self.glm is not None:
             arrays["glm.W"] = self.glm.W
             arrays["glm.mcols"] = self.glm.mcols
+        if getattr(self, "glm_qn", None) is not None:
+            arrays["glm_qn.W"] = self.glm_qn.W
+            arrays["glm_qn.mcols"] = self.glm_qn.mcols
+            arrays.update(self.qn.to_arrays())
         for g in self.groups:
             for k, v in self.gauss[g].to_dict().items():
                 arrays[f"g.{g}.{k}"] = v
@@ -720,6 +822,8 @@ class GeoModel:
                 "loc_params": self.loc_params, "region_params": self.region_params, "fit_hash": self.fit_hash()}
         if self.glm is not None and getattr(self.glm, "lam", None) is not None:
             meta["glm"] = {"lam": self.glm.lam, "iters": self.glm.iters}
+        if getattr(self, "glm_qn", None) is not None:
+            meta["glm_qn"] = {"lam": self.glm_qn.lam, "iters": self.glm_qn.iters}
         if self.param_sets:
             meta["param_sets"] = self.param_sets
         json.dump(meta, open(os.path.join(path, "model.json"), "w"), indent=1)
@@ -748,6 +852,12 @@ class GeoModel:
             gp = meta.get("glm") or {"lam": 3e-3, "iters": 400}   # models saved before model.json recorded it
             m.glm = SoftmaxGLM(lam=gp["lam"], iters=gp["iters"])
             m.glm.W, m.glm.mcols = z["glm.W"], z["glm.mcols"].astype(bool)
+        m.glm_qn = m.qn = None
+        if "glm_qn.W" in z.files:
+            gp = meta.get("glm_qn") or {"lam": 3e-4, "iters": 1200}
+            m.glm_qn = SoftmaxGLM(lam=gp["lam"], iters=gp["iters"])
+            m.glm_qn.W, m.glm_qn.mcols = z["glm_qn.W"], z["glm_qn.mcols"].astype(bool)
+            m.qn = QuantileNormal.from_arrays(z)
         m.gauss = {}
         for g in m.groups:
             m.gauss[g] = GroupGaussian.from_dict({k.split(".", 2)[2]: z[k] for k in z.files if k.startswith(f"g.{g}.")})

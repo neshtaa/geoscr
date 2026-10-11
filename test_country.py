@@ -346,5 +346,56 @@ class TestFlagDetector(unittest.TestCase):
         self.assertTrue(np.all(np.isnan(x[:len(F.TEMPLATES)])))
 
 
+class TestQuantileGLM(unittest.TestCase):
+    """The second GLM on rank-Gaussianised features (GeoModel.fit_glm_qn, evidence "glm_qn")."""
+
+    def test_probit_and_quantile_normal(self):
+        from engine.model import QuantileNormal, probit
+        u = np.array([1e-4, 0.01, 0.3, 0.5, 0.8, 0.99, 1 - 1e-4])
+        z = probit(u)
+        # the rational approximation is good to ~1e-5 in z in the tails (the fitted GLM uses exactly this transform)
+        np.testing.assert_allclose(0.5 * (1 + np.vectorize(math.erf)(z / math.sqrt(2))), u, rtol=1e-4, atol=1e-6)
+        rs = np.random.RandomState(0)
+        X = np.c_[rs.exponential(size=2000), np.r_[rs.randn(1990), np.full(10, np.nan)], np.ones(2000)]
+        q = QuantileNormal(K=201).fit(X)
+        Z = q.transform(X)
+        self.assertTrue(np.isnan(Z[-10:, 1]).all() and np.isfinite(Z[:-10, 1]).all())
+        o = np.argsort(X[:, 0])
+        self.assertTrue(np.all(np.diff(Z[o, 0]) >= -1e-12))           # monotone
+        self.assertLess(abs(np.mean(Z[:, 0])), 0.05)                     # ~ standard normal ranks
+        self.assertAlmostEqual(float(np.std(Z[:, 0])), 1.0, delta=0.05)
+        self.assertTrue(np.all(Z[:, 2] == Z[0, 2]))                      # constant feature: one value
+        q2 = QuantileNormal.from_arrays(q.to_arrays())
+        np.testing.assert_array_equal(q2.transform(X), Z)
+
+    def test_fit_evidence_save_load(self):
+        from engine.model import GeoModel
+        rs = np.random.RandomState(1)
+        n, C = 300, 3
+        y = np.repeat(np.arange(C), n // C)
+        Xa = rs.randn(n, 4) + y[:, None] * 0.8
+        Xb = np.exp(rs.randn(n, 3) + y[:, None] * 0.5)
+        Xb[rs.rand(n) < 0.1, 0] = np.nan
+        m = GeoModel().fit({"a": Xa, "b": Xb}, [("AA", "BB", "CC")[k] for k in y],
+                           rs.uniform(-60, 60, n), rs.uniform(-180, 180, n), np.ones(n, bool), min_count=2, knn_k=5)
+        self.assertIsNotNone(m.glm_qn)
+        ev = m.evidence({"a": Xa[:20], "b": Xb[:20]})
+        self.assertIn("glm_qn", ev)
+        self.assertGreater(np.mean(np.argmax(ev["glm_qn"], 1) == y[:20]), 0.5)
+        h0 = m.fit_hash()
+        w = dict(m.weights, glm_qn=0.5)
+        lp = m.combine(ev, w)
+        self.assertFalse(np.allclose(lp, m.combine(ev, dict(w, glm_qn=0.0))))
+        with tempfile.TemporaryDirectory() as d:
+            m.save(d)
+            m2 = GeoModel.load(d)
+            self.assertEqual(m2.fit_hash(), h0)
+            # the knots are views of ONE loaded array (an npz read per feature kept 761 full copies: 5 GB per process)
+            self.assertEqual(len({id(k[0].base) for k in m2.qn.knots}), 1)
+            np.testing.assert_allclose(m2.evidence({"a": Xa[:20], "b": Xb[:20]})["glm_qn"], ev["glm_qn"])
+            meta = json.load(open(os.path.join(d, "model.json")))
+            self.assertEqual(meta["glm_qn"], {"lam": 3e-4, "iters": 1200})
+
+
 if __name__ == "__main__":
     unittest.main()

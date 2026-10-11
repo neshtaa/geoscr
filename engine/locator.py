@@ -145,7 +145,7 @@ class Locator:
         contrib = {}
         for c in order[:n_hint_countries]:
             row = {}
-            for g in m.groups + ["knn"] + [k for k in ("glm", "sun", "cards") if k in ev]:
+            for g in m.groups + ["knn"] + [k for k in ("glm", "glm_qn", "sun", "cards") if k in ev]:
                 w = setup["weights"].get(g, 0.0)
                 e = ev[g][0]
                 row[g] = round(float(w * (e[c] - np.dot(prior, e))), 2)

@@ -21,6 +21,10 @@ Fit, calibrate and evaluate the country/location model.
   python3 tools/train_model.py --refit-glm 3e-4,1200 [--calib-only] [--save]
                                                             only the GLM refitted (ridge / iterations) + the
                                                             calibrations that depend on the posterior
+  python3 tools/train_model.py --add-qn 3e-4,1200 [--calib-only] [--save]
+                                                            the second GLM (rank-Gaussianised features, evidence
+                                                            "glm_qn") fitted into the saved model + the same
+                                                            recalibrations as --refit-glm
   python3 tools/train_model.py --calibrate-maps --calib-only --save
                                                             map-aware prior recalibrated on CALIB (e.g. after
                                                             tools/build_priors.py), no TEST report
@@ -1429,16 +1433,20 @@ def cmd_refit_glm(args, recs, mats, tr, ca, te, ot):
     region kernels (calibrate_location) and the map-aware prior (calibrate_maps; per-map parameters kept, refit
     them with --world).  The views parameter set and regions_params.json are not touched."""
     from engine.model import SoftmaxGLM
-    lam, iters = (float(v) for v in args.refit_glm.split(","))
+    lam, iters = (float(v) for v in (args.add_qn or args.refit_glm).split(","))
     model = GeoModel.load()
     cidx = {c: i for i, c in enumerate(model.classes)}
     trk = np.array([i for i in tr if recs[i]["label"] in cidx])
     yi = np.array([cidx[recs[i]["label"]] for i in trk])
     t0 = time.time()
-    model.glm = SoftmaxGLM(lam=lam, iters=int(iters)).fit(model._glm_input({g: mats[g][trk] for g in model.groups}),
-                                                         yi, len(model.classes))
+    if args.add_qn:  # --add-qn: the second GLM on rank-Gaussianised features (GeoModel.fit_glm_qn); glm unchanged
+        model.fit_glm_qn({g: mats[g][trk] for g in model.groups}, yi, lam=lam, iters=int(iters))
+    else:
+        model.glm = SoftmaxGLM(lam=lam, iters=int(iters)).fit(model._glm_input({g: mats[g][trk] for g in model.groups}),
+                                                             yi, len(model.classes))
     model._fit_hash = None
-    print("GLM refit (lambda %g, %d iterations) on %d training panoramas: %.0fs" % (lam, iters, len(trk), time.time() - t0))
+    print("%s (lambda %g, %d iterations) on %d training panoramas: %.0fs"
+          % ("qn GLM fit" if args.add_qn else "GLM refit", lam, iters, len(trk), time.time() - t0))
 
     def ev_for(rows):
         ev = model.evidence({g: mats[g][rows] for g in model.groups})
@@ -1448,6 +1456,8 @@ def cmd_refit_glm(args, recs, mats, tr, ca, te, ot):
     yca = np.array([cidx.get(recs[i]["label"], -1) for i in ca])
     ok = yca >= 0
     model.weights = dict({g: 0.3 for g in model.groups}, knn=0.5, glm=0.7, sun=0.0)
+    if getattr(model, "glm_qn", None) is not None:
+        model.weights["glm_qn"] = 0.0
     model.prior_mix = 0.5
     ll = model.calibrate({k: (v[ok] if isinstance(v, np.ndarray) else v) for k, v in ev_ca.items()}, yca[ok])
     print("calibrated weights:", json.dumps({k: round(v, 3) for k, v in model.weights.items()}),
@@ -1497,6 +1507,9 @@ def main():
     ap.add_argument("--refit-glm", default="", metavar="LAM,ITERS",
                     help="saved model: refit only the GLM (ridge LAM, ITERS iterations) and recalibrate the exponents, "
                          "kernels and map-aware prior on calib")
+    ap.add_argument("--add-qn", default="", metavar="LAM,ITERS",
+                    help="fit the second GLM on rank-Gaussianised features (e.g. 3e-4,1200) into the saved model, then "
+                         "the same recalibrations as --refit-glm")
     ap.add_argument("--world", action="store_true",
                     help="saved model: the official World map's prior mixture on the world_calib games "
                          "(tools/world_play.py live answers) -> priors.json params maps[World id] with --save")
@@ -1542,7 +1555,7 @@ def main():
     if args.views:
         cmd_views(args, recs, ca, te, mats)
         return
-    if args.refit_glm:
+    if args.refit_glm or args.add_qn:
         cmd_refit_glm(args, recs, mats, tr, ca, te, ot)
         return
     if args.eval_only or args.calibrate_maps or args.calibrate_cards:

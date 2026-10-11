@@ -3,35 +3,35 @@
  "world_calib": {
   "family": "map+map_ranked",
   "model": "e28b16ec64bb",
-  "fit": "43571a4dc594",
-  "shared": "935ced95fc01",
+  "fit": "b4858d02dbdf",
+  "shared": "0bc71c94bb27",
   "calib_answers": 294,
   "calib_rounds": 219,
   "calib_games": 44,
-  "calib_loglik": -2.2024,
-  "calib_loglik_shared": -2.2667,
-  "calib_loglik_ranked_without_counts": -2.3389,
-  "calib_loglik_played": -2.2889,
+  "calib_loglik": -2.1465,
+  "calib_loglik_shared": -2.2015,
+  "calib_loglik_ranked_without_counts": -2.2554,
+  "calib_loglik_played": -2.2491,
   "counts_minus_ranked": {
-   "diff": 0.0723,
+   "diff": 0.054,
    "ci95_rounds": [
-    0.0424,
-    0.104
+    0.0279,
+    0.0807
    ],
    "ci95": [
-    0.0437,
-    0.1034
+    0.0295,
+    0.0811
    ],
    "clusters": 44
   },
   "cv": {
    "shared": {
-    "cv_loglik": -2.2667,
+    "cv_loglik": -2.2015,
     "minus_shared": {
      "diff": -0.0,
      "ci95_rounds": [
       -0.0,
-      -0.0
+      0.0
      ],
      "ci95": [
       -0.0,
@@ -41,90 +41,90 @@
     }
    },
    "prior_mix": {
-    "cv_loglik": -2.2144,
+    "cv_loglik": -2.158,
     "minus_shared": {
-     "diff": 0.0523,
+     "diff": 0.0434,
      "ci95_rounds": [
-      0.0116,
-      0.0937
+      0.0037,
+      0.0834
      ],
      "ci95": [
-      0.0185,
-      0.0849
+      0.0103,
+      0.0759
      ],
      "clusters": 44
     }
    },
    "map": {
-    "cv_loglik": -2.2292,
+    "cv_loglik": -2.1723,
     "minus_shared": {
-     "diff": 0.0375,
+     "diff": 0.0292,
      "ci95_rounds": [
-      0.0043,
-      0.073
+      0.0,
+      0.0604
      ],
      "ci95": [
-      0.0089,
-      0.0681
+      0.0033,
+      0.0558
      ],
      "clusters": 44
     }
    },
    "map+prior_mix": {
-    "cv_loglik": -2.2157,
+    "cv_loglik": -2.1602,
     "minus_shared": {
-     "diff": 0.0509,
+     "diff": 0.0412,
      "ci95_rounds": [
-      0.0092,
-      0.093
+      0.0033,
+      0.0795
      ],
      "ci95": [
-      0.0173,
-      0.0849
+      0.0094,
+      0.0722
      ],
      "clusters": 44
     }
    },
    "map+map_ranked": {
-    "cv_loglik": -2.2069,
+    "cv_loglik": -2.1498,
     "minus_shared": {
-     "diff": 0.0598,
+     "diff": 0.0517,
      "ci95_rounds": [
-      0.02,
-      0.1004
+      0.0174,
+      0.0868
      ],
      "ci95": [
-      0.0234,
-      0.0978
+      0.0196,
+      0.083
      ],
      "clusters": 44
     }
    },
    "full": {
-    "cv_loglik": -2.2137,
+    "cv_loglik": -2.1551,
     "minus_shared": {
-     "diff": 0.053,
+     "diff": 0.0464,
      "ci95_rounds": [
-      0.0073,
-      0.0984
+      0.0034,
+      0.0886
      ],
      "ci95": [
-      0.0124,
-      0.0934
+      0.0067,
+      0.0826
      ],
      "clusters": 44
     }
    }
   },
   "cv_scale_gain": {
-   "diff": 0.0055,
+   "diff": -0.0067,
    "ci95_rounds": [
-    -0.0113,
-    0.0228
+    -0.0187,
+    0.0057
    ],
    "ci95": [
-    -0.0136,
-    0.0262
+    -0.0195,
+    0.0066
    ],
    "clusters": 44
   },
@@ -134,6 +134,6 @@
    "map": 0.4,
    "map_ranked": 0.5
   },
-  "prior_mix": 0.0
+  "prior_mix": 0.1
  }
 }

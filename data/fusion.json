@@ -1,6 +1,6 @@
 {
  "params": {
-  "rho": 0.6,
+  "rho": 0.75,
   "d2": "mean",
   "max_captures": 8,
   "dup_ratio": 0.06224
@@ -18,59 +18,59 @@
    "no_map": {
     "walk": {
      "mean_log_p_true": [
-      -2.5734,
-      -2.4233,
-      -2.3113,
-      -2.2269,
-      -2.1632,
-      -2.0802,
-      -2.0377,
-      -2.0221,
-      -2.0248,
-      -2.0404,
-      -2.0651,
-      -2.0964,
-      -2.1323
+      -2.5029,
+      -2.341,
+      -2.2178,
+      -2.1226,
+      -2.0485,
+      -1.9457,
+      -1.8851,
+      -1.8531,
+      -1.8411,
+      -1.8436,
+      -1.8567,
+      -1.8778,
+      -1.9048
      ],
-     "best": 0.5,
+     "best": 0.6,
      "rows": 865
     },
     "short": {
      "mean_log_p_true": [
-      -2.4885,
-      -2.438,
-      -2.3955,
-      -2.3598,
-      -2.3301,
-      -2.2858,
-      -2.2576,
-      -2.2419,
-      -2.2361,
-      -2.2382,
-      -2.2465,
-      -2.2598,
-      -2.277
+      -2.4174,
+      -2.3568,
+      -2.3046,
+      -2.2597,
+      -2.2212,
+      -2.1604,
+      -2.1174,
+      -2.0882,
+      -2.0702,
+      -2.0612,
+      -2.0594,
+      -2.0635,
+      -2.0725
      ],
-     "best": 0.6,
+     "best": 0.8,
      "rows": 291
     },
     "pooled": {
      "mean_log_p_true": [
-      -2.552,
-      -2.427,
-      -2.3325,
-      -2.2604,
-      -2.2052,
-      -2.1319,
-      -2.0931,
-      -2.0774,
-      -2.078,
-      -2.0902,
-      -2.1108,
-      -2.1375,
-      -2.1687
+      -2.4814,
+      -2.345,
+      -2.2397,
+      -2.1571,
+      -2.0919,
+      -1.9997,
+      -1.9436,
+      -1.9123,
+      -1.8988,
+      -1.8984,
+      -1.9078,
+      -1.9246,
+      -1.947
      ],
-     "best": 0.5,
+     "best": 0.7,
      "rows": 1156
     },
     "grid": [
@@ -92,57 +92,57 @@
    "map": {
     "walk": {
      "mean_log_p_true": [
-      -2.4575,
-      -2.3074,
-      -2.1953,
-      -2.1105,
-      -2.0463,
-      -1.9618,
-      -1.9173,
-      -1.8992,
-      -1.8991,
-      -1.9117,
-      -1.9332,
-      -1.9613,
-      -1.9939
+      -2.2726,
+      -2.1335,
+      -2.0293,
+      -1.9503,
+      -1.8904,
+      -1.8113,
+      -1.7698,
+      -1.7535,
+      -1.7547,
+      -1.7682,
+      -1.7906,
+      -1.8195,
+      -1.8531
      ],
-     "best": 0.6,
+     "best": 0.5,
      "rows": 865
     },
     "short": {
      "mean_log_p_true": [
-      -2.3834,
-      -2.3317,
-      -2.2879,
-      -2.251,
-      -2.22,
-      -2.173,
-      -2.1421,
-      -2.1236,
-      -2.1151,
-      -2.1143,
-      -2.1197,
-      -2.1301,
-      -2.1445
+      -2.2088,
+      -2.1603,
+      -2.1192,
+      -2.0847,
+      -2.0558,
+      -2.0122,
+      -1.9841,
+      -1.968,
+      -1.9615,
+      -1.9625,
+      -1.9695,
+      -1.9814,
+      -1.9971
      ],
-     "best": 0.7,
+     "best": 0.6,
      "rows": 291
     },
     "pooled": {
      "mean_log_p_true": [
-      -2.4389,
-      -2.3135,
-      -2.2186,
-      -2.1459,
-      -2.0901,
-      -2.015,
-      -1.9739,
-      -1.9557,
-      -1.9535,
-      -1.9627,
-      -1.9802,
-      -2.0038,
-      -2.0318
+      -2.2565,
+      -2.1402,
+      -2.0519,
+      -1.9842,
+      -1.932,
+      -1.8619,
+      -1.8238,
+      -1.8075,
+      -1.8067,
+      -1.8171,
+      -1.8356,
+      -1.8603,
+      -1.8894
      ],
      "best": 0.6,
      "rows": 1156
@@ -168,570 +168,570 @@
    "p0_0": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.3737,
-     "top3": 0.5979,
-     "top5": 0.694,
-     "mean_log_p_true": -2.4105,
-     "points": 2331.2987,
-     "points_map_formula": 2302.4128,
-     "median_km": 942.8378
+     "top1": 0.4199,
+     "top3": 0.6335,
+     "top5": 0.7438,
+     "mean_log_p_true": -2.2567,
+     "points": 2473.9941,
+     "points_map_formula": 2442.0747,
+     "median_km": 818.254
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.4626,
-     "top3": 0.6584,
-     "top5": 0.7687,
-     "mean_log_p_true": -2.3044,
-     "points": 2606.4637,
-     "points_map_formula": 2573.0854,
-     "median_km": 703.8316
+     "top1": 0.4911,
+     "top3": 0.7082,
+     "top5": 0.7936,
+     "mean_log_p_true": -2.1895,
+     "points": 2714.778,
+     "points_map_formula": 2682.605,
+     "median_km": 642.0077
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.4555,
-     "top3": 0.7153,
-     "top5": 0.7936,
-     "mean_log_p_true": -2.4932,
-     "points": 2612.0323,
-     "points_map_formula": 2579.669,
-     "median_km": 729.0272
+     "top1": 0.5053,
+     "top3": 0.7438,
+     "top5": 0.8256,
+     "mean_log_p_true": -2.4468,
+     "points": 2915.9629,
+     "points_map_formula": 2884.8754,
+     "median_km": 495.4355
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.4982,
-     "top3": 0.7367,
-     "top5": 0.7972,
-     "mean_log_p_true": -2.8623,
-     "points": 2831.9743,
-     "points_map_formula": 2800.6299,
-     "median_km": 561.1295
+     "top1": 0.5338,
+     "top3": 0.758,
+     "top5": 0.8363,
+     "mean_log_p_true": -2.8016,
+     "points": 3013.5955,
+     "points_map_formula": 2981.4947,
+     "median_km": 499.5419
     }
    },
    "p0_0.25": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.3737,
-     "top3": 0.5979,
-     "top5": 0.694,
-     "mean_log_p_true": -2.4105,
-     "points": 2331.2987,
-     "points_map_formula": 2302.4128,
-     "median_km": 942.8378
+     "top1": 0.4199,
+     "top3": 0.6335,
+     "top5": 0.7438,
+     "mean_log_p_true": -2.2567,
+     "points": 2473.9941,
+     "points_map_formula": 2442.0747,
+     "median_km": 818.254
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.4626,
-     "top3": 0.6548,
-     "top5": 0.7616,
-     "mean_log_p_true": -2.1588,
-     "points": 2567.3411,
-     "points_map_formula": 2533.2456,
-     "median_km": 731.0629
+     "top1": 0.484,
+     "top3": 0.6975,
+     "top5": 0.7972,
+     "mean_log_p_true": -2.0082,
+     "points": 2732.9304,
+     "points_map_formula": 2700.9004,
+     "median_km": 640.8876
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.452,
-     "top3": 0.7117,
-     "top5": 0.8007,
-     "mean_log_p_true": -2.0626,
-     "points": 2658.1241,
-     "points_map_formula": 2624.5018,
-     "median_km": 679.5682
+     "top1": 0.5125,
+     "top3": 0.7438,
+     "top5": 0.8292,
+     "mean_log_p_true": -1.9486,
+     "points": 2978.9675,
+     "points_map_formula": 2947.3737,
+     "median_km": 479.9467
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.4911,
-     "top3": 0.7295,
-     "top5": 0.8007,
-     "mean_log_p_true": -2.0551,
-     "points": 2848.7635,
-     "points_map_formula": 2815.9253,
-     "median_km": 541.5569
+     "top1": 0.5338,
+     "top3": 0.7544,
+     "top5": 0.8399,
+     "mean_log_p_true": -1.939,
+     "points": 3034.9605,
+     "points_map_formula": 3003.1993,
+     "median_km": 455.133
     }
    },
    "p0_0.5": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.3737,
-     "top3": 0.5979,
-     "top5": 0.694,
-     "mean_log_p_true": -2.4105,
-     "points": 2331.2987,
-     "points_map_formula": 2302.4128,
-     "median_km": 942.8378
+     "top1": 0.4199,
+     "top3": 0.6335,
+     "top5": 0.7438,
+     "mean_log_p_true": -2.2567,
+     "points": 2473.9941,
+     "points_map_formula": 2442.0747,
+     "median_km": 818.254
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.452,
-     "top3": 0.6477,
-     "top5": 0.758,
-     "mean_log_p_true": -2.1205,
-     "points": 2621.7953,
-     "points_map_formula": 2586.5801,
-     "median_km": 693.1621
+     "top1": 0.4804,
+     "top3": 0.6904,
+     "top5": 0.7972,
+     "mean_log_p_true": -1.9406,
+     "points": 2698.8016,
+     "points_map_formula": 2665.4626,
+     "median_km": 645.46
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.4555,
-     "top3": 0.694,
-     "top5": 0.7936,
-     "mean_log_p_true": -1.9715,
-     "points": 2654.861,
-     "points_map_formula": 2619.7224,
-     "median_km": 698.147
+     "top1": 0.5196,
+     "top3": 0.7402,
+     "top5": 0.8221,
+     "mean_log_p_true": -1.8079,
+     "points": 2989.2546,
+     "points_map_formula": 2957.0996,
+     "median_km": 472.4522
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.4875,
-     "top3": 0.7224,
-     "top5": 0.8043,
-     "mean_log_p_true": -1.9055,
-     "points": 2878.6254,
-     "points_map_formula": 2845.0249,
-     "median_km": 542.0793
+     "top1": 0.5516,
+     "top3": 0.7616,
+     "top5": 0.8363,
+     "mean_log_p_true": -1.7369,
+     "points": 3094.0614,
+     "points_map_formula": 3062.1815,
+     "median_km": 403.6203
     }
    },
    "p0_0.6": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.3737,
-     "top3": 0.5979,
-     "top5": 0.694,
-     "mean_log_p_true": -2.4105,
-     "points": 2331.2987,
-     "points_map_formula": 2302.4128,
-     "median_km": 942.8378
+     "top1": 0.4199,
+     "top3": 0.6335,
+     "top5": 0.7438,
+     "mean_log_p_true": -2.2567,
+     "points": 2473.9941,
+     "points_map_formula": 2442.0747,
+     "median_km": 818.254
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.452,
-     "top3": 0.6548,
-     "top5": 0.758,
-     "mean_log_p_true": -2.1228,
-     "points": 2639.3371,
-     "points_map_formula": 2604.0641,
-     "median_km": 665.6625
+     "top1": 0.484,
+     "top3": 0.6904,
+     "top5": 0.7972,
+     "mean_log_p_true": -1.933,
+     "points": 2686.0807,
+     "points_map_formula": 2652.8505,
+     "median_km": 683.037
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.4591,
-     "top3": 0.6904,
-     "top5": 0.7972,
-     "mean_log_p_true": -1.9758,
-     "points": 2668.9815,
-     "points_map_formula": 2633.4057,
-     "median_km": 709.5439
+     "top1": 0.5231,
+     "top3": 0.7331,
+     "top5": 0.8221,
+     "mean_log_p_true": -1.7961,
+     "points": 2956.9523,
+     "points_map_formula": 2924.6335,
+     "median_km": 507.5017
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.4911,
-     "top3": 0.7117,
-     "top5": 0.8043,
-     "mean_log_p_true": -1.9082,
-     "points": 2911.8928,
-     "points_map_formula": 2878.7473,
-     "median_km": 533.3549
+     "top1": 0.5552,
+     "top3": 0.758,
+     "top5": 0.8327,
+     "mean_log_p_true": -1.7219,
+     "points": 3071.9972,
+     "points_map_formula": 3039.4199,
+     "median_km": 406.1988
     }
    },
    "p0_0.75": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.3737,
-     "top3": 0.5979,
-     "top5": 0.694,
-     "mean_log_p_true": -2.4105,
-     "points": 2331.2987,
-     "points_map_formula": 2302.4128,
-     "median_km": 942.8378
+     "top1": 0.4199,
+     "top3": 0.6335,
+     "top5": 0.7438,
+     "mean_log_p_true": -2.2567,
+     "points": 2473.9941,
+     "points_map_formula": 2442.0747,
+     "median_km": 818.254
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.452,
-     "top3": 0.6512,
-     "top5": 0.7473,
-     "mean_log_p_true": -2.139,
-     "points": 2671.585,
-     "points_map_formula": 2636.4591,
-     "median_km": 662.6116
+     "top1": 0.4769,
+     "top3": 0.6904,
+     "top5": 0.7972,
+     "mean_log_p_true": -1.9357,
+     "points": 2702.1029,
+     "points_map_formula": 2668.3096,
+     "median_km": 643.0123
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.4448,
-     "top3": 0.6797,
-     "top5": 0.79,
-     "mean_log_p_true": -2.006,
-     "points": 2723.5556,
-     "points_map_formula": 2687.9893,
-     "median_km": 643.1239
+     "top1": 0.5267,
+     "top3": 0.7295,
+     "top5": 0.8185,
+     "mean_log_p_true": -1.8055,
+     "points": 2995.8237,
+     "points_map_formula": 2963.1068,
+     "median_km": 504.2297
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.4804,
-     "top3": 0.7046,
-     "top5": 0.7972,
-     "mean_log_p_true": -1.945,
-     "points": 2906.1064,
-     "points_map_formula": 2872.4057,
-     "median_km": 533.3549
+     "top1": 0.5516,
+     "top3": 0.7509,
+     "top5": 0.8292,
+     "mean_log_p_true": -1.7357,
+     "points": 3074.7311,
+     "points_map_formula": 3042.3737,
+     "median_km": 406.1988
     }
    },
    "p0_1": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.3737,
-     "top3": 0.5979,
-     "top5": 0.694,
-     "mean_log_p_true": -2.4105,
-     "points": 2331.2987,
-     "points_map_formula": 2302.4128,
-     "median_km": 942.8378
+     "top1": 0.4199,
+     "top3": 0.6335,
+     "top5": 0.7438,
+     "mean_log_p_true": -2.2567,
+     "points": 2473.9941,
+     "points_map_formula": 2442.0747,
+     "median_km": 818.254
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.4377,
-     "top3": 0.6477,
-     "top5": 0.7473,
-     "mean_log_p_true": -2.1888,
-     "points": 2681.1311,
-     "points_map_formula": 2647.1459,
-     "median_km": 662.6116
+     "top1": 0.4804,
+     "top3": 0.694,
+     "top5": 0.7936,
+     "mean_log_p_true": -1.9669,
+     "points": 2704.4847,
+     "points_map_formula": 2671.5623,
+     "median_km": 644.5427
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.4413,
-     "top3": 0.6868,
-     "top5": 0.7829,
-     "mean_log_p_true": -2.0935,
-     "points": 2714.2861,
-     "points_map_formula": 2679.3843,
-     "median_km": 653.9924
+     "top1": 0.5302,
+     "top3": 0.7189,
+     "top5": 0.8149,
+     "mean_log_p_true": -1.8663,
+     "points": 2984.1524,
+     "points_map_formula": 2950.1566,
+     "median_km": 511.7441
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.4662,
-     "top3": 0.7011,
-     "top5": 0.8007,
-     "mean_log_p_true": -2.0533,
-     "points": 2905.1874,
-     "points_map_formula": 2871.3416,
-     "median_km": 546.7337
+     "top1": 0.548,
+     "top3": 0.7473,
+     "top5": 0.8221,
+     "mean_log_p_true": -1.815,
+     "points": 3067.5232,
+     "points_map_formula": 3033.2918,
+     "median_km": 443.7673
     }
    },
    "p1_0": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.4164,
-     "top3": 0.6121,
-     "top5": 0.7224,
-     "mean_log_p_true": -2.2655,
-     "points": 2415.5394,
-     "points_map_formula": 2384.5302,
-     "median_km": 856.23
+     "top1": 0.4448,
+     "top3": 0.6477,
+     "top5": 0.7616,
+     "mean_log_p_true": -2.145,
+     "points": 2576.1638,
+     "points_map_formula": 2544.9609,
+     "median_km": 787.2326
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.4982,
-     "top3": 0.6726,
-     "top5": 0.7651,
-     "mean_log_p_true": -2.1825,
-     "points": 2673.5861,
-     "points_map_formula": 2642.3772,
-     "median_km": 642.9229
+     "top1": 0.5231,
+     "top3": 0.7117,
+     "top5": 0.8043,
+     "mean_log_p_true": -2.0061,
+     "points": 2821.6568,
+     "points_map_formula": 2789.968,
+     "median_km": 549.6239
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.4875,
-     "top3": 0.7153,
-     "top5": 0.8114,
-     "mean_log_p_true": -2.3724,
-     "points": 2724.8101,
-     "points_map_formula": 2692.4662,
-     "median_km": 663.0442
+     "top1": 0.5338,
+     "top3": 0.7331,
+     "top5": 0.8292,
+     "mean_log_p_true": -2.2101,
+     "points": 2931.0334,
+     "points_map_formula": 2900.8861,
+     "median_km": 493.4052
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.516,
-     "top3": 0.726,
-     "top5": 0.8043,
-     "mean_log_p_true": -2.7442,
-     "points": 2829.2758,
-     "points_map_formula": 2797.5552,
-     "median_km": 582.1616
+     "top1": 0.5587,
+     "top3": 0.7651,
+     "top5": 0.8292,
+     "mean_log_p_true": -2.5244,
+     "points": 3036.7615,
+     "points_map_formula": 3005.516,
+     "median_km": 479.7062
     }
    },
    "p1_0.25": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.4164,
-     "top3": 0.6121,
-     "top5": 0.7224,
-     "mean_log_p_true": -2.2655,
-     "points": 2415.5394,
-     "points_map_formula": 2384.5302,
-     "median_km": 856.23
+     "top1": 0.4448,
+     "top3": 0.6477,
+     "top5": 0.7616,
+     "mean_log_p_true": -2.145,
+     "points": 2576.1638,
+     "points_map_formula": 2544.9609,
+     "median_km": 787.2326
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.5125,
-     "top3": 0.6797,
-     "top5": 0.7687,
-     "mean_log_p_true": -2.0323,
-     "points": 2758.6378,
-     "points_map_formula": 2725.2989,
-     "median_km": 578.0973
+     "top1": 0.5231,
+     "top3": 0.7117,
+     "top5": 0.8078,
+     "mean_log_p_true": -1.8703,
+     "points": 2823.3395,
+     "points_map_formula": 2791.8221,
+     "median_km": 569.8199
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.5018,
-     "top3": 0.7153,
-     "top5": 0.8078,
-     "mean_log_p_true": -1.9416,
-     "points": 2783.864,
-     "points_map_formula": 2750.1993,
-     "median_km": 613.1321
+     "top1": 0.5516,
+     "top3": 0.7438,
+     "top5": 0.8399,
+     "mean_log_p_true": -1.7998,
+     "points": 3032.0084,
+     "points_map_formula": 3000.7331,
+     "median_km": 464.9424
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.5302,
-     "top3": 0.7331,
-     "top5": 0.8007,
-     "mean_log_p_true": -1.9382,
-     "points": 2957.651,
-     "points_map_formula": 2922.8185,
-     "median_km": 499.4952
+     "top1": 0.5623,
+     "top3": 0.758,
+     "top5": 0.8399,
+     "mean_log_p_true": -1.7834,
+     "points": 3095.3524,
+     "points_map_formula": 3063.4164,
+     "median_km": 412.446
     }
    },
    "p1_0.5": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.4164,
-     "top3": 0.6121,
-     "top5": 0.7224,
-     "mean_log_p_true": -2.2655,
-     "points": 2415.5394,
-     "points_map_formula": 2384.5302,
-     "median_km": 856.23
+     "top1": 0.4448,
+     "top3": 0.6477,
+     "top5": 0.7616,
+     "mean_log_p_true": -2.145,
+     "points": 2576.1638,
+     "points_map_formula": 2544.9609,
+     "median_km": 787.2326
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.5089,
-     "top3": 0.6797,
-     "top5": 0.7722,
-     "mean_log_p_true": -1.9884,
-     "points": 2774.6407,
-     "points_map_formula": 2741.21,
-     "median_km": 570.2833
+     "top1": 0.516,
+     "top3": 0.7153,
+     "top5": 0.8114,
+     "mean_log_p_true": -1.8343,
+     "points": 2840.1196,
+     "points_map_formula": 2808.8434,
+     "median_km": 557.507
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.5018,
-     "top3": 0.7224,
-     "top5": 0.8185,
-     "mean_log_p_true": -1.8456,
-     "points": 2832.3086,
-     "points_map_formula": 2798.2847,
-     "median_km": 565.9663
+     "top1": 0.5409,
+     "top3": 0.7402,
+     "top5": 0.8292,
+     "mean_log_p_true": -1.7079,
+     "points": 3049.1114,
+     "points_map_formula": 3017.8648,
+     "median_km": 445.1545
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.5302,
-     "top3": 0.7295,
-     "top5": 0.8114,
-     "mean_log_p_true": -1.7836,
-     "points": 3041.7078,
-     "points_map_formula": 3007.6085,
-     "median_km": 445.4812
+     "top1": 0.5623,
+     "top3": 0.7616,
+     "top5": 0.8505,
+     "mean_log_p_true": -1.6395,
+     "points": 3183.0554,
+     "points_map_formula": 3150.5694,
+     "median_km": 379.4164
     }
    },
    "p1_0.6": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.4164,
-     "top3": 0.6121,
-     "top5": 0.7224,
-     "mean_log_p_true": -2.2655,
-     "points": 2415.5394,
-     "points_map_formula": 2384.5302,
-     "median_km": 856.23
+     "top1": 0.4448,
+     "top3": 0.6477,
+     "top5": 0.7616,
+     "mean_log_p_true": -2.145,
+     "points": 2576.1638,
+     "points_map_formula": 2544.9609,
+     "median_km": 787.2326
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.5053,
-     "top3": 0.6762,
-     "top5": 0.7651,
-     "mean_log_p_true": -1.9883,
-     "points": 2797.8579,
-     "points_map_formula": 2764.669,
-     "median_km": 557.0883
+     "top1": 0.5125,
+     "top3": 0.7153,
+     "top5": 0.8078,
+     "mean_log_p_true": -1.8366,
+     "points": 2830.2978,
+     "points_map_formula": 2798.4591,
+     "median_km": 583.6467
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.5018,
-     "top3": 0.7295,
-     "top5": 0.8185,
-     "mean_log_p_true": -1.8471,
-     "points": 2832.3554,
-     "points_map_formula": 2798.8292,
-     "median_km": 578.5804
+     "top1": 0.5338,
+     "top3": 0.7402,
+     "top5": 0.8292,
+     "mean_log_p_true": -1.7098,
+     "points": 3031.6965,
+     "points_map_formula": 3001.1566,
+     "median_km": 424.5195
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.5338,
-     "top3": 0.7331,
-     "top5": 0.8149,
-     "mean_log_p_true": -1.7832,
-     "points": 3058.4137,
-     "points_map_formula": 3024.0356,
-     "median_km": 425.6799
+     "top1": 0.573,
+     "top3": 0.7544,
+     "top5": 0.8434,
+     "mean_log_p_true": -1.6401,
+     "points": 3189.9327,
+     "points_map_formula": 3157.5445,
+     "median_km": 372.9876
     }
    },
    "p1_0.75": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.4164,
-     "top3": 0.6121,
-     "top5": 0.7224,
-     "mean_log_p_true": -2.2655,
-     "points": 2415.5394,
-     "points_map_formula": 2384.5302,
-     "median_km": 856.23
+     "top1": 0.4448,
+     "top3": 0.6477,
+     "top5": 0.7616,
+     "mean_log_p_true": -2.145,
+     "points": 2576.1638,
+     "points_map_formula": 2544.9609,
+     "median_km": 787.2326
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.4982,
-     "top3": 0.6762,
-     "top5": 0.7651,
-     "mean_log_p_true": -2.0007,
-     "points": 2821.144,
-     "points_map_formula": 2787.7509,
-     "median_km": 557.0883
+     "top1": 0.5089,
+     "top3": 0.7224,
+     "top5": 0.8078,
+     "mean_log_p_true": -1.8519,
+     "points": 2842.9833,
+     "points_map_formula": 2810.1957,
+     "median_km": 579.605
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.5018,
-     "top3": 0.7224,
-     "top5": 0.8043,
-     "mean_log_p_true": -1.8727,
-     "points": 2861.0915,
-     "points_map_formula": 2828.3559,
-     "median_km": 570.2818
+     "top1": 0.5338,
+     "top3": 0.7438,
+     "top5": 0.8185,
+     "mean_log_p_true": -1.7358,
+     "points": 3044.5991,
+     "points_map_formula": 3014.2064,
+     "median_km": 423.0401
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.5409,
-     "top3": 0.7295,
-     "top5": 0.8043,
-     "mean_log_p_true": -1.8147,
-     "points": 3075.0203,
-     "points_map_formula": 3040.5836,
-     "median_km": 413.72
+     "top1": 0.5801,
+     "top3": 0.758,
+     "top5": 0.8434,
+     "mean_log_p_true": -1.6724,
+     "points": 3199.2064,
+     "points_map_formula": 3167.0036,
+     "median_km": 372.5833
     }
    },
    "p1_1": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.4164,
-     "top3": 0.6121,
-     "top5": 0.7224,
-     "mean_log_p_true": -2.2655,
-     "points": 2415.5394,
-     "points_map_formula": 2384.5302,
-     "median_km": 856.23
+     "top1": 0.4448,
+     "top3": 0.6477,
+     "top5": 0.7616,
+     "mean_log_p_true": -2.145,
+     "points": 2576.1638,
+     "points_map_formula": 2544.9609,
+     "median_km": 787.2326
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.4947,
-     "top3": 0.6762,
-     "top5": 0.758,
-     "mean_log_p_true": -2.0441,
-     "points": 2830.2911,
-     "points_map_formula": 2797.4733,
-     "median_km": 553.7118
+     "top1": 0.5053,
+     "top3": 0.7295,
+     "top5": 0.8043,
+     "mean_log_p_true": -1.8995,
+     "points": 2849.4283,
+     "points_map_formula": 2816.6833,
+     "median_km": 575.7093
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.5018,
-     "top3": 0.7082,
-     "top5": 0.8007,
-     "mean_log_p_true": -1.9519,
-     "points": 2872.4644,
-     "points_map_formula": 2837.8861,
-     "median_km": 570.2818
+     "top1": 0.5445,
+     "top3": 0.7473,
+     "top5": 0.8185,
+     "mean_log_p_true": -1.8161,
+     "points": 3052.0253,
+     "points_map_formula": 3020.0641,
+     "median_km": 434.5102
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.548,
-     "top3": 0.7367,
-     "top5": 0.8114,
-     "mean_log_p_true": -1.9135,
-     "points": 3059.7503,
-     "points_map_formula": 3026.2598,
-     "median_km": 420.9391
+     "top1": 0.573,
+     "top3": 0.758,
+     "top5": 0.8292,
+     "mean_log_p_true": -1.7727,
+     "points": 3194.6028,
+     "points_map_formula": 3161.242,
+     "median_km": 372.5833
     }
    },
    "p0_last": {
     "1": {
      "n_rounds": 281,
-     "top1": 0.3737,
-     "top3": 0.5979,
-     "top5": 0.694,
-     "mean_log_p_true": -2.4105,
-     "points": 2331.2987,
-     "points_map_formula": 2302.4128,
-     "median_km": 942.8378
+     "top1": 0.4199,
+     "top3": 0.6335,
+     "top5": 0.7438,
+     "mean_log_p_true": -2.2567,
+     "points": 2473.9941,
+     "points_map_formula": 2442.0747,
+     "median_km": 818.254
     },
     "2": {
      "n_rounds": 281,
-     "top1": 0.452,
-     "top3": 0.6548,
-     "top5": 0.758,
-     "mean_log_p_true": -2.1228,
-     "points": 2634.9956,
-     "points_map_formula": 2599.7687,
-     "median_km": 693.1621
+     "top1": 0.484,
+     "top3": 0.6904,
+     "top5": 0.7972,
+     "mean_log_p_true": -1.933,
+     "points": 2687.2475,
+     "points_map_formula": 2654.0498,
+     "median_km": 681.6674
     },
     "3": {
      "n_rounds": 281,
-     "top1": 0.4591,
-     "top3": 0.6904,
-     "top5": 0.7972,
-     "mean_log_p_true": -1.9758,
-     "points": 2686.5909,
-     "points_map_formula": 2651.1174,
-     "median_km": 681.0126
+     "top1": 0.5231,
+     "top3": 0.7331,
+     "top5": 0.8221,
+     "mean_log_p_true": -1.7961,
+     "points": 2955.812,
+     "points_map_formula": 2923.306,
+     "median_km": 523.3283
     },
     "4": {
      "n_rounds": 281,
-     "top1": 0.4911,
-     "top3": 0.7117,
-     "top5": 0.8043,
-     "mean_log_p_true": -1.9082,
-     "points": 2902.7899,
-     "points_map_formula": 2869.1637,
-     "median_km": 544.7828
+     "top1": 0.5552,
+     "top3": 0.758,
+     "top5": 0.8327,
+     "mean_log_p_true": -1.7219,
+     "points": 3071.3887,
+     "points_map_formula": 3038.726,
+     "median_km": 412.5013
     }
    }
   },
   "choice": {
    "by_ll": 0.6,
-   "by_points": 1.0,
+   "by_points": 0.75,
    "mean_points_n2to4_both_variants": {
-    "0": 2713.0,
-    "0.25": 2762.4,
-    "0.5": 2800.7,
-    "0.6": 2818.1,
-    "0.75": 2843.1,
-    "1": 2843.9
+    "0": 2905.6,
+    "0.25": 2949.6,
+    "0.5": 2975.7,
+    "0.6": 2961.2,
+    "0.75": 2976.6,
+    "1": 2975.4
    },
    "points_gain_vs_ll_choice": [
-    25.712,
-    -14.5941,
-    68.9741
+    15.4149,
+    0.9885,
+    32.1637
    ],
    "d2_last_minus_mean_points": [
-    1.3884,
-    -10.9634,
-    13.6611
+    -0.194,
+    -3.923,
+    3.4575
    ]
   },
   "dup": {
@@ -746,21 +746,21 @@
    "threshold": 0.06223515950271247,
    "neighbours_below_threshold": 2
   },
-  "model": "cd5b09f3761a",
+  "model": "c4def1b11206",
   "features": "517b4c653927",
-  "fitted_at": "2026-10-09 14:07"
+  "fitted_at": "2026-10-11 06:41"
  },
  "test": {
   "rounds": 386,
   "params": {
-   "rho": 0.6,
+   "rho": 0.75,
    "d2": "mean",
    "max_captures": 8,
    "dup_ratio": 0.06224
   },
-  "model": "cd5b09f3761a",
+  "model": "c4def1b11206",
   "features": "517b4c653927",
-  "reported_at": "2026-10-09 14:12",
+  "reported_at": "2026-10-11 07:05",
   "walk_sizes": {
    "3": 15,
    "4": 366,
@@ -791,185 +791,185 @@
   "no_map": {
    "1": {
     "n_rounds": 366,
-    "top1": 0.3279,
-    "top3": 0.5519,
-    "top5": 0.6257,
-    "mean_log_p_true": -2.582,
-    "points": 2341.0653,
-    "points_map_formula": 2308.418,
-    "median_km": 961.301
+    "top1": 0.3689,
+    "top3": 0.5656,
+    "top5": 0.6667,
+    "mean_log_p_true": -2.4359,
+    "points": 2390.6812,
+    "points_map_formula": 2363.2705,
+    "median_km": 891.4681
    },
    "2": {
     "n_rounds": 366,
-    "top1": 0.3962,
-    "top3": 0.5847,
-    "top5": 0.7022,
-    "mean_log_p_true": -2.3526,
-    "points": 2398.9269,
-    "points_map_formula": 2368.2077,
-    "median_km": 925.9638
+    "top1": 0.4098,
+    "top3": 0.6284,
+    "top5": 0.7186,
+    "mean_log_p_true": -2.1741,
+    "points": 2669.5948,
+    "points_map_formula": 2639.9399,
+    "median_km": 697.2306
    },
    "3": {
     "n_rounds": 366,
-    "top1": 0.4372,
-    "top3": 0.6311,
-    "top5": 0.7077,
-    "mean_log_p_true": -2.2279,
-    "points": 2590.6663,
-    "points_map_formula": 2560.4235,
-    "median_km": 817.8348
+    "top1": 0.4563,
+    "top3": 0.6503,
+    "top5": 0.7377,
+    "mean_log_p_true": -2.0614,
+    "points": 2779.6811,
+    "points_map_formula": 2750.5219,
+    "median_km": 662.6343
    },
    "4": {
     "n_rounds": 366,
-    "top1": 0.4399,
-    "top3": 0.6257,
-    "top5": 0.7213,
-    "mean_log_p_true": -2.1698,
-    "points": 2661.0139,
-    "points_map_formula": 2631.1967,
-    "median_km": 749.9495
+    "top1": 0.4536,
+    "top3": 0.653,
+    "top5": 0.7623,
+    "mean_log_p_true": -1.9851,
+    "points": 2831.4698,
+    "points_map_formula": 2801.6913,
+    "median_km": 612.3565
    }
   },
   "no_map_naive_product": {
    "2": {
     "n_rounds": 366,
-    "top1": 0.3907,
-    "top3": 0.5929,
-    "top5": 0.6967,
-    "mean_log_p_true": -2.7107,
-    "points": 2367.1435,
-    "points_map_formula": 2336.2186,
-    "median_km": 974.5292
+    "top1": 0.4098,
+    "top3": 0.6257,
+    "top5": 0.735,
+    "mean_log_p_true": -2.6265,
+    "points": 2606.3698,
+    "points_map_formula": 2579.6803,
+    "median_km": 772.3058
    },
    "3": {
     "n_rounds": 366,
-    "top1": 0.429,
-    "top3": 0.623,
-    "top5": 0.7131,
-    "mean_log_p_true": -3.1424,
-    "points": 2445.9936,
-    "points_map_formula": 2415.7732,
-    "median_km": 907.26
+    "top1": 0.4481,
+    "top3": 0.653,
+    "top5": 0.7568,
+    "mean_log_p_true": -3.1149,
+    "points": 2653.1397,
+    "points_map_formula": 2624.1257,
+    "median_km": 745.4919
    },
    "4": {
     "n_rounds": 366,
-    "top1": 0.429,
-    "top3": 0.6339,
-    "top5": 0.7213,
-    "mean_log_p_true": -3.6937,
-    "points": 2520.9446,
-    "points_map_formula": 2490.5,
-    "median_km": 861.4131
+    "top1": 0.4153,
+    "top3": 0.6776,
+    "top5": 0.7678,
+    "mean_log_p_true": -3.6325,
+    "points": 2655.5135,
+    "points_map_formula": 2623.0219,
+    "median_km": 809.2974
    }
   },
   "no_map_rounds_with_2plus": {
    "1": {
     "n_rounds": 382,
-    "top1": 0.3246,
-    "top3": 0.555,
-    "top5": 0.6283,
-    "mean_log_p_true": -2.6065,
-    "points": 2339.6101,
-    "points_map_formula": 2306.1859,
-    "median_km": 932.9783
+    "top1": 0.3639,
+    "top3": 0.5654,
+    "top5": 0.6649,
+    "mean_log_p_true": -2.4588,
+    "points": 2386.0098,
+    "points_map_formula": 2356.6178,
+    "median_km": 897.5496
    },
    "2": {
     "n_rounds": 382,
-    "top1": 0.3953,
-    "top3": 0.5838,
-    "top5": 0.6963,
-    "mean_log_p_true": -2.3829,
-    "points": 2418.7325,
-    "points_map_formula": 2386.5497,
-    "median_km": 918.2397
+    "top1": 0.411,
+    "top3": 0.6257,
+    "top5": 0.7147,
+    "mean_log_p_true": -2.1987,
+    "points": 2675.8457,
+    "points_map_formula": 2644.3796,
+    "median_km": 697.2306
    }
   },
   "no_map_short_move": {
    "1": {
     "n_rounds": 375,
-    "top1": 0.32,
-    "top3": 0.552,
-    "top5": 0.6267,
-    "mean_log_p_true": -2.6166,
-    "points": 2329.5505,
-    "points_map_formula": 2296.3013,
-    "median_km": 969.6481
+    "top1": 0.3573,
+    "top3": 0.5627,
+    "top5": 0.6613,
+    "mean_log_p_true": -2.4702,
+    "points": 2373.6652,
+    "points_map_formula": 2345.0053,
+    "median_km": 899.8477
    },
    "2": {
     "n_rounds": 375,
-    "top1": 0.3627,
-    "top3": 0.5813,
-    "top5": 0.6507,
-    "mean_log_p_true": -2.5123,
-    "points": 2412.1565,
-    "points_map_formula": 2378.7227,
-    "median_km": 907.3424
+    "top1": 0.4053,
+    "top3": 0.6133,
+    "top5": 0.7067,
+    "mean_log_p_true": -2.3497,
+    "points": 2635.1065,
+    "points_map_formula": 2603.008,
+    "median_km": 767.3454
    }
   },
   "no_map_paired_4_vs_1": {
    "points": [
-    319.9485,
-    158.861,
-    484.2521
+    440.7886,
+    268.9356,
+    608.15
    ],
    "log_p_true": [
-    0.4122,
-    0.3106,
-    0.5134
+    0.4508,
+    0.351,
+    0.5537
    ],
    "top1": [
-    0.112,
-    0.0683,
-    0.1557
+    0.0847,
+    0.041,
+    0.1284
    ],
    "top3": [
-    0.0738,
-    0.0355,
-    0.1175
+    0.0874,
+    0.0437,
+    0.1339
    ]
   },
   "no_map_same_month": {
    "rounds": 287,
    "n1": {
     "n_rounds": 287,
-    "top1": 0.338,
-    "top3": 0.554,
-    "top5": 0.6237,
-    "mean_log_p_true": -2.5669,
-    "points": 2434.1113,
-    "points_map_formula": 2406.4321,
-    "median_km": 823.482
+    "top1": 0.3728,
+    "top3": 0.5749,
+    "top5": 0.676,
+    "mean_log_p_true": -2.4239,
+    "points": 2502.1908,
+    "points_map_formula": 2479.0836,
+    "median_km": 767.7276
    },
    "n4": {
     "n_rounds": 287,
-    "top1": 0.439,
-    "top3": 0.6167,
-    "top5": 0.7108,
-    "mean_log_p_true": -2.2306,
-    "points": 2664.2453,
-    "points_map_formula": 2639.8049,
-    "median_km": 705.1734
+    "top1": 0.4495,
+    "top3": 0.6411,
+    "top5": 0.7491,
+    "mean_log_p_true": -2.0443,
+    "points": 2869.2942,
+    "points_map_formula": 2844.9094,
+    "median_km": 524.1899
    },
    "paired_4_vs_1": {
     "points": [
-     230.1341,
-     55.9764,
-     401.3694
+     367.1033,
+     181.0774,
+     551.6624
     ],
     "log_p_true": [
-     0.3363,
-     0.2275,
-     0.4411
+     0.3796,
+     0.2712,
+     0.4848
     ],
     "top1": [
-     0.101,
-     0.0557,
-     0.1463
+     0.0767,
+     0.0279,
+     0.1254
     ],
     "top3": [
-     0.0627,
-     0.0174,
-     0.108
+     0.0662,
+     0.0209,
+     0.115
     ]
    }
   },
@@ -977,251 +977,251 @@
    "rounds": 79,
    "n1": {
     "n_rounds": 79,
-    "top1": 0.2911,
-    "top3": 0.5443,
+    "top1": 0.3544,
+    "top3": 0.5316,
     "top5": 0.6329,
-    "mean_log_p_true": -2.6369,
-    "points": 2003.0377,
-    "points_map_formula": 1952.3418,
-    "median_km": 1244.2974
+    "mean_log_p_true": -2.4795,
+    "points": 1985.5767,
+    "points_map_formula": 1942.5316,
+    "median_km": 1397.4387
    },
    "n4": {
     "n_rounds": 79,
-    "top1": 0.443,
-    "top3": 0.6582,
-    "top5": 0.7595,
-    "mean_log_p_true": -1.9491,
-    "points": 2649.2742,
-    "points_map_formula": 2599.9241,
-    "median_km": 782.5307
+    "top1": 0.4684,
+    "top3": 0.6962,
+    "top5": 0.8101,
+    "mean_log_p_true": -1.7703,
+    "points": 2694.0571,
+    "points_map_formula": 2644.6835,
+    "median_km": 789.817
    },
    "paired_4_vs_1": {
     "points": [
-     646.2365,
-     280.1591,
-     1025.1005
+     708.4805,
+     324.0435,
+     1105.0846
     ],
     "log_p_true": [
-     0.6878,
-     0.4386,
-     0.9336
+     0.7093,
+     0.4491,
+     0.9739
     ],
     "top1": [
-     0.1519,
-     0.0506,
-     0.2532
+     0.1139,
+     0.0127,
+     0.2152
     ],
     "top3": [
-     0.1139,
-     0.0253,
-     0.2025
+     0.1646,
+     0.0633,
+     0.2658
     ]
    }
   },
   "no_map_short_paired_2_vs_1": {
    "points": [
-    82.6059,
-    -45.6859,
-    211.3862
+    261.4413,
+    132.8595,
+    391.5555
    ],
    "log_p_true": [
-    0.1043,
-    0.041,
-    0.1662
+    0.1205,
+    0.056,
+    0.183
    ],
    "top1": [
-    0.0427,
-    0.0133,
-    0.0747
+    0.048,
+    0.016,
+    0.0827
    ],
    "top3": [
-    0.0293,
-    0.0,
-    0.0613
+    0.0507,
+    0.0187,
+    0.0827
    ]
   },
   "map": {
    "1": {
     "n_rounds": 366,
-    "top1": 0.3525,
-    "top3": 0.5492,
-    "top5": 0.6284,
-    "mean_log_p_true": -2.536,
-    "points": 2262.7103,
-    "points_map_formula": 2230.0492,
-    "median_km": 1038.0177
+    "top1": 0.3716,
+    "top3": 0.5765,
+    "top5": 0.6585,
+    "mean_log_p_true": -2.3813,
+    "points": 2429.8362,
+    "points_map_formula": 2399.6803,
+    "median_km": 847.6696
    },
    "2": {
     "n_rounds": 366,
-    "top1": 0.3934,
-    "top3": 0.612,
-    "top5": 0.694,
-    "mean_log_p_true": -2.3159,
-    "points": 2448.9455,
-    "points_map_formula": 2417.0246,
-    "median_km": 861.7202
+    "top1": 0.4262,
+    "top3": 0.6421,
+    "top5": 0.7432,
+    "mean_log_p_true": -2.1365,
+    "points": 2674.2158,
+    "points_map_formula": 2644.4727,
+    "median_km": 724.5642
    },
    "3": {
     "n_rounds": 366,
-    "top1": 0.4208,
-    "top3": 0.6202,
-    "top5": 0.7295,
-    "mean_log_p_true": -2.1971,
-    "points": 2535.5986,
-    "points_map_formula": 2503.4126,
-    "median_km": 812.4596
+    "top1": 0.4344,
+    "top3": 0.653,
+    "top5": 0.735,
+    "mean_log_p_true": -2.0353,
+    "points": 2742.7933,
+    "points_map_formula": 2712.9945,
+    "median_km": 664.8641
    },
    "4": {
     "n_rounds": 366,
-    "top1": 0.4317,
-    "top3": 0.6448,
-    "top5": 0.7295,
-    "mean_log_p_true": -2.1352,
-    "points": 2600.5466,
-    "points_map_formula": 2570.1175,
-    "median_km": 813.429
+    "top1": 0.4481,
+    "top3": 0.6749,
+    "top5": 0.7732,
+    "mean_log_p_true": -1.9632,
+    "points": 2866.4303,
+    "points_map_formula": 2836.9617,
+    "median_km": 596.9808
    }
   },
   "map_naive_product": {
    "2": {
     "n_rounds": 366,
-    "top1": 0.3743,
-    "top3": 0.5984,
-    "top5": 0.6885,
-    "mean_log_p_true": -2.6808,
-    "points": 2414.8386,
-    "points_map_formula": 2383.4918,
-    "median_km": 894.9988
+    "top1": 0.4208,
+    "top3": 0.6257,
+    "top5": 0.7432,
+    "mean_log_p_true": -2.4643,
+    "points": 2633.7589,
+    "points_map_formula": 2606.1366,
+    "median_km": 759.2197
    },
    "3": {
     "n_rounds": 366,
-    "top1": 0.4235,
-    "top3": 0.6339,
-    "top5": 0.7131,
-    "mean_log_p_true": -3.1159,
-    "points": 2425.7005,
-    "points_map_formula": 2395.1557,
-    "median_km": 912.5375
+    "top1": 0.4372,
+    "top3": 0.6448,
+    "top5": 0.7486,
+    "mean_log_p_true": -2.8671,
+    "points": 2671.2497,
+    "points_map_formula": 2640.9672,
+    "median_km": 742.2429
    },
    "4": {
     "n_rounds": 366,
-    "top1": 0.4153,
-    "top3": 0.6448,
-    "top5": 0.7377,
-    "mean_log_p_true": -3.6589,
-    "points": 2484.4977,
-    "points_map_formula": 2453.9918,
-    "median_km": 900.3208
+    "top1": 0.418,
+    "top3": 0.6749,
+    "top5": 0.7623,
+    "mean_log_p_true": -3.3064,
+    "points": 2662.3859,
+    "points_map_formula": 2630.1967,
+    "median_km": 779.309
    }
   },
   "map_rounds_with_2plus": {
    "1": {
     "n_rounds": 382,
-    "top1": 0.3534,
-    "top3": 0.5524,
-    "top5": 0.6283,
-    "mean_log_p_true": -2.5594,
-    "points": 2273.3934,
-    "points_map_formula": 2240.0942,
-    "median_km": 1017.9701
+    "top1": 0.3691,
+    "top3": 0.5785,
+    "top5": 0.6597,
+    "mean_log_p_true": -2.4028,
+    "points": 2434.9109,
+    "points_map_formula": 2403.3508,
+    "median_km": 847.6696
    },
    "2": {
     "n_rounds": 382,
-    "top1": 0.3953,
-    "top3": 0.6099,
-    "top5": 0.6911,
-    "mean_log_p_true": -2.3445,
-    "points": 2483.2438,
-    "points_map_formula": 2449.3508,
-    "median_km": 852.1211
+    "top1": 0.4293,
+    "top3": 0.6387,
+    "top5": 0.7382,
+    "mean_log_p_true": -2.1588,
+    "points": 2698.4727,
+    "points_map_formula": 2666.3351,
+    "median_km": 721.3045
    }
   },
   "map_short_move": {
    "1": {
     "n_rounds": 375,
-    "top1": 0.3493,
-    "top3": 0.5493,
-    "top5": 0.6267,
-    "mean_log_p_true": -2.567,
-    "points": 2261.3794,
-    "points_map_formula": 2228.1973,
-    "median_km": 1057.3065
+    "top1": 0.3653,
+    "top3": 0.576,
+    "top5": 0.656,
+    "mean_log_p_true": -2.4109,
+    "points": 2427.2123,
+    "points_map_formula": 2395.888,
+    "median_km": 861.9479
    },
    "2": {
     "n_rounds": 375,
-    "top1": 0.3573,
-    "top3": 0.5813,
-    "top5": 0.6587,
-    "mean_log_p_true": -2.4706,
-    "points": 2403.5931,
-    "points_map_formula": 2370.8613,
-    "median_km": 886.4143
+    "top1": 0.4053,
+    "top3": 0.6107,
+    "top5": 0.7013,
+    "mean_log_p_true": -2.2871,
+    "points": 2642.9446,
+    "points_map_formula": 2611.8507,
+    "median_km": 748.5564
    }
   },
   "map_paired_4_vs_1": {
    "points": [
-    337.8363,
-    176.5268,
-    496.5223
+    436.5941,
+    271.8498,
+    599.7954
    ],
    "log_p_true": [
-    0.4007,
-    0.3016,
-    0.4994
+    0.4181,
+    0.3263,
+    0.508
    ],
    "top1": [
-    0.0792,
+    0.0765,
     0.0355,
-    0.123
+    0.1175
    ],
    "top3": [
-    0.0956,
-    0.0574,
-    0.1339
+    0.0984,
+    0.0546,
+    0.1421
    ]
   },
   "map_same_month": {
    "rounds": 287,
    "n1": {
     "n_rounds": 287,
-    "top1": 0.3693,
-    "top3": 0.554,
-    "top5": 0.6307,
-    "mean_log_p_true": -2.5244,
-    "points": 2327.3349,
-    "points_map_formula": 2300.1707,
-    "median_km": 974.8741
+    "top1": 0.3763,
+    "top3": 0.5819,
+    "top5": 0.6655,
+    "mean_log_p_true": -2.3755,
+    "points": 2509.8167,
+    "points_map_formula": 2485.554,
+    "median_km": 757.7246
    },
    "n4": {
     "n_rounds": 287,
-    "top1": 0.4286,
-    "top3": 0.6341,
-    "top5": 0.7143,
-    "mean_log_p_true": -2.1971,
-    "points": 2625.8572,
-    "points_map_formula": 2601.2091,
-    "median_km": 757.0321
+    "top1": 0.439,
+    "top3": 0.6551,
+    "top5": 0.7561,
+    "mean_log_p_true": -2.0182,
+    "points": 2842.7423,
+    "points_map_formula": 2817.2125,
+    "median_km": 582.9474
    },
    "paired_4_vs_1": {
     "points": [
-     298.5223,
-     121.6927,
-     465.1415
+     332.9256,
+     152.195,
+     508.7004
     ],
     "log_p_true": [
-     0.3272,
-     0.2195,
-     0.4293
+     0.3574,
+     0.2579,
+     0.4541
     ],
     "top1": [
-     0.0592,
-     0.0139,
+     0.0627,
+     0.0174,
      0.108
     ],
     "top3": [
-     0.0801,
-     0.0417,
-     0.122
+     0.0732,
+     0.0279,
+     0.1185
     ]
    }
   },
@@ -1229,67 +1229,67 @@
    "rounds": 79,
    "n1": {
     "n_rounds": 79,
-    "top1": 0.2911,
-    "top3": 0.5316,
-    "top5": 0.6203,
-    "mean_log_p_true": -2.5781,
-    "points": 2027.9349,
-    "points_map_formula": 1975.3038,
-    "median_km": 1227.2853
+    "top1": 0.3544,
+    "top3": 0.557,
+    "top5": 0.6329,
+    "mean_log_p_true": -2.4024,
+    "points": 2139.274,
+    "points_map_formula": 2087.7089,
+    "median_km": 1227.5318
    },
    "n4": {
     "n_rounds": 79,
-    "top1": 0.443,
-    "top3": 0.6835,
-    "top5": 0.7848,
-    "mean_log_p_true": -1.9104,
-    "points": 2508.5953,
-    "points_map_formula": 2457.1646,
-    "median_km": 854.3058
+    "top1": 0.481,
+    "top3": 0.7468,
+    "top5": 0.8354,
+    "mean_log_p_true": -1.7636,
+    "points": 2952.4869,
+    "points_map_formula": 2908.7089,
+    "median_km": 681.1116
    },
    "paired_4_vs_1": {
     "points": [
-     480.6604,
-     158.5841,
-     816.8716
+     813.2128,
+     447.4711,
+     1197.3685
     ],
     "log_p_true": [
-     0.6676,
-     0.4254,
-     0.913
+     0.6387,
+     0.41,
+     0.8727
     ],
     "top1": [
-     0.1519,
-     0.0633,
-     0.2532
+     0.1266,
+     0.0127,
+     0.2405
     ],
     "top3": [
-     0.1519,
-     0.0506,
-     0.2532
+     0.1899,
+     0.0886,
+     0.2911
     ]
    }
   },
   "map_short_paired_2_vs_1": {
    "points": [
-    142.2137,
-    33.6584,
-    253.0397
+    215.7323,
+    87.42,
+    352.6616
    ],
    "log_p_true": [
-    0.0964,
-    0.0348,
-    0.1579
+    0.1237,
+    0.0657,
+    0.181
    ],
    "top1": [
+    0.04,
     0.008,
-    -0.0213,
-    0.04
+    0.072
    ],
    "top3": [
-    0.032,
+    0.0347,
     0.0027,
-    0.064
+    0.0667
    ]
   }
  }

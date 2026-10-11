@@ -15,12 +15,18 @@ locator incl. cards + region model (`tools/train_model.py --views --eval-only`, 
 |---|---|---|---|---|
 | prior only | 4.3% | 10% | 16% | 209 |
 | first working version (17k random Street View panoramas) | 17.9% | 34.0% | 46.0% | 1617 |
-| live mode, 1 panorama (No Move) | 31.9% | 56.2% | 63.0% | 2276 |
-| live mode, 1 panorama + map info | 34.5% | 56.0% | 63.7% | 2279 |
-| Moving, 4 panoramas fused (`engine/fusion.py`, 366 rounds) | 44.0% | 62.6% | 72.1% | 2661 |
+| live mode, 1 panorama (No Move), 2026-10-09 | 31.9% | 56.2% | 63.0% | 2276 |
+| Moving, 4 panoramas fused, 2026-10-09 | 44.0% | 62.6% | 72.1% | 2661 |
+| live mode, 1 panorama (No Move), 2026-10-11 (GLM refit + glm_qn) | 36.5% | 57.0% | 66.6% | 2395 |
+| live mode, 1 panorama + map info | 37.6% | 58.6% | 66.1% | 2419 |
+| Moving, 4 panoramas fused (`engine/fusion.py`, 366 rounds) | 45.4% | 65.3% | 76.2% | 2831 |
 
-Moving: 1 -> 4 panoramas 2341 -> 2661 (+320 [+159, +484]) on simulated walks along Street View
-links (`tools/moving_calib.py`, rho fitted on CALIB). Region given the right country: top3 ~54%.
+Moving: 1 -> 4 panoramas 2391 -> 2831 (+441 [+269, +608]) on simulated walks along Street View
+links (`tools/moving_calib.py`, rho 0.75 fitted on CALIB by points; by log P 0.6). Region given the right
+country (live grid): top1 30.5%, top3 54.6%; areas top1 49.5%, top2 72.8%.  Full panoramas (`train_model.py
+--eval-only`): no map top1 35.5%, log P -2.364 (3e5f3ef: 34.2%, -2.392); map info 37.0%, -2.325 (35.0%, -2.375).
+Live-grid TEST summaries: `data/model/eval_live.json`, `eval_live_map.json`; Moving: `data/fusion.json` "test".
+The official World map has its own section below (real games of the locator).
 Real games (one panorama per round, --submit): daily 2026-10-04 17,664 (26.7k model).
 
 Data: 78k training panoramas = 7k random Street View (world/balanced) + 71k panoramas of public ranked
@@ -29,6 +35,55 @@ features of 51k of them, records marked pano_deleted; own rounds within 1 km exc
 GeoGuessr clue placements: 33k placements on 8.9k panoramas (`data/calibration/pano_clues.json`).
 The "views" parameter set (calibrated on live-grid CALIB features) is disabled (`enabled: false` in
 model.json): 2-fold CV inside CALIB showed no gain.
+
+## Official World map (GeoGuessr Unlimited, 2026-10-10/11)
+- `tools/world_play.py`: classic single-player World games (5 rounds, no time limit) created and played by
+  the live pipeline (`play_live_visual.js --game <t> --submit --headless`, alternately No Move and Moving with
+  `--test-walk 3`); the game is read only after it is finished.  104 games / 520 rounds (+2 excluded games):
+  world_calib = 44 games (220 rounds), world_test = 60 games (300 rounds), halves by md5(token).  The disk
+  budget pruned the move-capture images of 49 world_calib / 45 world_test Moving rounds: those keep only the
+  start-capture answer in re-analyses.  `replay` re-runs a locator server on the exact live captures;
+  `tools/train_model.py --world-points <split>` does the same in-process, old vs new model.
+- Classic World rounds come back without GeoGuessr clue placements (`/api/v4/clues` empty): no new card labels.
+- World prior: per-map counts of world_calib (+ the user's 5 CALIB rounds on World) mixed with the ranked-duel
+  prior and the model prior, `map 0.4 / map_ranked 0.5 / model 0.1`, chosen by repeated 5-fold CV over the
+  world_calib games (`train_model.py --world --evidence scratch/world_eval --save`; +0.052 [+0.020, +0.083] nats
+  over the shared mixture).  It is stamped with the model fit: after any refit rerun `--world-points
+  world_calib` and `--world --save`, otherwise the shared mixture is used (warning on stderr).
+- Country GLM: lambda 3e-4 / 1200 iterations (was 3e-3 / 400), chosen on CALIB 2-fold CV.
+- Second GLM `glm_qn` (`GeoModel.fit_glm_qn`, `train_model.py --add-qn 3e-4,1200`): the same multinomial
+  logit on rank-Gaussianised raw features (`QuantileNormal`, 1001 knots per feature), own exponent (CALIB:
+  glm 0.4, glm_qn 0.4).  Chosen by the overnight research on CALIB (live grid, exponents refitted out of fold:
+  log P(true country) +0.069 [+0.036, +0.101]) and checked on the real world_calib captures (World prior,
+  exponents out of fold: +0.045 [+0.002, +0.085], No Move points +138 [+17, +276]).  Not adopted: a live ->
+  full-panorama feature correction (+0.04 more on CALIB, points within noise on real captures), quadratic
+  Fisher features, per-group GLMs.
+- world_test (60 games, the World prior, real live captures re-analysed; 3e5f3ef = World prior + GLM refit,
+  before glm_qn):
+
+| world_test, real live captures, World prior | rounds | 89a558e | 3e5f3ef | glm_qn (now) | now - 3e5f3ef, points |
+|---|---|---|---|---|---|
+| first capture (No Move answer), all rounds | 300 | 1898 pts, top1 35.7% | 1971, 42.3% | 2154, 44.0% | +183 [+63, +311] |
+| No Move games | 165 | 1930, 42.4% | 1922, 44.8% | 2144, 47.3% | +222 [+65, +394] |
+| Moving games, first capture | 135 | 1860, 27.4% | 2032, 39.3% | 2166, 40.0% | +135 [-48, +311] |
+| Moving games, fused (move images kept) | 90 | 2353, 41.1% | 2355, 47.8% (rho 0.6) | 2393, 48.9% (rho 0.75) | +33 [-60, +161] (both rho 0.75; 3e5f3ef 2360, 45.6%) |
+| live grid rendered from the full panoramas (`eval_live.py --split world_test`) | 300 | 1887, 36.3% | 2067, 40.7% | 2050, 42.7% | -17 [-135, +91] |
+
+  log P(true country), first capture: 3e5f3ef -2.192 -> now -2.177; Moving fused (rho 0.75) -1.797 -> -1.773.  Region given
+  the right country (rendered grid): top1 24%, top3 38%; areas top1 40%, top2 59%.  world_calib (selection
+  data, World override of the new model not yet refitted): No Move +74 [-55, +209], Moving fused +189 [-39, +424].
+  world_test was looked at before for 3e5f3ef (a 130-round run and the final run above); nothing was tuned on it.
+
+- Open problems:
+  - Cambodia -> India (the user's daily round in Pailin): fused after 3 panoramas IN 75.9% / KH 11.5% (89a558e)
+    -> IN 91.8 / KH 6.8 (3e5f3ef) -> IN 84.1 / KH 13.5 (glm_qn).  About 95% of the 3e5f3ef shift is the World
+    prior (IN:KH 2.9 -> 5.8: 5 IN vs 1 KH world_calib round, ranked duels 9.5:1); the image evidence alone
+    favours India ~2.3:1.  The flag-detector spike (`engine/flag_detect.py`, AUC 0.69 flag vs no flag, KH 0 of
+    3 at 5% false alarms) and the script spike gave no CALIB gain, so nothing Cambodia-specific is wired in.
+  - Sinks on the World map: US / RU / ID are over-predicted on the first panorama (world_test 3e5f3ef: US
+    false positives 11 -> 30, RU 25 -> 31 vs 89a558e); a large part comes from the World prior (RU 2.2 -> 4.2%).
+  - Wrong answers are confident: on rounds both models get wrong, the guess lands further away (points do not
+    follow top-1).
 
 ## GeoGuessr's own analysis
 Not image recognition: the client calls `GET /api/v4/clues/{panoId}` and the server returns
@@ -107,6 +162,13 @@ See README "Навчання й калібрування". Dataset in `scratch/`
 Feature extraction ~9 pano/s on 4 cores; `train_model.py` ~2 min.
 
 ## Ideas not done
+- World prior from all 104 World games: after the final world_test evaluation, the world_test rounds could
+  join the per-map counts (530 rounds instead of 235; world_test has 5 KH / 7 IN rounds against 1 / 5 in
+  world_calib), with the mixture weights re-chosen by CV - then report it as a refit, not a new test result.
+- Live -> full-panorama feature correction (research sandbox, per-feature affine map fitted on paired
+  renders / real captures): +0.04 nats more on CALIB on top of glm_qn, points within noise on real captures.
+- A temperature on the posterior used for the guess point (confident wrong answers land far away), chosen
+  on CALIB / world_calib by points.
 - Script recognition spike (`engine/script_detect.py`, `tools/script_spike.py`): classical text
   detection + glyph statistics on GeoGuessr language / sign placements at 0.03 deg/px; non-Latin
   recall 130/631, CALIB gain indistinguishable from 0 -> dropped (not integrated).
