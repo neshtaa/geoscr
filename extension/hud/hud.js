@@ -75,6 +75,54 @@
     return COMPASS[Math.round(norm360(h) / 45) % 8];
   }
 
+  // GeoGuessr-style areas of a country (hint.areas: US census divisions, BR macro-regions, ...; engine/areas.py) and,
+  // under them ("регіони:"), its most probable admin-1 regions (hint.regions) except those already shown as an area
+  // of their own (an area of one unit); only the regions when the country has no areas.  tight (a short panel):
+  // one row - the 2 most probable areas (their regions in the tooltip), or the regions without areas.
+  function regionLinesHtml(hint, compact, tight) {
+    let h = '';
+    if (!hint) return h;
+    const areas = (Array.isArray(hint.areas) ? hint.areas : []).filter(a => a && a.name && +a.probability > 0)
+      .slice(0, compact || tight ? 2 : 3);
+    if (areas.length)
+      h += `<div class="areas">${areas
+        .map(a => `<span class="chip area" title="${esc(a.en || a.name)}${(a.regions || []).length ? ': ' + esc(a.regions.map(r => r.name).join(', ')) : ''}">` +
+          `${esc(a.name)} <b>${pct(+a.probability)}</b></span>`).join('')}</div>`;
+    if (tight && areas.length) return h;
+    const single = new Set();
+    for (const a of areas)
+      if (+a.size === 1 && Array.isArray(a.regions) && a.regions[0] && a.regions[0].code) single.add(a.regions[0].code);
+    const regs = (Array.isArray(hint.regions) ? hint.regions : []).filter(r => r && !(r.code && single.has(r.code)))
+      .slice(0, compact || tight ? 3 : 4);
+    if (regs.length)
+      h += `<div class="regions${areas.length ? ' sub' : ''}">${areas.length ? '<span class="sublbl">регіони:</span>' : ''}${regs
+        .map(r => `<span class="chip reg">${esc(r.name)} <b>${pct(+r.probability || 0)}</b></span>`).join('')}</div>`;
+    return h;
+  }
+
+  // The areas of the hinted countries weighted by the country probability ([{name, en, country, p}], most probable
+  // first; a hinted country without areas contributes its top regions); empty when no hinted country has areas.
+  function areaMixture(hints) {
+    const out = [];
+    let any = false;
+    for (const x of Array.isArray(hints) ? hints : []) {
+      if (!x) continue;
+      const pc = +x.probability || 0;
+      const areas = Array.isArray(x.areas) && x.areas.length ? x.areas : null;
+      any = any || !!areas;
+      for (const a of areas || (Array.isArray(x.regions) ? x.regions : []))
+        if (a && a.name) out.push({ name: a.name, en: a.en, country: x.country_code, p: pc * (+a.probability || 0) });
+    }
+    return any ? out.filter(a => a.p > 0).sort((a, b) => b.p - a.p) : [];
+  }
+
+  // The country of an admin-1 entry by its ISO 3166-2 code (the raster files a few units under another country,
+  // e.g. Crimea under RU; its code UA-43 says Ukraine), else the entry's country.
+  function isoCountry(x) {
+    const m = /^([A-Z]{2})-/.exec((x && x.code) || '');
+    return m ? m[1] : (x && x.country) || '';
+  }
+
   function countryName(code, fallback) {
     try {
       const n = new Intl.DisplayNames(['uk'], { type: 'region' }).of(code);
@@ -179,6 +227,7 @@
   }
 
   const isCompact = (vw, vh) => vw < 1280 || vh < 740;
+  const TIGHT_H = 520;   // a panel shorter than this (px) shows one row of areas (or regions) of the chosen country
 
   // ---------------------------------------------------------------- HUD
 
@@ -209,7 +258,7 @@
 
     let view = { mode: 'off', status: { text: '', level: 'idle' } };
     let prefs = load();
-    let destroyed = false, place = null, timer = null, html = null;
+    let destroyed = false, place = null, timer = null, html = null, availH = Infinity;
     const open = {};   // cards whose description is unfolded (compact mode)
 
     function load() {
@@ -293,6 +342,7 @@
         place = autoPlace(area(), obstacles(vw, vh), w);
         x = place.x; y = place.y; maxH = place.h;
       }
+      availH = maxH;
       host.style.left = Math.round(x) + 'px';
       host.style.top = Math.round(y) + 'px';
       panel.style.maxHeight = Math.max(110, Math.round(maxH)) + 'px';
@@ -340,13 +390,11 @@
       return h + '</div></div>';
     }
 
-    function countryDetails(c, hint, i, compact) {
+    function countryDetails(c, hint, i, compact, tight) {
       let h = `<div class="sec details"><div class="dhead">${esc(countryName(c.code, c.name))}` +
         `${hint && hint.driving_side ? ` <span class="muted">· рух ${hint.driving_side === 'left' ? 'лівосторонній' : 'правосторонній'}</span>` : ''}</div>`;
       if (!hint) return h + '<div class="muted small">Підказок для цієї країни немає.</div></div>';
-      if (hint.regions && hint.regions.length)
-        h += `<div class="regions">${hint.regions.slice(0, compact ? 3 : 4)
-          .map(r => `<span class="chip reg">${esc(r.name)} <b>${pct(r.probability)}</b></span>`).join('')}</div>`;
+      h += regionLinesHtml(hint, compact, tight);
       // cards with a detected placement first
       const cards = (hint.geoguessr || []).map((k, j) => ({ k, j }));
       cards.sort((a, b) => (normalizeDetected(b.k.detected) ? 1 : 0) - (normalizeDetected(a.k.detected) ? 1 : 0) || a.j - b.j);
@@ -398,16 +446,20 @@
       h += '</div>';
       const sel = countries[prefs.sel];
       const hit = sel ? hints[sel.code] : null;
-      const details = sel ? countryDetails(sel, hit && hit.hint, hit ? hit.i : -1, compact) : '';
+      const details = sel ? countryDetails(sel, hit && hit.hint, hit ? hit.i : -1, compact, availH < TIGHT_H) : '';
       // compact: the chosen country's regions and cards right below the countries
       h += compact ? details + guessHtml(r, countries, compact) : guessHtml(r, countries, compact) + details;
       if (r.observations && r.observations.length)
         h += `<div class="sec"><div class="lbl">Що видно</div>${r.observations.slice(0, compact ? 5 : 10)
           .map(o => `<span class="chip obs" style="opacity:${0.55 + 0.45 * Math.max(0, Math.min(1, +o.strength || 0))}">${esc(o.text)}</span>`).join('')}</div>`;
-      const selRegions = !!(hit && hit.hint.regions && hit.hint.regions.length);
-      if (r.regions && r.regions.length && !(compact && selRegions))
+      const selRegions = !!(hit && ((hit.hint.regions && hit.hint.regions.length) || (hit.hint.areas && hit.hint.areas.length)));
+      const mix = areaMixture(r.hints);
+      if (mix.length && !(compact && selRegions))
+        h += `<div class="sec"><div class="lbl">Частини країн</div>${mix.slice(0, compact ? 3 : 5)
+          .map(x => `<span class="chip area" title="${esc(x.en || x.name)}">${esc(x.name)} <span class="muted">${esc(x.country)}</span> <b>${pct(x.p)}</b></span>`).join('')}</div>`;
+      else if (r.regions && r.regions.length && !(compact && selRegions))
         h += `<div class="sec"><div class="lbl">Регіони</div>${r.regions.slice(0, compact ? 3 : 5)
-          .map(x => `<span class="chip reg">${esc(x.name)} <span class="muted">${esc(x.country)}</span> <b>${pct(x.probability)}</b></span>`).join('')}</div>`;
+          .map(x => `<span class="chip reg">${esc(x.name)} <span class="muted">${esc(isoCountry(x))}</span> <b>${pct(x.probability)}</b></span>`).join('')}</div>`;
       for (const w of r.warnings || []) h += `<div class="warn small">${esc(w)}</div>`;
       const t = view.timing;
       if (t || (r.map && r.map.name)) {
@@ -442,6 +494,7 @@
       if (destroyed) return;
       if (view.mode === 'off') { layout(); return; }
       host.style.display = '';
+      layout();   // the panel's height first: a short panel (availH < TIGHT_H) shows one region line
       const compact = isCompact(root.innerWidth, root.innerHeight);
       const busy = (view.status || {}).level === 'busy';
       const game = view.mode === 'game';
@@ -587,5 +640,5 @@
   }
 
   return { api: API, mount, autoPlace, freeIntervals, mapReserve, cssLength, safeImage, normalizeDetected, compassName,
-    countryName, panelWidth, isCompact, esc, fusionLine };
+    countryName, panelWidth, isCompact, esc, fusionLine, regionLinesHtml, areaMixture, isoCountry };
 });

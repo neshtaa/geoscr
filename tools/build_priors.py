@@ -15,6 +15,12 @@ maps          per-map counts from the CALIB half (by game, tools/calibrate.split
               plus per-fold counts so the prior mix can be calibrated out-of-fold on CALIB, the dates
               of the counted games (from duel ObjectIds; unknown for Classic / Challenge tokens) and
               the map's updatedAt (data/maps.json) to flag counts older than the map's last edit.
+              The official World map (id 52d15ff6850ffb3b847cb3b4) also counts the world_calib games the
+              locator played there (data/calibration/world_games.json, tools/world_play.py; finished games,
+              the same md5 parity as CALIB: world_calib = calib half, world_test never counted).  Only the
+              true country of a round is used, so the games flagged "exclude" (engine under edit while
+              they were played) count too.  World-map rounds of both halves are also "own" rounds for the
+              duel location filter below.
 TEST rounds are only used to remove duel rounds at their locations.  Counts cover every country (the model classes are applied at load),
 so a refit of the model needs no rebuild.  The mixture weights ("params") come from
 tools/train_model.py --calibrate-maps.
@@ -38,6 +44,8 @@ from engine.model import MODEL_DIR, PRIORS_FILE  # noqa: E402
 
 CAL = os.path.join(ROOT, "data", "calibration")
 DUELS = os.path.join(CAL, "duel_rounds.json")
+WORLD_GAMES = os.path.join(CAL, "world_games.json")
+WORLD_MAP_ID = "52d15ff6850ffb3b847cb3b4"
 
 
 def label(cc):
@@ -64,6 +72,28 @@ def game_date(game):
         return datetime.datetime.utcfromtimestamp(int(g[:8], 16)).date().isoformat()
     except ValueError:
         return None
+
+
+def world_play_rounds(path=WORLD_GAMES):
+    """Rounds of the finished World-map calibration games (tools/world_play.py) as history-like records
+    {game, round, pano_id, lat, lng, gg_country, map: "World", source: "world_play"} (both halves; per_map
+    keeps the calib half by the game hash)."""
+    try:
+        with open(path) as f:
+            games = json.load(f).get("games", [])
+    except (OSError, ValueError):
+        return []
+    out = []
+    for g in games:
+        if g.get("status") != "finished" or not g.get("token"):
+            continue
+        for r in g.get("rounds") or []:
+            cc = r.get("gg_country") or r.get("country")
+            if r.get("lat") is None or not cc:
+                continue
+            out.append({"game": g["token"], "round": r.get("round"), "pano_id": r.get("pano_id") or "",
+                        "lat": r["lat"], "lng": r["lng"], "gg_country": cc, "map": "World", "source": "world_play"})
+    return out
 
 
 def counts_of(codes):
@@ -115,7 +145,11 @@ def per_map(own, min_rounds, k):
         counts = counts_of(label(r.get("gg_country")) for r in rows)
         folds = [counts_of(label(r.get("gg_country")) for r in rows if fold_of(r["game"], k) == f) for f in range(k)]
         dates = sorted(d for d in (game_date(r["game"]) for r in rows) if d)
-        out[mid] = {"name": m["name"], "source": "CALIB split of data/calibration/history_rounds.json",
+        n_wp = sum(1 for r in rows if r.get("source") == "world_play")
+        src = "CALIB split of data/calibration/history_rounds.json"
+        if n_wp:
+            src += " + %d rounds of the world_calib games of data/calibration/world_games.json" % n_wp
+        out[mid] = {"name": m["name"], "source": src, "world_play_rounds": n_wp,
                     "n": sum(counts.values()), "games": len({r["game"] for r in rows}),
                     "dates": [dates[0], dates[-1]] if dates else None, "dated_rounds": len(dates),
                     "map_updated": m.get("updatedAt"), "counts": counts, "fold_counts": folds}
@@ -134,10 +168,17 @@ def main():
                     help="additive smoothing per class (best out-of-fold calib points of 0.1/0.25/0.5/1)")
     ap.add_argument("--min-rounds", type=int, default=50, help="calib rounds needed for a per-map prior")
     ap.add_argument("--folds", type=int, default=5, help="folds (by game) for out-of-fold calibration")
+    ap.add_argument("--out", default="", help="write here instead of data/model/priors.json (dry run)")
     args = ap.parse_args()
     own = json.load(open(os.path.join(CAL, "history_rounds.json")))
+    played = {r["game"] for r in world_play_rounds()}
+    own = [r for r in own if r.get("game") not in played] + world_play_rounds()
+    print("own rounds: %d (of which %d World-map calibration rounds, %d games)" % (
+        len(own), sum(1 for r in own if r.get("source") == "world_play"), len(played)))
     path = os.path.join(MODEL_DIR, PRIORS_FILE)
     old = json.load(open(path)) if os.path.exists(path) else {}
+    if args.out:
+        path = args.out
     rw = ranked_world(own)
     print("ranked_world: %d rounds (removed: %d of the user's own games, %d at the user's locations), top %s"
           % (rw["n"], rw["removed_own_games"], rw["removed_near_user_rounds"], Counter(rw["counts"]).most_common(6)))

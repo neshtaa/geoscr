@@ -19,6 +19,20 @@
  *                                                  server; HUD screenshots hud_move<k>.png, points per step
  *     ... --interrupt hud|pano                     during the first move's sweep click the HUD / drag the panorama
  *
+ * Calibration / testing helpers (single-player /game/<t> pages with --submit only; used by tools/world_play.py
+ * on classic games of the official World map; never on multiplayer pages, which are never automated):
+ *     ... --test-walk N       after the start capture, step forward like a player (a click on the road ahead,
+ *                             else ArrowUp / a click a little left or right), let the page re-capture and fuse
+ *                             each new panorama (auto-analyse), submit after N steps (or when no step works /
+ *                             a move capture does not come back within 90 s)
+ *     ... --test-walk-clicks C  moves per step before the player stops (default 1; ~10 m per move)
+ *     ... --exit-when-done    close the browser and exit once the game is finished (after the last guess), on
+ *                             HTTP 401 / 403 / 429 from the guess, or after --max-minutes (default 20)
+ *     ... --summary FILE      write the per-round outcome (guess, points, distance, panoramas fused, capture
+ *                             directories) as JSON, after every guess; plus page screenshots in the round's
+ *                             capture directory: hud_r<k>.jpg (panorama + HUD answer, just before the guess),
+ *                             result_r<k>.jpg (result screen, when the page shows one)
+ *
  * Moving games: when the round's panorama changes inside the round (the player moved) and auto-analyse
  * is on, the page's controller re-captures it once the player has been idle for 1.5 s (no pano change,
  * camera turn or mouse button) and the server fuses all panoramas of the round (engine/fusion.py; the
@@ -42,6 +56,9 @@
  * never captured or automated and show nothing. The HUD gets card images only as data: URLs from
  * the local server's cache (GET /hud/img), never from www.geoguessr.com.
  * --replay takes the finished round from data/calibration/history_rounds.json and makes no API call.
+ * The calibration helpers (--test-walk, --exit-when-done, --summary) add only what a player does (clicks on
+ * the road, ArrowUp, "Next" on a result screen) and local files; the game's end is read from the guess
+ * response's whitelisted metadata (state, guess count), never from the game's rounds.
  * Every capture is saved to scratch/live/<game>_r<round>/ (views, views.json, meta, response).
  * Cookie: data/session_cookie.txt (_ncfa value) or env GEOGUESSR_COOKIE.
  */
@@ -584,45 +601,208 @@ async function bridge(ctx, type, payload) {
     const r = await analyseRound(ctx, info);
     out = { result: await inlineImages(r.result), timing: r.timing, noRotate: r.noRotate };
   } else throw new Error(`unknown request ${type}`);
-  if (ctx.opts.submit && job.trigger === 'auto') {
+  ctx.lastProgress = Date.now();
+  if (ctx.opts.submit && (job.trigger === 'auto' || job.trigger === 'move')) {
     const result = out.result || out;
-    setTimeout(() => submitAndContinue(ctx, result, info).catch(async e => {
-      console.error('[!] ' + e.message);
-      await hudStatus(ctx.page, e.message, 'error');
-    }), 300);
+    const done = job.trigger === 'move' ? ctx.moves[rk] || 0 : 0;
+    clearTimeout(ctx.watchdog[rk]);
+    ctx.lastResult[rk] = { result, info };
+    if (ctx.opts.summary) noteCapture(ctx, info, sub, result);
+    const action = ctx.submitted[rk] ? null : walkAction(job.trigger, done, ctx.opts.walk);
+    if (action === 'walk') {
+      // TEST ONLY (--test-walk): walk forward like a player; the page re-captures and fuses the new panorama
+      // (a 'move' job), which comes back here; a lost move capture still ends in a guess (watchdog)
+      setTimeout(() => walkStep(ctx, info).then(moved => {
+        if (!moved) return submitRound(ctx, rk, result, info);
+        armWatchdog(ctx, rk, result, info);
+        return null;
+      }).catch(e => {
+        console.error('[walk] ' + e.message);
+        submitRound(ctx, rk, result, info);
+      }), 800);
+    } else if (action === 'submit') submitRound(ctx, rk, result, info);
   }
   return out;
 }
 
 // ------------------------------------------------------------------ modes
 
-async function submitGuess(ctx, guess, p) {
+// --submit: what to do after a capture of a round ('auto' = the round's start capture, 'move' = a capture
+// after the player moved; done = moves so far): 'walk' one more step (--test-walk N), 'submit', or nothing
+// (a move without --test-walk: the round was already submitted after its start capture).
+function walkAction(trigger, done, walk) {
+  if (trigger !== 'auto' && trigger !== 'move') return null;
+  if (walk && done < walk) return 'walk';
+  if (trigger === 'auto' || walk) return 'submit';
+  return null;
+}
+
+// A move capture that never comes back (failed in the page) must not leave the round unanswered.
+function armWatchdog(ctx, rk, result, info, ms = 90000) {
+  clearTimeout(ctx.watchdog[rk]);
+  ctx.watchdog[rk] = setTimeout(() => {
+    console.log('   [walk] нова панорама не проаналізована за ' + Math.round(ms / 1000) + ' с: подаю останню відповідь');
+    submitRound(ctx, rk, result, info);
+  }, ms);
+}
+
+// Submits a round once (the watchdog and a late move capture cannot both post).
+function submitRound(ctx, rk, result, info) {
+  clearTimeout(ctx.watchdog[rk]);
+  if (ctx.submitted[rk]) return;
+  ctx.submitted[rk] = true;
+  setTimeout(() => submitAndContinue(ctx, result, info).catch(async e => {
+    console.error('[!] ' + e.message);
+    await hudStatus(ctx.page, e.message, 'error');
+    if (ctx.opts.exitWhenDone && /HTTP (401|403|429)/.test(e.message)) await finish(ctx, 'error: ' + e.message, 2);
+  }), 300);
+}
+
+// Where a walking "player" clicks (fractions of the canvas from the point 72% down its centre line) or which key
+const WALK_TRIES = [[0, 0, null], [0, 0, 'ArrowUp'], [-0.12, 0, null], [0.12, 0, null], [-0.25, -0.07, null],
+  [0.25, -0.07, null], [-0.4, -0.1, null], [0.4, -0.1, null]];
+
+// TEST ONLY (--test-walk): one step forward as a player does - --test-walk-clicks moves (default 1; a player
+// usually walks a few panoramas before stopping to look), each a click on the road ahead (Street View
+// click-to-go), else ArrowUp, else a click a little left / right of it, with no pause long enough for the
+// page's idle rule (1.5 s), so the page captures once, where the player stopped. True once the panorama changed.
+async function walkStep(ctx, info) {
+  const { page } = ctx;
+  ctx.capturePath = info.path;   // every click / key is bound to the round's page
+  const changes = () => page.evaluate(() => (window.__geoscr ? window.__geoscr.panoChanges : null));
+  let moved = 0;
+  for (let c = 0; c < Math.max(1, ctx.opts.walkClicks || 1); c++) {
+    assertPath(ctx);
+    const before = await changes();
+    const box = await page.evaluate(() => {
+      const el = document.querySelector("[data-qa='panorama'] canvas.widget-scene-canvas") || document.querySelector('canvas.widget-scene-canvas');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height * 0.72, w: r.width, h: r.height };
+    });
+    if (!box || before === null) break;
+    let ok = false;
+    // the road ahead, ArrowUp, then further left / right and a little higher (a bend in the road)
+    for (const [dx, dy, key] of WALK_TRIES) {
+      assertPath(ctx);
+      if (key) await page.keyboard.press(key);
+      else await page.mouse.click(box.x + dx * box.w, box.y + dy * box.h);
+      for (let i = 0; i < 12 && !ok; i++) {
+        await sleep(250);
+        if (await changes() !== before) ok = true;
+      }
+      if (ok) break;
+    }
+    if (!ok) break;
+    moved++;
+    await sleep(300);
+  }
+  const rk = `${info.key}_r${info.round}`;
+  ctx.steps[rk] = (ctx.steps[rk] || 0) + moved;
+  console.log(moved ? `   [walk] крок уперед (${moved} перех.)` : '   [walk] не вдалося зрушити');
+  return moved > 0;
+}
+
+// --summary: per round, the capture directories and the fused answer of the latest capture.
+function noteCapture(ctx, info, sub, result) {
+  const r = ctx.played[info.round] = ctx.played[info.round] || { round: info.round, dirs: [] };
+  if (!r.dirs.includes(sub)) r.dirs.push(sub);
+  r.n_fused = result && result.fusion ? result.fusion.n : 1;
+  r.top = result && result.countries ? result.countries.slice(0, 3).map(c => [c.code, c.probability]) : null;
+}
+
+function writeSummary(ctx, extra = {}) {
+  if (!ctx.opts.summary) return;
+  const out = Object.assign({ game: ctx.opts.game, walk: ctx.opts.walk, walk_clicks: ctx.opts.walkClicks, server: SERVER, total: ctx.total,
+    rounds: Object.values(ctx.played).sort((a, b) => a.round - b.round), updated_at: new Date().toISOString() },
+  ctx.final || {}, extra);
+  const tmp = ctx.opts.summary + '.tmp';
+  fs.mkdirSync(path.dirname(ctx.opts.summary), { recursive: true });
+  fs.writeFileSync(tmp, JSON.stringify(out, null, 1));
+  fs.renameSync(tmp, ctx.opts.summary);
+}
+
+// --exit-when-done: summary, then the browser closes (the 'disconnected' handler exits the process).
+async function finish(ctx, reason, code = 0) {
+  if (ctx.finishing) return;
+  ctx.finishing = true;
+  ctx.final = Object.assign({}, ctx.final || {}, { end: reason });
+  writeSummary(ctx);
+  console.log(`Кінець (${reason}); всього ${ctx.total}`);
+  process.exitCode = code;
+  await ctx.browser.close().catch(() => process.exit(code));
+}
+
+// The game is over after this guess (state from the guess response's whitelisted metadata).
+function gameFinished(meta) {
+  const g = (meta && meta.game) || {};
+  return g.state === 'finished' || (g.roundCount > 0 && g.guessCount >= g.roundCount);
+}
+
+// steps = panoramas the player moved through in this round (the client's stepsCount)
+async function submitGuess(ctx, guess, p, steps = 0) {
   const meta = await readMeta(ctx, p);
   const problem = submitProblem(p, meta);
   if (problem) throw new Error('--submit: ' + problem);
   const token = meta.game.token;
   await requestSlot();
   const r = await ctx.page.evaluate((url, body, p) => window.__geoscr.post(url, body, p),
-    `${SITE}/api/v3/games/${token}`, { token, lat: guess.lat, lng: guess.lng, timedOut: false, stepsCount: 0 }, p);
+    `${SITE}/api/v3/games/${token}`, { token, lat: guess.lat, lng: guess.lng, timedOut: false, stepsCount: steps }, p);
   if (r.status === 429) { rateLimited = true; throw new Error('HTTP 429 from GeoGuessr: stopping requests'); }
   if (r.status !== 200) throw new Error(`--submit: HTTP ${r.status} ${r.error || ''}`);
   ctx.metaCache[p] = mergeMeta(ctx.metaCache[p], r.meta);
-  return r.meta && r.meta.game ? r.meta.game.lastGuess : null;
+  return { last: r.meta && r.meta.game ? r.meta.game.lastGuess : null, finished: gameFinished(r.meta) };
 }
 
 async function submitAndContinue(ctx, result, info) {
+  ctx.inSubmit++;
+  try { await submitAndNext(ctx, result, info); } finally { ctx.inSubmit--; }
+}
+
+async function submitAndNext(ctx, result, info) {
   const { page } = ctx;
   ctx.capturePath = info.path;
-  const last = await submitGuess(ctx, result.guess, info.path);
+  const rk = `${info.key}_r${info.round}`;
+  const steps = ctx.steps[rk] || ctx.moves[rk] || 0;   // panoramas walked (the client's stepsCount)
+  await shot(ctx, info, 'hud');   // --summary: the round's panorama with the HUD's answer, before the guess
+  const { last, finished } = await submitGuess(ctx, result.guess, info.path, steps);
+  ctx.lastProgress = Date.now();
   const pts = last ? last.points : 0;
   const km = last ? Math.round(last.distanceMeters / 100) / 10 : null;
   ctx.total += pts || 0;
   console.log(`   результат: ${pts} балів, ${km} км (всього ${ctx.total})`);
+  if (ctx.opts.summary) {
+    const r = ctx.played[info.round] = ctx.played[info.round] || { round: info.round, dirs: [] };
+    Object.assign(r, { guess: { lat: result.guess.lat, lng: result.guess.lng }, points: pts, distance_m: last ? last.distanceMeters : null,
+      steps, captures: ctx.moves[rk] || 0, n_fused: result.fusion ? result.fusion.n : 1, submitted_at: new Date().toISOString(),
+      blind: !!result.blind });
+    if (finished) ctx.final = { finished: true };
+    writeSummary(ctx);
+  }
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
-  await page.waitForSelector("[data-qa='close-round-result']", { timeout: 20000 });
+  if (finished && ctx.opts.exitWhenDone) {
+    await sleep(3000);
+    await shot(ctx, info, 'result');
+    await finish(ctx, 'game finished');
+    return;
+  }
+  // the reloaded page shows the round's result screen, or (when its own load already started the next
+  // round) the next round, whose start capture the page's controller makes by itself
+  const seen = await page.waitForFunction(r => {
+    if (document.querySelector("[data-qa='close-round-result']")) return 'result';
+    const S = window.__geoscr, st = S && S.state ? S.state() : null;
+    const m = st && st.roundText ? /(\d+)\s*\/\s*(\d+)/.exec(st.roundText) : null;
+    const meta = S && S.metaFor ? S.metaFor(location.pathname) : null;
+    const g = meta && meta.game;
+    const now = m ? +m[1] : g && typeof g.round === 'number' && g.guessCount < g.round ? g.round : 0;
+    return now > r ? 'next' : false;
+  }, { timeout: 30000, polling: 250 }, info.round).then(h => h.jsonValue()).catch(() => null);
+  if (seen === 'next') return;
+  if (seen !== 'result') throw new Error('після здогадки: немає ні екрана результату, ні наступного раунду');
   await hudShow(page, { mode: 'game', round: info.label, result, status: { text: 'Результат', level: 'ok' },
     score: { points: pts, distance: km, total: ctx.total } });
   await sleep(4000);
+  await shot(ctx, info, 'result');
   if (/^\/game\//.test(info.path))
     console.log('   (якщо з’явиться вікно квитка, закрийте його, не натискайте Play: це витрачає квиток)');
   assertPath(ctx);
@@ -632,6 +812,101 @@ async function submitAndContinue(ctx, result, info) {
     if (S && S.ctl && S.ctl.lastKey) { S.ctl.resultKey = S.ctl.lastKey; S.ctl.resultMark = S.panoChanges; }
   });
   await page.click("[data-qa='close-round-result']");
+}
+
+// --exit-when-done (a run resumed after a crash): a round's result screen that nobody dismisses (the guess was
+// posted, the next round not started) is closed after 15 s, as a player presses "Next"; the summary screen of a
+// finished game ends the run.
+async function resumeResult(ctx) {
+  if (ctx.finishing || ctx.inSubmit > 0) return;
+  const p = ctx.page.url();
+  if (!/\/game\/[A-Za-z0-9]+$/.test(new URL(p).pathname)) return;
+  const st = await ctx.page.evaluate(() => {
+    const next = document.querySelector("[data-qa='close-round-result']");
+    const meta = window.__geoscr ? window.__geoscr.metaFor(location.pathname) : null;
+    return { next: !!(next && next.offsetParent), finished: !!(meta && meta.game && meta.game.state === 'finished') };
+  }).catch(() => null);
+  if (!st) return;
+  if (st.finished) {
+    ctx.final = Object.assign({}, ctx.final || {}, { finished: true });
+    return finish(ctx, 'game finished (seen on the page)');
+  }
+  if (!st.next) { ctx.resultSeen = 0; return; }
+  ctx.resultSeen = (ctx.resultSeen || 0) + 1;
+  if (ctx.resultSeen < 3) return;
+  ctx.resultSeen = 0;
+  console.log('   екран результату раунду без дії: далі');
+  await ctx.page.evaluate(() => {
+    const S = window.__geoscr;
+    if (S && S.ctl && S.ctl.lastKey) { S.ctl.resultKey = S.ctl.lastKey; S.ctl.resultMark = S.panoChanges; }
+  });
+  await ctx.page.click("[data-qa='close-round-result']");
+}
+
+// --exit-when-done: nothing happened for STALL_MS (no capture came back, no guess): log what the HUD says, keep a
+// screenshot, and do what a player would - analyse the round again (as auto-analyse does at a round's start),
+// or, when the round was already answered, reload the page.
+const STALL_MS = 120000;
+const BLIND_GUESS = { lat: 45.0, lng: 10.0 };   // a round whose panorama never loads (nothing to analyse)
+async function unstall(ctx) {
+  if (ctx.finishing || ctx.inSubmit > 0) return;
+  const idle = Date.now() - ctx.lastProgress;
+  if (idle < 15000) return;
+  const v = await ctx.page.evaluate(() => {
+    const S = window.__geoscr, C = S && S.ctl;
+    if (!C) return null;
+    const again = Array.from(document.querySelectorAll('button')).find(x => /try again/i.test(x.innerText || '') && x.offsetParent);
+    return { busy: !!C.busy, status: C.view.status ? C.view.status.text : null, level: C.view.status ? C.view.status.level : null,
+      key: C.lastKey, result: !!document.querySelector("[data-qa='close-round-result']"), again: !!again };
+  }).catch(() => null);
+  if (!v) return;
+  const m = /#(\d+)$/.exec(v.key || '');
+  const rk = m ? `${ctx.opts.game}_r${m[1]}` : null;
+  // GeoGuessr could not load the round's panorama ("Failed to load the panorama at this round"): press its
+  // "Try again", as a player would, and analyse the round 20 s later; after two tries the player can only
+  // guess blind
+  if (v.again && rk && !ctx.submitted[rk]) {
+    ctx.failedLoads[rk] = (ctx.failedLoads[rk] || 0) + 1;
+    if (ctx.failedLoads[rk] > 2) {
+      const last = ctx.lastResult[rk];   // walking onto a panorama that fails: the answer so far
+      console.log(last ? '   [stall] панорама не завантажилась: подаю останню відповідь'
+        : '   [stall] панорама раунду так і не завантажилась: здогадка наосліп');
+      const info = last ? last.info : { key: ctx.opts.game, round: +m[1], label: `Раунд ${m[1]}`, path: `/game/${ctx.opts.game}` };
+      submitRound(ctx, rk, last ? last.result : { guess: BLIND_GUESS, blind: true, fusion: null, countries: [] }, info);
+      return;
+    }
+    console.log(`   [stall] панорама раунду не завантажилась (${v.status || '?'}): «Try again»`);
+    await ctx.page.evaluate(() => {
+      const b = Array.from(document.querySelectorAll('button')).find(x => /try again/i.test(x.innerText || '') && x.offsetParent);
+      if (b) b.click();
+    }).catch(() => null);
+    ctx.lastProgress = Date.now() - STALL_MS + 20000;
+    return;
+  }
+  if (idle < STALL_MS) return;
+  ctx.lastProgress = Date.now();
+  ctx.stalls = (ctx.stalls || 0) + 1;
+  console.log(`   [stall ${ctx.stalls}] ${Math.round(idle / 1000)} с без змін; HUD: ${v.level} «${v.status}», ${v.key}, busy ${v.busy}`);
+  const dir = path.join(OUT_ROOT, `${ctx.opts.game}_stall`);
+  fs.mkdirSync(dir, { recursive: true });
+  await ctx.page.screenshot({ path: path.join(dir, `stall_${ctx.stalls}.jpg`), type: 'jpeg', quality: 70 }).catch(() => null);
+  if (v.busy || v.result) return;
+  if (rk && !ctx.submitted[rk]) {
+    console.log('   [stall] аналіз раунду ще раз');
+    await ctx.page.evaluate(() => { window.__geoscr.ctl.analyse('auto'); }).catch(() => null);
+  } else {
+    console.log('   [stall] перезавантажую сторінку');
+    await ctx.page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => null);
+  }
+}
+
+// --summary: the page (panorama + HUD before the guess, or the result screen) -> <round capture dir>/<what>_r<k>.jpg
+async function shot(ctx, info, what) {
+  if (!ctx.opts.summary) return;
+  const dir = path.join(OUT_ROOT, `${info.key}_r${info.round}`);
+  fs.mkdirSync(dir, { recursive: true });
+  await ctx.page.screenshot({ path: path.join(dir, `${what}_r${info.round}.jpg`), type: 'jpeg', quality: 70 })
+    .catch(e => console.log('   [!] screenshot: ' + e.message));
 }
 
 async function fovTable(ctx, dir) {
@@ -890,6 +1165,9 @@ function parseArgs(argv) {
   return {
     challenge: val('--challenge'), game: val('--game'), replay: val('--replay'), round: val('--round', '1'),
     submit: has('--submit'), headless: has('--headless'), webgl: has('--webgl'), fovTable: has('--fov-table'),
+    walk: Math.max(0, Math.min(10, parseInt(val('--test-walk', '0'), 10) || 0)), exitWhenDone: has('--exit-when-done'),
+    walkClicks: Math.max(1, Math.min(10, parseInt(val('--test-walk-clicks', '1'), 10) || 1)),
+    summary: val('--summary'), maxMinutes: Math.max(1, parseFloat(val('--max-minutes', '20')) || 20),
     keepOpen: has('--keep-open'), hfov: Math.min(125, Math.max(60, parseFloat(val('--hfov', '125')))),
     playerZoom: val('--player-zoom') === null ? null : Math.min(3, Math.max(0, parseFloat(val('--player-zoom')) || 0)),
     auto: has('--auto') || has('--submit'), extension: has('--extension'),
@@ -906,6 +1184,11 @@ async function main() {
   }
   if (opts.submit && opts.replay) { console.error('[!] --submit cannot be used with --replay'); process.exit(1); }
   if (opts.extension && !opts.replay) { console.error('[!] --extension is a test of the extension on --replay'); process.exit(1); }
+  const testOnly = ['walk', 'exitWhenDone', 'summary'].filter(k => opts[k]);
+  if (testOnly.length && !(opts.submit && opts.game)) {
+    console.error('[!] --test-walk / --exit-when-done / --summary are calibration helpers for --game <token> --submit only');
+    process.exit(1);
+  }
   let fin = null;
   if (opts.replay) {
     try {
@@ -928,7 +1211,9 @@ async function main() {
   browser.on('disconnected', () => process.exit(process.exitCode || 0));
   const page = (await browser.pages())[0] || await browser.newPage();
   const paths = opts.replay ? ALLOWED_PATHS.concat([REPLAY_PATH]) : ALLOWED_PATHS;
-  const ctx = { page, opts, metaCache: {}, extraMeta: {}, fovCache: loadFovCache(), zoomChoice: {}, total: 0, moves: {},
+  const ctx = { page, browser, opts, metaCache: {}, extraMeta: {}, fovCache: loadFovCache(), zoomChoice: {}, total: 0, moves: {},
+    watchdog: {}, submitted: {}, played: {}, steps: {}, failedLoads: {}, lastResult: {}, final: null, finishing: false, inSubmit: 0,
+    lastProgress: Date.now(),
     capturePath: null, waitTiles: trackTiles(page), settings: { auto: opts.auto && !opts.replay },
     freeZoom: !!opts.replay && opts.playerZoom === null };
   if (opts.replay) {
@@ -969,6 +1254,19 @@ async function main() {
           ` forbid move/zoom/rotate ${!!c.forbidMoving}/${!!c.forbidZooming}/${!!c.forbidRotating}. Натисніть Play на сторінці.`);
         start = `${SITE}/challenge/${opts.challenge}`;
       } else if (opts.game) start = `${SITE}/game/${opts.game}`;
+      if (opts.summary) {   // a resumed run keeps the rounds an earlier run of this game submitted
+        try {
+          const prev = JSON.parse(fs.readFileSync(opts.summary, 'utf8'));
+          if (prev.game === opts.game) {
+            for (const r of prev.rounds || []) if (r && r.round) ctx.played[r.round] = r;
+            ctx.total = prev.total || 0;
+          }
+        } catch (e) { /* first run */ }
+      }
+      if (opts.exitWhenDone) {
+        setTimeout(() => finish(ctx, `time limit ${opts.maxMinutes} min`, 3), opts.maxMinutes * 60000);
+        setInterval(() => resumeResult(ctx).then(() => unstall(ctx)).catch(() => null), 5000);
+      }
       await page.goto(start, { waitUntil: 'domcontentloaded', timeout: 60000 });
       console.log('Режим спостереження: грайте у вікні браузера. Alt+G або кнопка «Аналіз» у HUD — аналіз панорами; ' +
         `автоаналіз на початку раунду ${ctx.settings.auto ? 'увімкнено' : 'вимкнено'} (Alt+A).`);
@@ -985,7 +1283,7 @@ async function main() {
 
 module.exports = Object.assign({}, P, {
   submitProblem, clipProblem, replayRound, pageScript, hudScript, attachScript, PAGE_SCRIPT, trackTiles, waitPanorama,
-  pageCapture, bridge, inlineImages,
+  pageCapture, bridge, inlineImages, walkAction, gameFinished, parseArgs,
 });
 
 if (require.main === module) main();

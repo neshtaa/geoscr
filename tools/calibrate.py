@@ -167,9 +167,15 @@ NON_WORLD_MAPS = {"Ukraine", "United Kingdom (Better Map)", "MLB and MiLB Stadiu
 def split_of(r):
     """train: random Street View samples + public ranked-duel rounds of other players;
     calib / test: halves (by game) of the user's real GeoGuessr World-map rounds;
+    world_calib / world_test: halves (by game, same hash rule) of the classic games the locator played on the
+    official World map (tools/world_play.py, mode world_play) - held out from train like calib / test, but
+    not part of the calib / test benchmark;
     other: rounds from single-country maps."""
     if r["mode"] in ("world", "balanced", "duel"):  # duel = public ranked duels of other players
         return "train"
+    if r["mode"] == "world_play":
+        g = str(r.get("game") or r["pano_id"])
+        return "world_calib" if int(hashlib.md5(g.encode()).hexdigest(), 16) % 2 == 0 else "world_test"
     if r.get("map") in NON_WORLD_MAPS:
         return "other"
     g = str(r.get("game") or r["pano_id"])

@@ -18,13 +18,36 @@ Fit, calibrate and evaluate the country/location model.
   python3 tools/train_model.py --views --cv                 2-fold cross-validation inside CALIB (folds by game):
                                                             both sets recalibrated on one half, scored on the
                                                             other (-> data/model/eval_views_cv.json with --save)
+  python3 tools/train_model.py --refit-glm 3e-4,1200 [--calib-only] [--save]
+                                                            only the GLM refitted (ridge / iterations) + the
+                                                            calibrations that depend on the posterior
+  python3 tools/train_model.py --calibrate-maps --calib-only --save
+                                                            map-aware prior recalibrated on CALIB (e.g. after
+                                                            tools/build_priors.py), no TEST report
+  python3 tools/train_model.py --world-points world_calib|world_test [--old-model DIR] [--workers 2] [--save]
+                                                            the locator re-run on the saved live captures of the
+                                                            World-map games (tools/world_play.py): No Move (start
+                                                            capture) and Moving (fused) answers, points, evidence
+                                                            -> scratch/world_eval/<split>.npz
+  python3 tools/train_model.py --world --evidence scratch/world_eval [--world-test] [--save]
+                                                            official World map: prior mixture of its per-map
+                                                            counts on the world_calib answers (the current model's
+                                                            evidence from --world-points) -> priors.json params
+                                                            "maps"[World id]
   python3 tools/train_model.py --views --eval-only --live-kind frame [--save]
                                                             the saved sets on single NMPZ frames
                                                             (tools/live_features.py --kind frame;
                                                             -> data/model/eval_views_frame.json)
 
 Order after new data: train_model.py --save (refit + calibration), tools/build_priors.py when the
-rounds behind the counts change, then train_model.py --calibrate-maps --save.  The "views" set
+rounds behind the counts change, then train_model.py --calibrate-maps --save.  The official World map after new
+world_calib games (tools/world_play.py; when no game is being played), DIR = the model files the games were played
+with (model.json, model.npz, priors.json):
+    python3 tools/build_priors.py
+    python3 tools/train_model.py --calibrate-maps --calib-only --save
+    python3 tools/train_model.py --world-points world_calib --old-model DIR
+    python3 tools/train_model.py --world --evidence scratch/world_eval --save
+(world_test only once with final settings: --world-points world_test --old-model DIR --save).  The "views" set
 (model.json "param_sets", data/model/regions_params.json) records what it was calibrated with (fitted
 arrays, priors.json counts, regions.npz, clue_detectors.npz) and is ignored once any of them changes
 (screenshots then use the panorama set): after a refit (--save), tools/build_priors.py, a regions.npz refit
@@ -40,6 +63,8 @@ test   : the other half -> reported accuracy and mean GeoGuessr points per round
 """
 import argparse
 import copy
+import hashlib
+import itertools
 import json
 import os
 import sys
@@ -245,6 +270,15 @@ def calibrate_maps(model, ev, recs, rows, iters=3, only=None):
     params = {"weights": w, "prior_mix": pm, "mix": mix, "alpha": model.priors.get("alpha"),
               "model": model.fingerprint(), "calib_rounds": len(rows), "calib_loglik": round(best, 4),
               "calib_loglik_ranked_only": round(best_r, 4), "calib_loglik_model_prior_bounds": round(no_map, 4)}
+    old_maps = (model.priors.get("params") or {}).get("maps")
+    if old_maps:  # per-map calibrations (the official World map, --world) are kept as a record; values whose
+        # override_stamp no longer matches (new shared parameters / model fit) are ignored by GeoModel.map_override
+        params["maps"] = old_maps
+        stale = sorted(k for k, o in old_maps.items() if any(x in o for x in ("mix", "prior_mix", "evidence_scale"))
+                       and {"fit": o.get("fit"), "shared": o.get("shared")} != model.override_stamp(params))
+        print("kept the per-map parameters of %s%s - rerun tools/train_model.py --world-points world_calib and "
+              "--world --evidence scratch/world_eval --save" % (", ".join(sorted(old_maps)), (
+                  " (now inactive, calibrated with other shared parameters: %s)" % ", ".join(stale)) if stale else ""))
     model.priors["params"] = params
     print("map params: weights %s prior_mix %s mix %s | calib loglik %.3f (start %.3f, model prior + bounds %.3f, "
           "ranked_world for all %.3f)" % (json.dumps({k: round(v, 3) for k, v in w.items()}), pm, mix, best, start,
@@ -902,6 +936,545 @@ def save_region_views(rmodel, n_calib, path=None):
               open(f, "w"), indent=1)
 
 
+# ----------------------------------------------------------------------------- official World map (world_play games)
+WORLD_GAMES = os.path.join(ROOT, "data", "calibration", "world_games.json")
+WORLD_MAP_ID = "52d15ff6850ffb3b847cb3b4"
+MIX_GRID = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+WORLD_SCALES = [0.8, 0.9, 1.0, 1.1, 1.2]
+PM_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+
+def world_split_of(token):
+    """world_calib / world_test of a World-map game without a stored "split": the parity rule of calibrate.split_of
+    (mode world_play; = build_priors / tools/world_play.py split_of_game) - not fold_of, whose bit is independent of
+    the parity."""
+    return split_of({"mode": "world_play", "game": str(token), "pano_id": ""})
+
+
+def world_rounds(path=WORLD_GAMES):
+    """Rounds of the finished World-map calibration games (tools/world_play.py, data/calibration/world_games.json):
+    [{game, split, walk, round, cc, lat, lng, points, dirs: capture directories oldest first (the start capture,
+    then the moves), exclude: the game is flagged (its live answers came from an engine under edit)}]."""
+    try:
+        with open(path) as f:
+            games = json.load(f).get("games", [])
+    except (OSError, ValueError):
+        return []
+    out = []
+    for g in games:
+        if g.get("status") != "finished" or not g.get("token"):
+            continue
+        split = g.get("split") or world_split_of(g["token"])
+        for r in g.get("rounds") or []:
+            cc = (r.get("gg_country") or r.get("country") or "").upper()
+            dirs = [d if os.path.isabs(d) else os.path.join(ROOT, d) for d in (r.get("dirs") or [])]
+            out.append({"game": g["token"], "split": split, "walk": int(g.get("walk") or 0), "round": r.get("round"),
+                        "cc": {"UK": "GB"}.get(cc, cc), "lat": r.get("lat"), "lng": r.get("lng"),
+                        "points": r.get("points"), "dirs": [d for d in dirs if os.path.exists(os.path.join(d, "response.json"))],
+                        "exclude": bool(g.get("exclude"))})
+    return out
+
+
+def response_evidence(path, classes):
+    """(evidence relative to the prior the capture was analysed with: log posterior - log prior, (C,); that prior)
+    of a saved live response (posterior / prior are stored to 4 significant digits)."""
+    with open(os.path.join(path, "response.json")) as f:
+        r = json.load(f)
+    post, prior = r.get("posterior") or {}, r.get("prior") or {}
+    p = np.array([float(post.get(c, 0.0)) for c in classes])
+    q = np.array([float(prior.get(c, 0.0)) for c in classes])
+    return np.log(np.maximum(p, 1e-12)) - np.log(np.maximum(q, 1e-12)), q
+
+
+def world_answers(model, rounds):
+    """Saved live answers of the World-map rounds: y (class index, -1 unknown), E_start (the start capture: the
+    No Move answer), E_final (the last capture: the fused Moving answer; = E_start without moves), P_old (the prior
+    the game was played with) - rounds without a saved start response are dropped."""
+    cls = {c: i for i, c in enumerate(model.classes)}
+    keep, ys, es, ef, po = [], [], [], [], []
+    for r in rounds:
+        if not r["dirs"]:
+            continue
+        e0, q0 = response_evidence(r["dirs"][0], model.classes)
+        e1, _ = response_evidence(r["dirs"][-1], model.classes)
+        keep.append(r)
+        ys.append(cls.get(r["cc"], -1))
+        es.append(e0)
+        ef.append(e1)
+        po.append(q0)
+    return keep, np.array(ys, int), np.array(es).reshape(-1, len(model.classes)), \
+        np.array(ef).reshape(-1, len(model.classes)), np.array(po).reshape(-1, len(model.classes))
+
+
+def world_priors(model, rounds, mix, params=None, oof=True, prior_mix=None):
+    """(n, C) priors of the official World map for the rounds: its per-map counts (build_priors.py: the user's CALIB
+    rounds on "World" + the world_calib games) without the round's own game fold when oof (the counted half),
+    mixed with mix {"map", "map_ranked"} and the model prior of prior_mix (shared params otherwise)."""
+    params = params or model.map_params() or {}
+    world = resolve_map({"id": WORLD_MAP_ID})
+    entry = model.map_entry(world)
+    k = int(model.priors.get("folds", 5))
+    cache, out = {}, []
+    for r in rounds:
+        f = fold_of(r["game"], k) if (oof and entry and r["split"] == "world_calib") else -1
+        if f not in cache:
+            counts = None
+            if entry and f >= 0:
+                fc = entry["fold_counts"][f]
+                counts = {c: n - fc.get(c, 0) for c, n in entry["counts"].items()}
+            kind, ranked, emp, wb = model.map_components(world, counts)
+            pm = params.get("prior_mix", model.prior_mix) if prior_mix is None else prior_mix
+            base = _norm_prior(model.base_prior(pm) * wb)
+            if kind == "map":
+                p = mix_prior("map", dict(params.get("mix") or {}, **mix), base, ranked, emp)
+            elif kind == "ranked":
+                p = mix_prior("ranked", params.get("mix") or {"ranked": 0.0}, base, ranked)
+            else:
+                p = base
+            cache[f] = _norm_prior(p)
+        out.append(cache[f])
+    return np.array(out)
+
+
+def _norm_prior(p):
+    p = np.asarray(p, float)
+    return p / p.sum(-1, keepdims=True)
+
+
+def _lp_true(P, E, y, scale=1.0):
+    lp = np.log(np.maximum(P, 1e-300)) + scale * E
+    lp = lp - lp.max(1, keepdims=True)
+    lp = lp - np.log(np.exp(lp).sum(1, keepdims=True))
+    return lp[np.arange(len(y)), y], lp
+
+
+def world_metrics(P, E, y, games, scale=1.0):
+    tp, lp = _lp_true(P, E, y, scale)
+    rank = (lp > tp[:, None]).sum(1)
+    return {"n": int(len(y)), "games": int(len(set(games))), "top1": round(float((rank == 0).mean()), 4),
+            "top3": round(float((rank < 3).mean()), 4), "top5": round(float((rank < 5).mean()), 4),
+            "loglik": round(float(tp.mean()), 4)}, tp, rank
+
+
+WORLD_CV_K, WORLD_CV_REPS = 5, 20
+
+
+def world_families(shared):
+    """Candidate World-map mixtures, nested families around the shared mix (shared = no own parameters): the
+    model-prior blend only, the per-map weight only, both, per-map + ranked weights, all three."""
+    g = [x for x in MIX_GRID if x <= 0.9 + 1e-9]
+
+    def fam(keys):
+        vals = {"map": g, "map_ranked": g, "prior_mix": PM_GRID}
+        out = []
+        for combo in itertools.product(*[vals[k] for k in keys]):
+            c_ = dict(shared, **dict(zip(keys, combo)))
+            if c_["map"] + c_["map_ranked"] <= 0.95 + 1e-9 and c_ not in out:
+                out.append(c_)
+        return out
+    return [("shared", [dict(shared)]), ("prior_mix", fam(["prior_mix"])), ("map", fam(["map"])),
+            ("map+prior_mix", fam(["map", "prior_mix"])), ("map+map_ranked", fam(["map", "map_ranked"])),
+            ("full", fam(["map", "map_ranked", "prior_mix"]))]
+
+
+def world_cv_folds(games, k=None, reps=None):
+    """reps random assignments of the games to k folds (md5 of game + repetition: deterministic)."""
+    k, reps = k or WORLD_CV_K, reps or WORLD_CV_REPS
+    return [np.array([int(hashlib.md5(("%s|%d" % (g, rep)).encode()).hexdigest(), 16) % k for g in games])
+            for rep in range(reps)]
+
+
+def world_cv(L, folds):
+    """Repeated k-fold CV of choosing the best row of L (candidates, answers) by the mean on the other folds: the
+    out-of-fold value of every answer, averaged over the repetitions."""
+    out = np.zeros(L.shape[1])
+    for f in folds:
+        cv_ = np.zeros(L.shape[1])
+        for k in np.unique(f):
+            tr = f != k
+            cv_[~tr] = L[int(np.argmax(L[:, tr].mean(1))), ~tr]
+        out += cv_
+    return out / len(folds)
+
+
+def cmd_world(args):
+    """--world: the official World map's prior mixture on the world_calib games (answers of tools/world_play.py
+    games: start capture = No Move answer, last capture = fused Moving answer; their evidence relative to the prior,
+    from the saved live responses or, with --evidence, from --world-points re-analysis under the current model),
+    out-of-fold per-map counts.  Nested families of World-specific parameters around the shared mixture (none, the
+    model-prior blend, the per-map weight, ...; world_families) are compared by repeated 5-fold CV over the games; the
+    best family whose CV gain over the shared mixture is clearly positive (lower 95% bound > 0, bootstrap over games)
+    gives the override (its in-sample best mixture; none when no family qualifies), an evidence scale likewise.  World_test only with --world-test.  --save writes priors.json params
+    "maps"[World id] (and data/model/eval_world.json)."""
+    model = GeoModel.load()
+    if args.priors:  # dry run on another priors.json (e.g. tools/build_priors.py --out)
+        model.priors = json.load(open(args.priors))
+    params = model.map_params()
+    if not params:
+        raise SystemExit("no calibrated map parameters (train_model.py --calibrate-maps --save first)")
+    if not model.map_entry(resolve_map({"id": WORLD_MAP_ID})):
+        print("WARNING: priors.json has no per-map counts for the official World map yet (tools/build_priors.py "
+              "after world_calib games; >= --min-rounds) - the World map uses the ranked prior")
+    allr = world_rounds()
+    print("world_games.json: %d rounds of finished games (%s)" % (len(allr), dict(collections_counter(
+        (r["split"], "moving" if r["walk"] else "no move", "excluded" if r["exclude"] else "ok") for r in allr))))
+    out = {"note": "official World map (52d15ff6850ffb3b847cb3b4): live answers of the locator's own classic games "
+                   "(tools/world_play.py), evidence = log posterior - log prior of the saved responses (start capture: "
+                   "No Move answer; last capture: fused Moving answer); per-map counts out-of-fold on world_calib; "
+                   "games flagged 'exclude' left out of the evidence (their counts are used)"}
+    res = {}
+    for split in ("world_calib",) + (("world_test",) if args.world_test else ()):
+        rr = [r for r in allr if r["split"] == split and not r["exclude"]]
+        rounds, y, Es, Ef, Pold = world_answers(model, rr)
+        ev_file = os.path.join(args.evidence, "%s.npz" % split) if args.evidence else None
+        if ev_file:  # evidence of the current model (cmd_world_points re-analysis) instead of the saved responses
+            z = np.load(ev_file, allow_pickle=True)
+            if list(z["classes"]) != list(model.classes):
+                raise SystemExit("%s: other classes" % ev_file)
+            pos = {(str(g), int(rd)): k for k, (g, rd) in enumerate(zip(z["game"], z["round"]))}
+            sel = [i for i, r in enumerate(rounds) if (r["game"], int(r["round"])) in pos]
+            idx = [pos[(rounds[i]["game"], int(rounds[i]["round"]))] for i in sel]
+            print("%s: evidence of the current model from %s (%d of %d rounds)" % (split, ev_file, len(sel), len(rounds)))
+            rounds = [rounds[i] for i in sel]
+            y, Pold = y[sel], Pold[sel]
+            Es, Ef = z["new_start_e"][idx].astype(np.float64), z["new_final_e"][idx].astype(np.float64)
+            no_fused = ~np.isfinite(Ef).all(1)  # Moving rounds whose move images were pruned: start answer only
+            if no_fused.any():
+                print("%s: %d Moving rounds without a fused answer (pruned move-capture images): start answer only"
+                      % (split, no_fused.sum()))
+                rounds = [dict(r, no_fused=True) if nf else r for r, nf in zip(rounds, no_fused)]
+                Ef = np.where(no_fused[:, None], Es, Ef)
+        ok = y >= 0
+        rounds = [r for r, o in zip(rounds, ok) if o]
+        y, Es, Ef, Pold = y[ok], Es[ok], Ef[ok], Pold[ok]
+        games = np.array([r["game"] for r in rounds])
+        mov = np.array([r["walk"] > 0 and not r.get("no_fused") for r in rounds])  # rounds with a fused Moving answer
+        res[split] = {"rounds": rounds, "y": y, "Es": Es, "Ef": Ef, "Pold": Pold, "games": games, "mov": mov,
+                      "nomove": np.array([r["walk"] == 0 for r in rounds])}
+        print("%s: %d rounds with saved answers (%d games; %d Moving rounds)" % (split, len(y), len(set(games)), mov.sum()))
+    c = res["world_calib"]
+    if not len(c["y"]):
+        raise SystemExit("no world_calib answers yet")
+    # observations: every start answer (No Move) and the fused answer of the Moving rounds
+    E_obs = np.concatenate([c["Es"], c["Ef"][c["mov"]]])
+    y_obs = np.concatenate([c["y"], c["y"][c["mov"]]])
+    rr_obs = c["rounds"] + [r for r, mv in zip(c["rounds"], c["mov"]) if mv]
+
+    shared = {"map": params["mix"].get("map", 0.0), "map_ranked": params["mix"].get("map_ranked", 0.0),
+              "prior_mix": params.get("prior_mix", 0.0)}
+    obs_games = np.array([r["game"] for r in rr_obs])
+    scales = [1.0] + [s_ for s_ in WORLD_SCALES if s_ != 1.0]
+    cache = {}
+
+    def L_of(cand):  # (scales, answers) log P(true country), out-of-fold per-map counts
+        k = tuple(sorted(cand.items()))
+        if k not in cache:
+            P = world_priors(model, rr_obs, {"map": cand["map"], "map_ranked": cand["map_ranked"]}, params,
+                             prior_mix=cand["prior_mix"])
+            cache[k] = np.array([_lp_true(P, E_obs, y_obs, sc)[0] for sc in scales])
+        return cache[k]
+
+    fams = world_families(shared)
+    Lf = {name: np.array([L_of(c_) for c_ in cands]) for name, cands in fams}   # (cands, scales, answers)
+    folds = world_cv_folds(obs_games)
+    cv = {name: world_cv(L[:, 0], folds) for name, L in Lf.items()}
+    L_shared = Lf["shared"][0, 0]
+    # the World map without per-map counts (HEAD 89a558e: ranked kind) and the prior the games were played with
+    world = resolve_map({"id": WORLD_MAP_ID})
+    _, ranked, _, wb = model.map_components(world, use=("ranked",))
+    base = _norm_prior(model.base_prior(params.get("prior_mix", model.prior_mix)) * wb)
+    p_ranked = _norm_prior(mix_prior("ranked", params["mix"], base, ranked))
+    L_ranked = _lp_true(np.tile(p_ranked, (len(y_obs), 1)), E_obs, y_obs)[0]
+    played_tp = _lp_true(np.concatenate([c["Pold"], c["Pold"][c["mov"]]]), E_obs, y_obs)[0]
+    flat = float(_lp_true(np.ones_like(E_obs), E_obs, y_obs)[0].mean())
+    print("world_calib (%d answers, %d games): loglik flat prior %.4f | played with %.4f | ranked prior without per-map "
+          "counts %.4f | shared mix over the per-map counts %.4f (out-of-fold counts)" % (
+              len(y_obs), len(set(obs_games)), flat, played_tp.mean(), L_ranked.mean(), L_shared.mean()))
+    d_counts = paired_diff(L_shared, L_ranked, obs_games)
+    print("  per-map counts (shared mix) - ranked prior: %+.4f %s" % (d_counts["diff"], d_counts["ci95"]))
+    cv_out = {}
+    for name, _ in fams:
+        d = paired_diff(cv[name], L_shared, obs_games)
+        cv_out[name] = {"cv_loglik": round(float(cv[name].mean()), 4), "minus_shared": d}
+        print("  family %-14s repeated %d-fold CV loglik %.4f, minus shared mix %+.4f %s" % (
+            name, WORLD_CV_K, cv[name].mean(), d["diff"], d["ci95"]))
+    # a World-specific family only when it beats the shared mixture clearly (lower 95% bound of the CV gain > 0):
+    # ~20 games pick quite different mixtures fold to fold, so a mere CV mean edge is mostly noise
+    ok_f = [n_ for n_ in cv if n_ == "shared" or cv_out[n_]["minus_shared"]["ci95"][0] > 0]
+    family = max(ok_f, key=lambda n_: (float(cv[n_].mean()), n_ == "shared"))
+    cands = dict(fams)[family]
+    L = Lf[family]
+    best_mix = cands[int(np.argmax(L[:, 0].mean(1)))]
+    # evidence scale of the World map (with the chosen family): joint choice vs mixture only, kept only when its CV
+    # gain is clearly positive
+    cv_joint = world_cv(L.reshape(-1, L.shape[-1]), folds)
+    d_scale = paired_diff(cv_joint, cv[family], obs_games)
+    ij = int(np.argmax(L.reshape(-1, L.shape[-1]).mean(1)))
+    use_scale = scales[ij % len(scales)] != 1.0 and d_scale["ci95"][0] > 0
+    scale = scales[ij % len(scales)] if use_scale else 1.0
+    if use_scale:
+        best_mix = cands[ij // len(scales)]
+    best = float(L_of(best_mix)[scales.index(scale)].mean())
+    print("  -> family %s: mix %s, evidence scale %.2f (scale CV gain %+.4f %s), in-sample loglik %.4f" % (
+        family, best_mix, scale, d_scale["diff"], d_scale["ci95"], best))
+    # fit / shared: the override_stamp (model fit + shared map parameters) the values below belong to (map_override
+    # ignores the values once either changes)
+    over = {"family": family, "model": model.fingerprint(), **model.override_stamp(params),
+            "calib_answers": int(len(y_obs)),
+            "calib_rounds": int(len(c["y"])), "calib_games": int(len(set(c["games"]))),
+            "calib_loglik": round(best, 4), "calib_loglik_shared": round(float(L_shared.mean()), 4),
+            "calib_loglik_ranked_without_counts": round(float(L_ranked.mean()), 4),
+            "calib_loglik_played": round(float(played_tp.mean()), 4), "counts_minus_ranked": d_counts,
+            "cv": cv_out, "cv_scale_gain": d_scale,
+            "counts_rounds": (model.map_entry(world) or {}).get("n"),
+            "source": "tools/train_model.py --world (world_calib answers of tools/world_play.py games)"}
+    if family != "shared":  # otherwise the shared mixture (and its later recalibrations) applies
+        over.update(mix={"map": best_mix["map"], "map_ranked": best_mix["map_ranked"]}, prior_mix=best_mix["prior_mix"])
+    if use_scale:
+        over["evidence_scale"] = scale
+    out["world_calib"] = over
+    newp = dict(params, maps=dict(params.get("maps") or {}, **{WORLD_MAP_ID: over}))
+    if args.world_test:
+        t = res["world_test"]
+        if len(t["y"]):
+            t_out = {}
+            Pnew = world_priors(model, t["rounds"], {"map": best_mix["map"], "map_ranked": best_mix["map_ranked"]},
+                                params, oof=False, prior_mix=best_mix["prior_mix"])
+            for name, E, sel in (("no_move_start", t["Es"], np.ones(len(t["y"]), bool)),
+                                 ("no_move_games", t["Es"], t["nomove"]), ("moving_final", t["Ef"], t["mov"])):
+                if not sel.any():
+                    continue
+                a, tpa, _ = world_metrics(Pnew[sel], E[sel], t["y"][sel], t["games"][sel], scale)
+                b, tpb, _ = world_metrics(t["Pold"][sel], E[sel], t["y"][sel], t["games"][sel])
+                t_out[name] = {"new_world_prior": a, "played_with": b,
+                               "loglik_new_minus_played": paired_diff(tpa, tpb, t["games"][sel])}
+                print("world_test %-14s new prior %s | played with %s | loglik %+.4f %s" % (
+                    name, a, b, t_out[name]["loglik_new_minus_played"]["diff"],
+                    t_out[name]["loglik_new_minus_played"]["ci95"]))
+            out["world_test"] = t_out
+    if args.save:
+        model.priors["params"] = newp
+        model.save_priors()
+        print("saved priors.json params maps[%s] = %s" % (WORLD_MAP_ID, {k: over.get(k) for k in (
+            "family", "mix", "prior_mix", "evidence_scale")}))
+    if args.save:
+        json.dump(out, open(os.path.join(MODEL_DIR, "eval_world.json"), "w"), indent=1)
+    return out
+
+
+def _points_job(job):
+    """Worker of cmd_world_points: one round; the locator (working tree, features / card detections extracted once per
+    capture, fusion.install_tap) re-run on its saved captures with every model variant; per variant the start answer
+    (No Move) and the fused answer of all captures (Moving: engine.fusion.FusionStore, as the live server)."""
+    r, mp, cls = job
+    from engine import fusion
+    from engine.geo import geoguessr_points as gp, haversine_km as hk
+    from engine.panorama import SphericalImage
+    from rebuild_views import load_capture
+    loc = _WORKER["loc"]
+    stores = {name: fusion.FusionStore(max_rounds=4) for name in _WORKER["models"]}
+    start, final = {}, {}
+    # tools/world_play.py prunes the move captures' view images of old games when its disk budget runs out (views.json
+    # and response.json stay): such a round has only its start capture (No Move answer), no fused Moving answer
+    complete = all(capture_has_images(d) for d in r["dirs"])
+    for k, d in enumerate(r["dirs"] if complete else r["dirs"][:1]):
+        _, views = load_capture(d)
+        sph = SphericalImage.from_views(views, width=2048, heading=0.0)
+        for name, m in _WORKER["models"].items():
+            loc.model = m
+            res = loc.analyze(sph, map_info=mp)
+            if len(r["dirs"]) > 1:
+                X, flat, det = fusion.tapped(loc, sph)
+                res = stores[name].add(loc, "game:%s#%s" % (r["game"], r["round"]),
+                                       fusion.capture_state(res, X, flat, det), map_info=mp)
+            if k == 0:
+                start[name] = res
+            final[name] = res
+    out = {}
+    for name in _WORKER["models"]:
+        rec = {}
+        for tag, res in (("start", start[name]), ("final", final[name] if complete else None)):
+            if res is None:  # fused answer unavailable (pruned move-capture images)
+                rec[tag] = {"points": np.nan, "km": np.nan, "e": np.full(len(cls), np.nan, np.float32),
+                            "post": np.full(len(cls), np.nan, np.float32)}
+                continue
+            g = res["guess"]
+            d_km = float(hk(r["lat"], r["lng"], g["lat"], g["lng"]))
+            post = np.array([float(res["posterior"].get(c, 0.0)) for c in cls])
+            prior = np.array([float(res["prior"].get(c, 0.0)) for c in cls])
+            rec[tag] = {"points": float(gp(d_km, mp["maxErrorDistance"])), "km": d_km,
+                        "e": (np.log(np.maximum(post, 1e-12)) - np.log(np.maximum(prior, 1e-12))).astype(np.float32),
+                        "post": post.astype(np.float32)}
+        out[name] = rec
+    return r["game"], r["round"], dict(out, complete=complete)
+
+
+def capture_has_images(d):
+    """True when every view image named in the capture's views.json exists."""
+    try:
+        with open(os.path.join(d, "views.json")) as f:
+            v = json.load(f)
+    except (OSError, ValueError):
+        return False
+    files = [x.get("file") for x in (v.get("views") or v.get("frames") or []) if isinstance(x, dict)]
+    return bool(files) and all(f and os.path.exists(os.path.join(d, f)) for f in files)
+
+
+_WORKER = {}
+
+
+def _points_init(model_dirs):
+    from engine import fusion
+    from engine.locator import Locator
+    _WORKER["loc"] = fusion.install_tap(Locator())
+    _WORKER["models"] = {name: GeoModel.load(d) for name, d in model_dirs.items()}
+
+
+def cmd_world_points(args):
+    """--world-points SPLIT: the locator re-run on the saved live captures of the World-map games of SPLIT with the
+    model files of --old-model (the version the games were played with: model.json, model.npz, priors.json) and the
+    current data/model; per round and variant the start answer (No Move) and the fused answer (Moving): points with
+    the World formula, country rank, evidence relative to the prior -> scratch/world_eval/<split>.npz (the evidence
+    for cmd_world --evidence) and, with --save, data/model/eval_world_points_<split>.json (paired by game)."""
+    from multiprocessing import Pool
+    model_dirs = {"old": args.old_model, "new": MODEL_DIR} if args.old_model else {"new": MODEL_DIR}
+    mp = resolve_map({"id": WORLD_MAP_ID})
+    cls = list(GeoModel.load().classes)
+    rounds = [r for r in world_rounds() if r["split"] == args.world_points and not r["exclude"] and r["dirs"]
+              and r.get("lat") is not None]
+    if args.limit:
+        rounds = rounds[:args.limit]
+    print("%s: %d rounds (%d captures), variants %s" % (args.world_points, len(rounds),
+                                                         sum(len(r["dirs"]) for r in rounds), model_dirs), flush=True)
+    res, t0 = {}, time.time()
+    with Pool(args.workers, initializer=_points_init, initargs=(model_dirs,)) as pool:
+        for k, (g, rd, out) in enumerate(pool.imap_unordered(_points_job, [(r, mp, cls) for r in rounds])):
+            res[(g, rd)] = out
+            if (k + 1) % 10 == 0:
+                print("  %d/%d (%.0fs)" % (k + 1, len(rounds), time.time() - t0), flush=True)
+    rows = [r for r in rounds if (r["game"], r["round"]) in res]
+    cidx = {c: i for i, c in enumerate(cls)}
+    arrays = {"game": np.array([r["game"] for r in rows]), "round": np.array([r["round"] for r in rows]),
+              "complete": np.array([bool(res[(r["game"], r["round"])]["complete"]) for r in rows]),
+              "y": np.array([cidx.get(r["cc"], -1) for r in rows]), "walk": np.array([r["walk"] for r in rows]),
+              "played_points": np.array([float(r["points"] or 0) for r in rows]), "classes": np.array(cls)}
+    for name in model_dirs:
+        for tag in ("start", "final"):
+            for key in ("points", "km", "e", "post"):
+                arrays["%s_%s_%s" % (name, tag, key)] = np.array([res[(r["game"], r["round"])][name][tag][key]
+                                                                  for r in rows])
+    os.makedirs(WORLD_EVAL_DIR, exist_ok=True)
+    np.savez_compressed(os.path.join(WORLD_EVAL_DIR, "%s.npz" % args.world_points), **arrays)
+    report = world_points_report(arrays, "locator (working tree) re-run on the saved captures of the %s games; old = %s, "
+                                         "new = data/model; ci95 bootstrap over games" % (args.world_points, args.old_model))
+    if args.save:
+        json.dump(report, open(os.path.join(MODEL_DIR, "eval_world_points_%s.json" % args.world_points), "w"), indent=1)
+    return report
+
+
+WORLD_EVAL_DIR = os.path.join(ROOT, "scratch", "world_eval")
+
+
+def world_points_report(a, note):
+    games, y = a["game"], a["y"]
+    mov = a["walk"] > 0
+    comp = np.asarray(a["complete"], bool) if "complete" in a else np.ones(len(y), bool)
+    names = [n for n in ("new", "old") if "%s_start_points" % n in a]
+    report = {"note": note, "n": int(len(y)), "games": int(len(set(games.tolist()))),
+              "moving_rounds_without_move_images": int((mov & ~comp).sum())}
+    for tag, sel, label in (("start", np.ones(len(y), bool), "No Move answer (start capture), all rounds"),
+                            ("start", ~mov, "No Move games"), ("start", mov, "Moving games, start capture"),
+                            ("final", mov & comp, "Moving games (fused)")):
+        if not sel.any():
+            continue
+        e = {"n": int(sel.sum()), "games": int(len(set(games[sel].tolist()))),
+             "points_played": round(float(a["played_points"][sel].mean()), 1)}
+        for n in names:
+            P = a["%s_%s_post" % (n, tag)][sel]
+            yy = y[sel]
+            tp = np.where(yy >= 0, P[np.arange(len(yy)), np.maximum(yy, 0)], 0.0)
+            rank = np.where(yy >= 0, (P > tp[:, None]).sum(1), 999)
+            e[n] = {"points": round(float(a["%s_%s_points" % (n, tag)][sel].mean()), 1),
+                    "top1": round(float((rank == 0).mean()), 4), "top3": round(float((rank < 3).mean()), 4),
+                    "top5": round(float((rank < 5).mean()), 4),
+                    "loglik": round(float(np.log(np.maximum(tp, 1e-9)).mean()), 4),
+                    "median_km": round(float(np.median(a["%s_%s_km" % (n, tag)][sel])), 1)}
+        if len(names) == 2:
+            e["new_minus_old_points"] = paired_diff(a["new_%s_points" % tag][sel], a["old_%s_points" % tag][sel],
+                                                    games[sel])
+        report[label] = e
+        print("%-44s n=%d %s | played %.0f%s" % (
+            label, e["n"], " | ".join("%s: %.0f pts top1 %.3f top3 %.3f" % (n, e[n]["points"], e[n]["top1"], e[n]["top3"])
+                                      for n in names), e["points_played"],
+            (" | new-old %+.0f %s" % (e["new_minus_old_points"]["diff"], e["new_minus_old_points"]["ci95"]))
+            if len(names) == 2 else ""), flush=True)
+    return report
+
+
+def collections_counter(it):
+    from collections import Counter
+    return Counter(it)
+
+
+def cmd_refit_glm(args, recs, mats, tr, ca, te, ot):
+    """--refit-glm LAM,ITERS: refit only the multinomial GLM of the saved model on the CURRENT train split (classes
+    and standardisation of the saved model; the Gaussians, kNN references, embedding - hence the clue index, region
+    model and card detectors - are unchanged).  The train split drifts from the one the saved kNN references were
+    built on: tools/world_play.py turns duel training records that share a panorama with a World-map round into
+    world_play records, and load_records drops training records within 1 km of them (78050 references, 78028 GLM
+    rows on 2026-10-10), so a refit is not reproducible against the saved references and those references may still
+    sit on world_* rounds until the next full fit.  Memory: peak RSS ~2.5 GB (the float64 design matrix of ~78k rows
+    next to the feature caches), ~5 BLAS threads - run it alone, with OMP_NUM_THREADS=2..4.  Then recalibrate what depends on the posterior as a full refit does: evidence
+    exponents and prior mix from the fit defaults (GeoModel.calibrate, card exponent included), the location /
+    region kernels (calibrate_location) and the map-aware prior (calibrate_maps; per-map parameters kept, refit
+    them with --world).  The views parameter set and regions_params.json are not touched."""
+    from engine.model import SoftmaxGLM
+    lam, iters = (float(v) for v in args.refit_glm.split(","))
+    model = GeoModel.load()
+    cidx = {c: i for i, c in enumerate(model.classes)}
+    trk = np.array([i for i in tr if recs[i]["label"] in cidx])
+    yi = np.array([cidx[recs[i]["label"]] for i in trk])
+    t0 = time.time()
+    model.glm = SoftmaxGLM(lam=lam, iters=int(iters)).fit(model._glm_input({g: mats[g][trk] for g in model.groups}),
+                                                         yi, len(model.classes))
+    model._fit_hash = None
+    print("GLM refit (lambda %g, %d iterations) on %d training panoramas: %.0fs" % (lam, iters, len(trk), time.time() - t0))
+
+    def ev_for(rows):
+        ev = model.evidence({g: mats[g][rows] for g in model.groups})
+        return ev if args.no_cards else add_cards(model, ev, recs, rows)
+
+    ev_ca, ev_te, ev_ot = ev_for(ca), ev_for(te), (ev_for(ot) if len(ot) else None)
+    yca = np.array([cidx.get(recs[i]["label"], -1) for i in ca])
+    ok = yca >= 0
+    model.weights = dict({g: 0.3 for g in model.groups}, knn=0.5, glm=0.7, sun=0.0)
+    model.prior_mix = 0.5
+    ll = model.calibrate({k: (v[ok] if isinstance(v, np.ndarray) else v) for k, v in ev_ca.items()}, yca[ok])
+    print("calibrated weights:", json.dumps({k: round(v, 3) for k, v in model.weights.items()}),
+          "prior_mix", model.prior_mix, "calib loglik %.3f" % ll)
+    calibrate_location(model, ev_ca, recs, ca)
+    params = calibrate_maps(model, ev_ca, recs, ca)
+    if args.calib_only:  # no TEST numbers (report them once at the end: train_model.py --eval-only --save)
+        groups = map_groups(model, recs, ca)
+        evaluate(model, ev_ca, recs, ca, "calib, no map", groups=groups)
+        evaluate(model, ev_ca, recs, ca, "calib, map info", True, groups=groups)
+        if args.save:
+            model.save()
+            if params:
+                model.save_priors()
+            print("saved data/model (model.npz GLM, model.json, priors.json params; eval files not written: "
+                  "--calib-only)")
+        return model
+    out = map_report(model, ev_ca, ev_te, recs, ca, te, ev_ot, ot)
+    if args.save:
+        model.save()
+        if params:
+            model.save_priors()
+        json.dump(out, open(os.path.join(MODEL_DIR, "eval_maps.json"), "w"), indent=1)
+        json.dump(out["test_no_map"], open(os.path.join(MODEL_DIR, "eval.json"), "w"), indent=1)
+        print("saved data/model (model.npz GLM, model.json, priors.json params, eval_maps.json, eval.json)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--groups", default="")
@@ -916,11 +1489,38 @@ def main():
     ap.add_argument("--views", action="store_true",
                     help="saved model: calibrate the 'views' parameter set (screenshots, live play) on the CALIB "
                          "live-grid features of tools/live_features.py and report CALIB / TEST live")
-    ap.add_argument("--calib-only", action="store_true", help="with --views: no TEST report (model selection)")
+    ap.add_argument("--calib-only", action="store_true",
+                    help="with --views / --refit-glm / --calibrate-maps / --calibrate-cards: no TEST report (model selection)")
     ap.add_argument("--cv", action="store_true", help="with --views: 2-fold cross-validation inside CALIB")
     ap.add_argument("--live-kind", default="grid", choices=("grid", "frame"),
                     help="with --views: live features of the grid (rotating rounds) or of single NMPZ frames")
+    ap.add_argument("--refit-glm", default="", metavar="LAM,ITERS",
+                    help="saved model: refit only the GLM (ridge LAM, ITERS iterations) and recalibrate the exponents, "
+                         "kernels and map-aware prior on calib")
+    ap.add_argument("--world", action="store_true",
+                    help="saved model: the official World map's prior mixture on the world_calib games "
+                         "(tools/world_play.py live answers) -> priors.json params maps[World id] with --save")
+    ap.add_argument("--world-test", action="store_true", help="with --world: also report world_test")
+    ap.add_argument("--evidence", default="", help="with --world: directory of cmd_world_points outputs "
+                    "(<split>.npz): the current model's evidence on the captures instead of the saved responses")
+    ap.add_argument("--priors", default="", help="with --world: use this priors.json (dry run, never with --save)")
+    ap.add_argument("--world-points", default="", choices=("", "world_calib", "world_test"),
+                    help="re-run the locator on the saved captures of these World-map games with the model files of "
+                         "--old-model and the current data/model; paired points (-> scratch/world_eval/<split>.npz, "
+                         "data/model/eval_world_points_<split>.json with --save)")
+    ap.add_argument("--old-model", default="", help="with --world-points: directory with the model.json, model.npz and "
+                    "priors.json the games were played with (paired comparison)")
+    ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--limit", type=int, default=0)
     args = ap.parse_args()
+    if args.world_points:
+        cmd_world_points(args)
+        return
+    if args.world:
+        if args.priors and args.save:
+            raise SystemExit("--priors is a dry run; --save writes data/model/priors.json from its own counts")
+        cmd_world(args)
+        return
     from engine import features
     groups = args.groups.split(",") if args.groups else [m.NAME for m in features.available()
                                                          if os.path.exists(os.path.join(FEAT_DIR, m.NAME + ".npz"))]
@@ -942,6 +1542,9 @@ def main():
     if args.views:
         cmd_views(args, recs, ca, te, mats)
         return
+    if args.refit_glm:
+        cmd_refit_glm(args, recs, mats, tr, ca, te, ot)
+        return
     if args.eval_only or args.calibrate_maps or args.calibrate_cards:
         model = GeoModel.load()
         ev_ca, ev_te = (model.evidence({g: mats[g][rows] for g in model.groups}) for rows in (ca, te))
@@ -955,6 +1558,20 @@ def main():
             calibrate_maps(model, ev_ca, recs, ca)
         if args.calibrate_cards:
             calibrate_cards(model, ev_ca, recs, ca)
+        if args.calib_only:  # model selection / recalibration: CALIB numbers only, no TEST report or eval files
+            groups = map_groups(model, recs, ca)
+            evaluate(model, ev_ca, recs, ca, "calib, no map", groups=groups)
+            if model.map_params():
+                evaluate(model, ev_ca, recs, ca, "calib, map info", True, groups=groups)
+            if args.save and (args.calibrate_maps or args.calibrate_cards):
+                model.save_priors()
+                if args.calibrate_cards:
+                    mj = os.path.join(MODEL_DIR, "model.json")
+                    meta = json.load(open(mj))
+                    meta["weights"]["cards"] = model.weights.get("cards", 0.0)
+                    json.dump(meta, open(mj, "w"), indent=1)
+                print("saved data/model/" + PRIORS_FILE + " params (eval files not written: --calib-only)")
+            return
         out = map_report(model, ev_ca, ev_te, recs, ca, te, ev_ot, ot)
         if args.save:
             if args.calibrate_maps or args.calibrate_cards:

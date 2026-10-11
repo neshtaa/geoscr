@@ -1,0 +1,139 @@
+{
+ "note": "official World map (52d15ff6850ffb3b847cb3b4): live answers of the locator's own classic games (tools/world_play.py), evidence = log posterior - log prior of the saved responses (start capture: No Move answer; last capture: fused Moving answer); per-map counts out-of-fold on world_calib; games flagged 'exclude' left out of the evidence (their counts are used)",
+ "world_calib": {
+  "family": "map+map_ranked",
+  "model": "e28b16ec64bb",
+  "fit": "43571a4dc594",
+  "shared": "935ced95fc01",
+  "calib_answers": 294,
+  "calib_rounds": 219,
+  "calib_games": 44,
+  "calib_loglik": -2.2024,
+  "calib_loglik_shared": -2.2667,
+  "calib_loglik_ranked_without_counts": -2.3389,
+  "calib_loglik_played": -2.2889,
+  "counts_minus_ranked": {
+   "diff": 0.0723,
+   "ci95_rounds": [
+    0.0424,
+    0.104
+   ],
+   "ci95": [
+    0.0437,
+    0.1034
+   ],
+   "clusters": 44
+  },
+  "cv": {
+   "shared": {
+    "cv_loglik": -2.2667,
+    "minus_shared": {
+     "diff": -0.0,
+     "ci95_rounds": [
+      -0.0,
+      -0.0
+     ],
+     "ci95": [
+      -0.0,
+      0.0
+     ],
+     "clusters": 44
+    }
+   },
+   "prior_mix": {
+    "cv_loglik": -2.2144,
+    "minus_shared": {
+     "diff": 0.0523,
+     "ci95_rounds": [
+      0.0116,
+      0.0937
+     ],
+     "ci95": [
+      0.0185,
+      0.0849
+     ],
+     "clusters": 44
+    }
+   },
+   "map": {
+    "cv_loglik": -2.2292,
+    "minus_shared": {
+     "diff": 0.0375,
+     "ci95_rounds": [
+      0.0043,
+      0.073
+     ],
+     "ci95": [
+      0.0089,
+      0.0681
+     ],
+     "clusters": 44
+    }
+   },
+   "map+prior_mix": {
+    "cv_loglik": -2.2157,
+    "minus_shared": {
+     "diff": 0.0509,
+     "ci95_rounds": [
+      0.0092,
+      0.093
+     ],
+     "ci95": [
+      0.0173,
+      0.0849
+     ],
+     "clusters": 44
+    }
+   },
+   "map+map_ranked": {
+    "cv_loglik": -2.2069,
+    "minus_shared": {
+     "diff": 0.0598,
+     "ci95_rounds": [
+      0.02,
+      0.1004
+     ],
+     "ci95": [
+      0.0234,
+      0.0978
+     ],
+     "clusters": 44
+    }
+   },
+   "full": {
+    "cv_loglik": -2.2137,
+    "minus_shared": {
+     "diff": 0.053,
+     "ci95_rounds": [
+      0.0073,
+      0.0984
+     ],
+     "ci95": [
+      0.0124,
+      0.0934
+     ],
+     "clusters": 44
+    }
+   }
+  },
+  "cv_scale_gain": {
+   "diff": 0.0055,
+   "ci95_rounds": [
+    -0.0113,
+    0.0228
+   ],
+   "ci95": [
+    -0.0136,
+    0.0262
+   ],
+   "clusters": 44
+  },
+  "counts_rounds": 235,
+  "source": "tools/train_model.py --world (world_calib answers of tools/world_play.py games)",
+  "mix": {
+   "map": 0.4,
+   "map_ranked": 0.5
+  },
+  "prior_mix": 0.0
+ }
+}

@@ -2,7 +2,7 @@
 Admin-1 region posterior inside a country (classical discriminant analysis, numpy only).
 
   P(region | image, country) ∝ prior(region)^w_prior · N(z | mu_region, I)^w_lda · LR_knn(region)^w_knn
-                               · P(sun | region)^w_sun
+                               · P(sun | region)^w_sun · LR_glm(region)^w_glm
 
 * z: the feature groups of engine.model (every column Gaussianised through its reference quantiles,
   robust-standardised, missing -> median) projected on the K leading within-country
@@ -16,8 +16,10 @@ Admin-1 region posterior inside a country (classical discriminant analysis, nump
   neighbourhood mean (Gaussian kernel on the distance from the region centroid to the reference
   panoramas of the country), itself shrunk towards the country mean, so tiny admin-1 units borrow
   from their neighbours.
-* prior: region frequencies in GeoGuessr's public ranked-duel pools (+ the random Street View
-  samples with weight beta), smoothed towards the area share of the region (90%, + 10% uniform).
+* prior: region frequencies in GeoGuessr's pools (fit(pool=...): all 76k ranked-duel rounds with a position and
+  the World-map rounds the locator played, tools/eval_regions.pool_counts; without it the duel reference panoramas)
+  + the random Street View samples with weight beta, smoothed towards the area share of the region (90%, + 10%
+  uniform).
   Extra references (prior_mask False: Street View panoramas sampled 3-40 km from duel locations,
   tools/eval_regions.py --fetch-extra) only describe the region appearance (weight extra_w in the
   means) and do not enter the prior.
@@ -25,6 +27,11 @@ Admin-1 region posterior inside a country (classical discriminant analysis, nump
   likelihood ratio against the region's share of the references.
 * sun: the analytic solar latitude likelihood (engine.features.solar) averaged over the
   latitudes of each region's reference panoramas.
+* glm: per country a class-balanced multinomial logit (ridge, as engine.model.SoftmaxGLM) of the region on the
+  K_big global discriminant coordinates of the references (regions with >= glm_min_n references; the others get the
+  neutral mean), a discriminative companion of the LDA densities (2-fold CV inside CALIB: log P(true region)
+  +0.03 [+0.01, +0.06] over the model without it).
+* any further key of the weights with a term of the same name in components() is added as exponent x term.
 * region smoothing: a share of the posterior is spread over neighbouring regions (distance kernel
   between region centroids, weighted by the prior) and over the regions that GeoGuessr's regional
   clue cards group together (co-occurrence in the cards' seterraRegionIds, data/calibration/pano_clues.json).
@@ -65,8 +72,60 @@ ALIAS = {"GF": "FR-GF", "GP": "FR-GP", "MQ": "FR-MQ", "RE": "FR-RE", "YT": "FR-Y
 # tools/eval_regions.py --cv --grid); the exponents / prior / smoothing below are starting values, calibrated on CALIB
 DEFAULT_PARAMS = {"pre": "qn", "K": 32, "K_big": 128, "shrink": 0.3, "tau": 5.0, "tau_geo": 5.0, "geo_sigma_km": 150.0,
                   "own": 0.0, "own_min": 150, "extra_w": 1.0, "beta": 0.3, "alpha": 0.5, "knn_k": 30, "knn_s": 2.0,
-                  "sun_smooth": 5, "weights": {"prior": 1.0, "lda": 0.3, "knn": 0.0, "sun": 0.0},
-                  "smooth": 0.0, "smooth_km": 200.0, "smooth_card": 0.0}
+                  "sun_smooth": 5, "weights": {"prior": 1.0, "lda": 0.3, "knn": 0.0, "sun": 0.0, "glm": 0.0},
+                  "smooth": 0.0, "smooth_km": 200.0, "smooth_card": 0.0,
+                  "glm_lam": 1e-2, "glm_min_n": 5, "glm_iters": 300, "glm_clip": 6.0}
+
+
+CHUNK = 8192  # rows per float64 block in the training sums
+
+
+def _group_sum(C, g, n):
+    """(n, d) per-group row sums of C (group index g of every row)."""
+    S = np.zeros((n, C.shape[1]))
+    if not len(g):
+        return S
+    o = np.argsort(g, kind="stable")
+    gs = g[o]
+    start = np.flatnonzero(np.r_[True, gs[1:] != gs[:-1]])
+    S[gs[start]] = np.add.reduceat(C[o], start, axis=0)
+    return S
+
+
+def _matmul_chunked(Z, W):
+    """Z @ W in float64 blocks of CHUNK rows (Z may be float32)."""
+    out = np.empty((len(Z), W.shape[1]))
+    for a in range(0, len(Z), CHUNK):
+        out[a:a + CHUNK] = np.asarray(Z[a:a + CHUNK], np.float64) @ W
+    return out
+
+
+def _softmax_fit(F, y, R, lam, iters=300, lr=0.5):
+    """(d, R) weights of a class-balanced multinomial logit with ridge lam on design F (n, d), labels y in 0..R-1:
+    full-batch Nesterov gradient descent on the convex penalised mean log-likelihood (engine.model.SoftmaxGLM)."""
+    n, d = F.shape
+    cnt = np.bincount(y, minlength=R).astype(float)
+    ws = 1.0 / cnt[y]
+    ws /= ws.sum()
+    W = np.zeros((d, R))
+    V = np.zeros_like(W)
+    for _ in range(iters):
+        Wn = W + 0.9 * V
+        A = F @ Wn
+        A -= A.max(1, keepdims=True)
+        P = np.exp(A)
+        P /= P.sum(1, keepdims=True)
+        P[np.arange(n), y] -= 1.0
+        g = F.T @ (P * ws[:, None]) + lam * Wn
+        V = 0.9 * V - lr * g
+        W = W + V
+    return W
+
+
+def _assign(out, X):
+    if out is not X:
+        out[...] = X
+    return out
 
 
 def _std_params(X):
@@ -174,34 +233,40 @@ class RegionModel:
         return self.param_sets.get(kind) or self.params
 
     # ------------------------------------------------------------------ training
-    def fit(self, X_by_group, country, region, lat, lng, duel, card_sets=(), prior_mask=None):
+    def fit(self, X_by_group, country, region, lat, lng, duel, card_sets=(), prior_mask=None, pool=None):
         """X_by_group: {group: (n, d)} features of the reference panoramas, country: (n,) labels,
         region: (n,) region indices of engine.geo.region_index (0 or a region the label does not own
         (region_owner) = not used), duel: (n,) True for panoramas of real GeoGuessr pools (ranked duels).
         card_sets: [(country, [region indices], placements)] of GeoGuessr's regional cards.
         prior_mask: (n,) False for references that only describe the region appearance (not counted
-        in the region prior)."""
+        in the region prior).
+        pool: optional (n_regions,) counts of real GeoGuessr pool rounds per raster region (all ranked-duel /
+        World-map rounds with a position, also those without features); replaces the counts of the duel
+        references in the region prior."""
         p = self.params
         _, codes, _, _, _ = _regions()
         self.groups = list(X_by_group)
-        self.dims = [int(X_by_group[g].shape[1]) for g in self.groups]
-        X = np.concatenate([np.asarray(X_by_group[g], np.float64) for g in self.groups], axis=1)
+        self.dims = [int(np.shape(X_by_group[g])[1]) for g in self.groups]
         country, region = np.asarray(country), np.asarray(region)
         lat, lng, duel = np.asarray(lat, float), np.asarray(lng, float), np.asarray(duel, bool)
         pm = np.ones(len(country), bool) if prior_mask is None else np.asarray(prior_mask, bool)
         rcc = region_owner(sorted(set(country)))
         ok = (region > 0) & (rcc[region] == country)
-        X, country, region, lat, lng, duel, pm = X[ok], country[ok], region[ok], lat[ok], lng[ok], duel[ok], pm[ok]
+        # float32 working copy of the used rows, transformed in place (85k x 700 references: ~0.25 GB)
+        X = np.concatenate([np.asarray(X_by_group[g])[ok].astype(np.float32, copy=False) for g in self.groups],
+                           axis=1)
+        country, region, lat, lng, duel, pm = country[ok], region[ok], lat[ok], lng[ok], duel[ok], pm[ok]
         self.qn = _qn_params(X) if p.get("pre") == "qn" else None
-        X = self._pre(X)
+        self._pre(X, out=X)
         self.med, self.sc = _std_params(X)
-        Z = self.transform(X, pre=False)
+        Z = self.transform(X, pre=False, out=X)
         Kb = max(p["K"], p["K_big"])
         self.proj, self.proj_ev = self._projection(Z, country, region, Kb, p["shrink"])
-        E = Z @ self.proj
+        E = _matmul_chunked(Z, self.proj)
+        del X, Z
         clat, clng, km2 = region_centroids()
         self.countries = sorted(set(country))
-        regs, mus, ndu, shares, hist, cnt, call, refs, ref_reg, ref_rows = [], [], [], [], [], [], [], [], [], []
+        regs, mus, ndu, nra, shares, hist, cnt, call, refs, ref_reg, ref_rows = [], [], [], [], [], [], [], [], [], [], []
         ref_off, reg_off = [0], [0]
         self.rot = {}
         for c in self.countries:
@@ -213,7 +278,8 @@ class RegionModel:
             wr = np.where(pm[rows], 1.0, p.get("extra_w", 1.0))  # weight of the appearance-only references
             nall = np.bincount(ri, minlength=len(rc)).astype(float)
             n = np.bincount(ri[pm[rows]], minlength=len(rc)).astype(float)
-            nd = np.bincount(ri[duel[rows] & pm[rows]], minlength=len(rc)).astype(float)
+            nd = np.bincount(ri[duel[rows] & pm[rows]], minlength=len(rc)).astype(float) if pool is None \
+                else np.asarray(pool, float)[rc]
             U = self._rotation(E[rows], ri, len(rc)) if p["own"] > 0 and len(rows) >= p["own_min"] else None
             e = E[rows][:, :p["K"]] if U is None else E[rows] @ U
             if U is not None:
@@ -229,6 +295,7 @@ class RegionModel:
             np.add.at(S, ri, e * wr[:, None])
             mus.append((S + p["tau"] * tgt) / (np.bincount(ri, weights=wr, minlength=len(rc)) + p["tau"])[:, None])
             ndu.append(nd)
+            nra.append(n - np.bincount(ri[duel[rows] & pm[rows]], minlength=len(rc)))
             shares.append(0.9 * km2[rc] / max(km2[rc].sum(), 1e-12) + 0.1 / len(rc))
             H = np.zeros((len(rc), len(SUN_LAT_GRID)))
             b = np.clip(np.round(lat[rows] - SUN_LAT_GRID[0]).astype(int), 0, len(SUN_LAT_GRID) - 1)
@@ -250,6 +317,7 @@ class RegionModel:
         self.mu = np.concatenate(mus)
         self.count = np.concatenate(cnt)
         self.count_duel = np.concatenate(ndu)
+        self.count_rand = np.concatenate(nra)
         self.count_all = np.concatenate(call)
         self.share = np.concatenate(shares)
         self.hist = np.concatenate(hist).astype(np.float32)
@@ -257,22 +325,74 @@ class RegionModel:
         self.ref_reg = np.concatenate(ref_reg).astype(np.int32)
         rr = np.concatenate(ref_rows)
         self.ref_lat, self.ref_lng, self.ref_duel = lat[rr], lng[rr], duel[rr]
+        self._fit_glm(E, ref_rows, ref_reg)
         self._index()
         return self
 
+    def _fit_glm(self, E, ref_rows, ref_reg):
+        """Per country: class-balanced multinomial logit (ridge glm_lam, Nesterov gradient descent as
+        engine.model.SoftmaxGLM) of the region on the K_big global discriminant coordinates of its references, over
+        the regions with >= glm_min_n references.  Stored as glm_S (region positions in the country's list) and
+        glm_W ((len(S), K_big + 1) rows), offsets glm_off per country."""
+        p = self.params
+        S_all, W_all, off = [], [], [0]
+        for rows, ri, c in zip(ref_rows, ref_reg, self.countries):
+            S, W = np.zeros(0, int), np.zeros((0, E.shape[1] + 1))
+            cnt = np.bincount(ri)
+            keep = np.flatnonzero(cnt >= p.get("glm_min_n", 5))
+            if len(keep) >= 2 and p.get("glm_lam") is not None:
+                m = np.isin(ri, keep)
+                pos = np.full(cnt.size, -1)
+                pos[keep] = np.arange(len(keep))
+                F = self._glm_design(E[rows[m]])
+                W = _softmax_fit(F, pos[ri[m]], len(keep), float(p["glm_lam"]), int(p.get("glm_iters", 300))).T
+                S = keep
+            S_all.append(S)
+            W_all.append(W)
+            off.append(off[-1] + len(S))
+        self.glm_S = np.concatenate(S_all).astype(np.int32)
+        self.glm_W = np.concatenate(W_all).astype(np.float32)
+        self.glm_off = np.array(off)
+
+    def _glm_design(self, Eb):
+        c = float(self.params.get("glm_clip", 6.0))
+        return np.hstack([np.clip(np.asarray(Eb, np.float64), -c, c), np.ones((len(Eb), 1))])
+
+    def glm_term(self, Eb, cc):
+        """(n, R_c) GLM log-likelihood ratio of the regions of cc for K_big coordinates Eb (regions without a GLM
+        class get the mean, log 1/|S|); None without a GLM for cc."""
+        if getattr(self, "glm_off", None) is None or cc not in self.cidx:
+            return None
+        i = self.cidx[cc]
+        a, b = self.glm_off[i], self.glm_off[i + 1]
+        if b - a < 2:
+            return None
+        S, W = self.glm_S[a:b], self.glm_W[a:b].astype(np.float64)
+        A = self._glm_design(Eb) @ W.T
+        A -= A.max(1, keepdims=True)
+        lp = A - np.log(np.exp(A).sum(1, keepdims=True))
+        T = np.full((len(Eb), self.reg_off[i + 1] - self.reg_off[i]), -math.log(len(S)))
+        T[:, S] = lp
+        return T - T.max(1, keepdims=True)
+
     @staticmethod
     def _projection(Z, country, region, K, shrink):
+        """Between-region discriminant directions (pooled within-region covariance against the scatter of the
+        region means around their country mean); Z (n, d) may be float32 (sums accumulated in float64 chunks)."""
         ur, inv = np.unique(region, return_inverse=True)
-        cnt = np.bincount(inv).astype(float)
-        S = np.zeros((len(ur), Z.shape[1]))
-        np.add.at(S, inv, Z)
-        M = S / cnt[:, None]
-        R = Z - M[inv]
-        Sw = R.T @ R / max(len(Z) - len(ur), 1)
-        Sw = (1 - shrink) * Sw + shrink * np.diag(np.diag(Sw))
         uc, cinv = np.unique(country, return_inverse=True)
-        Sc = np.zeros((len(uc), Z.shape[1]))
-        np.add.at(Sc, cinv, Z)
+        cnt = np.bincount(inv).astype(float)
+        d = Z.shape[1]
+        S, Sc, T = np.zeros((len(ur), d)), np.zeros((len(uc), d)), np.zeros((d, d))
+        for a in range(0, len(Z), CHUNK):
+            C = np.asarray(Z[a:a + CHUNK], np.float64)
+            T += C.T @ C
+            S += _group_sum(C, inv[a:a + CHUNK], len(ur))
+            Sc += _group_sum(C, cinv[a:a + CHUNK], len(uc))
+        M = S / cnt[:, None]
+        # within-region scatter = total - between (region means), as sum (z - m_r)(z - m_r)^T
+        Sw = (T - (M * cnt[:, None]).T @ M) / max(len(Z) - len(ur), 1)
+        Sw = (1 - shrink) * Sw + shrink * np.diag(np.diag(Sw))
         Mc = Sc / np.bincount(cinv)[:, None]
         first = np.zeros(len(ur), int)
         first[inv] = cinv
@@ -322,35 +442,45 @@ class RegionModel:
         self._kern = {}
 
     def prior(self, cc, beta=None, alpha=None):
-        """P(region | country): duel-pool counts + beta x the random-sample counts, smoothed towards the
-        area shares with alpha x sqrt(total count) pseudo-counts."""
+        """P(region | country): GeoGuessr pool counts (duel references, or the pool rounds given to fit) + beta x
+        the random-sample counts, smoothed towards the area shares with alpha x sqrt(total count) pseudo-counts."""
         p = self.params
         beta = p["beta"] if beta is None else beta
         alpha = p["alpha"] if alpha is None else alpha
         i = self.cidx[cc]
         sl = slice(self.reg_off[i], self.reg_off[i + 1])
-        n, nd = self.count[sl], self.count_duel[sl]
-        c = nd + beta * (n - nd)
+        c = self.count_duel[sl] + beta * self.count_rand[sl]
         q = c + alpha * max(1.0, math.sqrt(c.sum())) * self.share[sl]
         return q / max(q.sum(), 1e-300)
 
-    def _pre(self, X):
-        """Quantile Gaussianisation of every column (NaN stays NaN)."""
-        X = np.asarray(X, np.float64)
+    def _pre(self, X, out=None):
+        """Quantile Gaussianisation of every column (NaN stays NaN); out: write into this array (may be X)."""
+        if out is None:
+            X = np.asarray(X, np.float64)
         if self.qn is None:
-            return X
+            return X if out is None else _assign(out, X)
         xs, zs, off = self.qn
-        Y = np.zeros_like(X)
+        Y = np.zeros_like(X) if out is None else out
         for j in range(X.shape[1]):
             a, b = off[j], off[j + 1]
-            if b - a > 1:
-                Y[:, j] = np.interp(X[:, j], xs[a:b], zs[a:b])
-        Y[np.isnan(X)] = np.nan
+            nan = np.isnan(X[:, j])
+            Y[:, j] = np.interp(X[:, j], xs[a:b], zs[a:b]) if b - a > 1 else 0.0
+            Y[nan, j] = np.nan
         return Y
 
-    def transform(self, X, pre=True):
-        X = self._pre(X) if pre else np.asarray(X, np.float64)
-        return np.nan_to_num(np.clip((X - self.med) / self.sc, -8, 8))
+    def transform(self, X, pre=True, out=None):
+        """Robust-standardised, clipped features (NaN -> 0 = the median); out: compute in place there."""
+        if out is None:
+            X = self._pre(X) if pre else np.asarray(X, np.float64)
+            return np.nan_to_num(np.clip((X - self.med) / self.sc, -8, 8))
+        if pre:
+            self._pre(X, out=out)
+        elif out is not X:
+            out[...] = X
+        out -= self.med.astype(out.dtype)
+        out /= self.sc.astype(out.dtype)
+        np.clip(out, -8, 8, out=out)
+        return np.nan_to_num(out, copy=False)
 
     def embed_all(self, X_by_group):
         """(n, K_big) global discriminant coordinates of feature rows (a missing group counts as missing values)."""
@@ -370,9 +500,9 @@ class RegionModel:
         i = self.cidx[cc]
         return self.reg_idx[self.reg_off[i]:self.reg_off[i + 1]]
 
-    def components(self, e, cc, sun_mix=None):
-        """Raw (n, R_c) terms of country cc for embedded rows e: LDA log-density, kNN kernel votes and
-        the sun log-likelihood (with sun_mix)."""
+    def components(self, e, cc, sun_mix=None, ebig=None):
+        """Raw (n, R_c) terms of country cc for embedded rows e: LDA log-density, kNN kernel votes,
+        the sun log-likelihood (with sun_mix) and the GLM term (with ebig, the K_big coordinates of embed_all)."""
         p = self.params
         i = self.cidx[cc]
         sl = slice(self.reg_off[i], self.reg_off[i + 1])
@@ -395,6 +525,10 @@ class RegionModel:
         out["knn_votes"] = V
         if sun_mix is not None:
             out["sun"] = np.log(np.maximum(np.atleast_2d(sun_mix) @ self.sun_hist(cc).T, 0.0) + 1e-9)
+        if ebig is not None:
+            g = self.glm_term(ebig, cc)
+            if g is not None:
+                out["glm"] = g
         return out
 
     def sun_hist(self, cc):
@@ -429,6 +563,9 @@ class RegionModel:
             lp = lp + w["knn"] * (np.log((V + s * base[None]) / (V.sum(1, keepdims=True) + s)) - np.log(base)[None])
         if w.get("sun") and "sun" in comp:
             lp = lp + w["sun"] * comp["sun"]
+        for k, v in w.items():  # further log-likelihood terms of comp with an exponent of their own
+            if k not in ("prior", "lda", "knn", "sun") and v and k in comp:
+                lp = lp + v * comp[k]
         lp = lp - lp.max(1, keepdims=True)
         P = np.exp(lp)
         P /= P.sum(1, keepdims=True)
@@ -492,10 +629,14 @@ class RegionModel:
         overrides of self.params (e.g. params_for("views"))."""
         if cc not in self.cidx:
             return None
+        w = (params or self.params)["weights"]
+        if E is None and w.get("glm"):
+            E = self.embed_all(X_by_group)
         e = self.embed(X_by_group, cc, E)
-        if sun_mix is None and (params or self.params)["weights"].get("sun"):
+        if sun_mix is None and w.get("sun"):
             sun_mix = sun_mixture(X_by_group)
-        return self.regions_of(cc), self.combine(self.components(e, cc, sun_mix), cc, params)
+        return self.regions_of(cc), self.combine(self.components(e, cc, sun_mix, E if w.get("glm") else None), cc,
+                                                 params)
 
     # ------------------------------------------------------------- persistence
     def save(self, path=MODEL_DIR):
@@ -514,6 +655,7 @@ class RegionModel:
             reg_code=np.array([codes[i] for i in self.reg_idx]), reg_lat=self.reg_lat, reg_lng=self.reg_lng,
             reg_off=self.reg_off, ref_off=self.ref_off, card_co=self.card_co, card_off=self.card_off,
             mu=self.mu.astype(np.float32), count=self.count, count_duel=self.count_duel, count_all=self.count_all,
+            count_rand=self.count_rand, glm_S=self.glm_S, glm_W=self.glm_W, glm_off=self.glm_off,
             share=self.share, hist=self.hist,
             ref_emb=self.ref_emb.astype(np.float32), ref_reg=self.ref_reg, ref_lat=self.ref_lat.astype(np.float32),
             ref_lng=self.ref_lng.astype(np.float32), ref_duel=self.ref_duel)
@@ -536,6 +678,10 @@ class RegionModel:
                   "card_co", "card_off", "ref_duel"):
             setattr(m, k, z[k])
         m.count_all = z["count_all"] if "count_all" in z.files else m.count
+        # random Street View references of each region (older files: references minus duel references)
+        m.count_rand = z["count_rand"] if "count_rand" in z.files else m.count - m.count_duel
+        m.glm_S, m.glm_W, m.glm_off = ((z["glm_S"], z["glm_W"], z["glm_off"]) if "glm_off" in z.files
+                                       else (None, None, None))
         m.mu, m.ref_emb = z["mu"].astype(np.float64), z["ref_emb"].astype(np.float64)
         m.ref_lat, m.ref_lng = z["ref_lat"].astype(np.float64), z["ref_lng"].astype(np.float64)
         m._index()
@@ -550,7 +696,8 @@ def load_param_sets(npz_path):
     if not os.path.exists(f):
         return {}
     try:
-        sets = json.load(open(f))
+        with open(f) as fh:
+            sets = json.load(fh)
     except ValueError:
         return {}
     h, out = None, {}
@@ -686,6 +833,7 @@ def region_vector(probs):
 def region_list(probs, limit=400):
     """[{code, name, country, probability}] sorted by probability, the format of Locator.analyze()
     'regions' (engine.hints.region_probs_for reads it)."""
+    from .areas import region_name
     _, codes, names, rcc, _ = _regions()
     pos = {c: i for i, c in enumerate(codes)}
     out = []
@@ -693,7 +841,8 @@ def region_list(probs, limit=400):
         if p <= 0:
             break
         i = pos.get(code, 0)
-        out.append({"code": code, "name": names[i], "country": rcc[i], "probability": round(float(p), 5)})
+        out.append({"code": code, "name": region_name(code) if i else names[i], "country": rcc[i],
+                    "probability": round(float(p), 5)})
     return out
 
 

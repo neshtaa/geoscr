@@ -157,6 +157,12 @@ span.lbl { margin: 0; }
 }
 .chip.reg { border-color: rgba(255, 198, 40, .35); }
 .chip.reg b { color: var(--yellow); }
+.areas { margin: 2px 0 0; }
+.chip.area { border-color: rgba(151, 232, 81, .45); background: rgba(104, 192, 69, .12); }
+.chip.area b { color: var(--green); }
+.regions.sub { margin-top: 0; }
+.regions.sub .chip { font-size: max(10.5px, .76em); padding: 0 6px; opacity: .9; }
+.regions.sub .sublbl { color: var(--muted); font-size: max(10px, .72em); font-weight: 600; margin-right: 4px; }
 .chip.obs { border-color: rgba(143, 134, 230, .5); color: #dcd8ff; }
 
 .card {

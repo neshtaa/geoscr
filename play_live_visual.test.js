@@ -1133,3 +1133,53 @@ test('extension content script: requests answered on single-player pages only; l
   assert.strictEqual(JSON.stringify(test.storage), JSON.stringify({ __geoscr_cfg: '{"replay":true}' }));
   test.port.close();
 });
+
+// ---------------------------------------------------------------- calibration helpers (--test-walk, --exit-when-done)
+
+test('--test-walk: walk after the start capture until N moves, then submit; no walk = submit at the start only', () => {
+  assert.strictEqual(L.walkAction('auto', 0, 0), 'submit');
+  assert.strictEqual(L.walkAction('move', 1, 0), null);           // moving without --test-walk: already submitted
+  assert.strictEqual(L.walkAction('manual', 0, 3), null);
+  assert.strictEqual(L.walkAction('auto', 0, 3), 'walk');
+  assert.strictEqual(L.walkAction('move', 1, 3), 'walk');
+  assert.strictEqual(L.walkAction('move', 2, 3), 'walk');
+  assert.strictEqual(L.walkAction('move', 3, 3), 'submit');
+  assert.strictEqual(L.walkAction('move', 4, 3), 'submit');       // a late extra capture still ends the round
+});
+
+test('gameFinished reads only the whitelisted state / guess count of the guess response', () => {
+  const meta = g => ({ game: L.safeGameMeta(fakeGame(g)) });
+  assert.strictEqual(L.gameFinished(meta({ state: 'started' })), false);
+  assert.strictEqual(L.gameFinished(meta({ state: 'finished' })), true);
+  const five = Array.from({ length: 5 }, () => ({ lat: 1, lng: 2, roundScoreInPoints: 1, distanceInMeters: 1 }));
+  assert.strictEqual(L.gameFinished(meta({ state: 'started', player: { guesses: five } })), true);
+  assert.strictEqual(L.gameFinished(null), false);
+  assert.strictEqual(L.gameFinished({}), false);
+});
+
+test('calibration options parse and are refused outside --game <token> --submit', () => {
+  const o = L.parseArgs(['--game', 'abc', '--submit', '--test-walk', '3', '--exit-when-done', '--summary', '/tmp/x.json']);
+  assert.strictEqual(o.walk, 3);
+  assert.strictEqual(o.exitWhenDone, true);
+  assert.strictEqual(o.summary, '/tmp/x.json');
+  assert.strictEqual(o.maxMinutes, 20);
+  assert.strictEqual(L.parseArgs(['--test-walk', 'x']).walk, 0);
+  assert.strictEqual(L.parseArgs(['--test-walk', '99']).walk, 10);
+  const { spawnSync } = require('child_process');
+  for (const args of [['--test-walk', '2'], ['--challenge', 'abc', '--submit', '--test-walk', '2'], ['--game', 'abc', '--exit-when-done'],
+    ['--replay', 'abc', '--summary', '/tmp/x.json']]) {
+    const r = spawnSync(process.execPath, [path.join(__dirname, 'play_live_visual.js')].concat(args),
+      { env: Object.assign({}, process.env, { LOCATOR_URL: 'http://127.0.0.1:9' }), encoding: 'utf8', timeout: 20000 });
+    assert.strictEqual(r.status, 1, args.join(' '));
+    assert.ok(/calibration helpers|--submit cannot|bad --/.test(r.stderr), r.stderr);
+  }
+});
+
+test('calibration helpers never touch the game API or the round location', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'play_live_visual.js'), 'utf8');
+  for (const name of ['walkStep', 'resumeResult', 'unstall', 'finish', 'writeSummary', 'noteCapture', 'submitRound', 'armWatchdog', 'shot']) {
+    const m = new RegExp(`(async )?function ${name}\\(([\\s\\S]*?)\\n}\\n`).exec(src);
+    assert.ok(m, name);
+    assert.ok(!/rounds\[|panoId|getPosition|getPano\(|siteGet|fetch\(|\/api\//.test(m[0]), name);
+  }
+});

@@ -199,7 +199,13 @@ class SoftmaxGLM:
     output acts as a likelihood ratio and the prior is applied separately).  Fitted by
     full-batch Nesterov gradient descent on the convex penalised log-likelihood."""
 
-    def __init__(self, lam=3e-3, iters=400, lr=0.5):
+    def __init__(self, lam=3e-4, iters=1200, lr=0.5):
+        # lam 3e-4 / 1200 iterations (was 3e-3 / 400), chosen on CALIB among 1e-3/800, 3e-4/1200, 1e-4/2400 (the
+        # saved model's other parts fixed, evidence exponents refitted per fold, 2-fold CV by game on the live grid):
+        # mean log P(true country) +0.074 [+0.034, +0.115] with the ranked World prior, +0.065 [+0.024, +0.105] with
+        # each round's own map prior (1e-3/800: +0.043 / +0.039; 1e-4/2400: +0.045 / +0.061).  The weaker ridge
+        # also helps out of fold on the training duels (3 spatial folds, 1e-3/800): -2.035 -> -1.939, top1 45.7 ->
+        # 47.6%.  The fitted lam / iters are recorded in model.json ("glm").
         self.lam, self.iters, self.lr = lam, iters, lr
 
     def design(self, Z):
@@ -257,6 +263,7 @@ class GeoModel:
         self.param_set = "pano"
         self._inside, self._share = {}, {}
         self._fit_hash = None
+        self._warned_override = set()
 
     # ------------------------------------------------------------------ training
     def fit(self, X_by_group, y, lat, lng, is_world, min_count=6, knn_k=40):
@@ -502,17 +509,56 @@ class GeoModel:
         return {"rounds": e.get("n"), "dates": dates, "map_updated": upd or None,
                 "stale": upd > dates[1] if dates and upd else None}
 
+    def map_override(self, map_info, params=None):
+        """Per-map parameters of a map with its own calibration (priors.json params "maps"[id]: "mix" over the
+        shared mix, optional "prior_mix" of its model-prior component (Street View coverage frequencies vs
+        uniform), optional "evidence_scale" multiplying the evidence exponents; calibrated on that map's own
+        rounds - the official World map on the world_calib games of tools/world_play.py, tools/train_model.py
+        --world), {} when none or when it is for another model.  An override that sets values must carry the
+        override_stamp it was calibrated with (the fitted arrays and the shared parameters it is layered on): after
+        a GLM refit or a --calibrate-maps it is ignored (the shared mixture applies) until --world refits it."""
+        params = self.map_params() if params is None else params
+        o = ((params or {}).get("maps") or {}).get((map_info or {}).get("id") or "") or {}
+        if o.get("model") not in (None, self.fingerprint()):
+            return {}
+        if any(k in o for k in ("mix", "prior_mix", "evidence_scale")):
+            st = self.override_stamp(params)
+            if o.get("fit") != st["fit"] or o.get("shared") != st["shared"]:
+                key, warned = (map_info or {}).get("id"), self.__dict__.setdefault("_warned_override", set())
+                if key not in warned:
+                    sys.stderr.write("priors.json params maps[%s] was calibrated with another model fit or other shared "
+                                     "map parameters - ignored, shared mixture used (run tools/train_model.py "
+                                     "--world-points world_calib, then --world --save)\n" % key)
+                    warned.add(key)
+                return {}
+        return o
+
+    def override_stamp(self, params):
+        """What a per-map override (map_override) depends on: the fitted arrays (fit_hash) and the shared map-aware
+        parameters it is layered on (weights, prior_mix, mix of priors.json params)."""
+        shared = {k: (params or {}).get(k) for k in ("weights", "prior_mix", "mix")}
+        return {"fit": self.fit_hash(),
+                "shared": hashlib.sha1(json.dumps(shared, sort_keys=True).encode()).hexdigest()[:12]}
+
     def map_setup(self, map_info=None, use=("map", "ranked")):
         """Prior, evidence exponents, score scale and bounds for a map resolved by
         engine.geo.resolve_map.  No map: model prior, World scale, no bounds.  The empirical
-        mixtures need the parameters calibrated by tools/train_model.py (priors.json "params")."""
+        mixtures need the parameters calibrated by tools/train_model.py (priors.json "params"); a map with
+        its own calibration (map_override: the official World map) uses its own mixture weights."""
         kind, ranked, emp, wb = self.map_components(map_info, use=use)
         params = self.map_params()
         if kind in ("map", "ranked") and not params:
             kind = "base"
         if kind in ("map", "ranked"):
             weights = params["weights"]
-            prior = mix_prior(kind, params["mix"], _norm(self.base_prior(params["prior_mix"]) * wb), ranked, emp)
+            mix = params["mix"]
+            over = self.map_override(map_info, params) if kind == "map" else {}
+            if over.get("mix"):
+                mix = dict(mix, **over["mix"])
+            if over.get("evidence_scale") not in (None, 1.0):  # the map's own temperature of the evidence
+                weights = {k: float(v) * float(over["evidence_scale"]) for k, v in weights.items()}
+            pm = over.get("prior_mix", params["prior_mix"])
+            prior = mix_prior(kind, mix, _norm(self.base_prior(pm) * wb), ranked, emp)
         else:
             weights, prior = self.weights, self.base_prior() * wb
         return {"kind": kind, "weights": weights, "prior": _norm(prior),
@@ -672,6 +718,8 @@ class GeoModel:
         meta = {"groups": self.groups, "classes": self.classes, "weights": self.weights,
                 "prior_mix": self.prior_mix, "knn_k": self.knn_k,
                 "loc_params": self.loc_params, "region_params": self.region_params, "fit_hash": self.fit_hash()}
+        if self.glm is not None and getattr(self.glm, "lam", None) is not None:
+            meta["glm"] = {"lam": self.glm.lam, "iters": self.glm.iters}
         if self.param_sets:
             meta["param_sets"] = self.param_sets
         json.dump(meta, open(os.path.join(path, "model.json"), "w"), indent=1)
@@ -697,7 +745,8 @@ class GeoModel:
         m.ref_emb = m.ref_emb.astype(np.float64)
         m.glm = None
         if "glm.W" in z.files:
-            m.glm = SoftmaxGLM()
+            gp = meta.get("glm") or {"lam": 3e-3, "iters": 400}   # models saved before model.json recorded it
+            m.glm = SoftmaxGLM(lam=gp["lam"], iters=gp["iters"])
             m.glm.W, m.glm.mcols = z["glm.W"], z["glm.mcols"].astype(bool)
         m.gauss = {}
         for g in m.groups:

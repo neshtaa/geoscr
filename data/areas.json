@@ -1,0 +1,6184 @@
+{
+ "_doc": "GeoGuessr-style areas that group the admin-1 units of the region raster (data/world_regions.npz, Natural Earth admin-1) per country, as players name them (US census divisions, Brazilian macro-regions, Russian federal districts, ...).  Written by tools/make_areas.py (edit the groupings there, not here).  countries.<CC>: {source, areas: [{id, name (Ukrainian), en, regions: [ISO 3166-2 codes of the raster]}], hidden: [codes]}; every raster unit of a listed country is in exactly one area or in its hidden list (units the raster files under the country that do not belong to it: shown in no area and no region list of it), and at least half of a country's areas group two or more units (checked by test_regions_areas.py).  Countries not listed: engine/areas.py groups their units automatically into compass-named areas when they have at least 17 (AUTO_MIN_UNITS) units, otherwise they have no areas (the HUD lists their regions).  region_names: display names replacing the raster's.  unit_points: label points (lat, lng) of the raster units without a pixel (engine/areas.py puts them into the nearest automatic area).",
+ "countries": {
+  "US": {
+   "source": "US Census Bureau census regions and divisions (Alaska and Hawaii split from the Pacific division).",
+   "areas": [
+    {
+     "id": "US:NewEngland",
+     "name": "Нова Англія",
+     "en": "New England",
+     "regions": [
+      "US-CT",
+      "US-ME",
+      "US-MA",
+      "US-NH",
+      "US-RI",
+      "US-VT"
+     ]
+    },
+    {
+     "id": "US:Mid-Atlantic",
+     "name": "Сер.-атлантичні штати",
+     "en": "Mid-Atlantic",
+     "regions": [
+      "US-NJ",
+      "US-NY",
+      "US-PA"
+     ]
+    },
+    {
+     "id": "US:EastNorthCentral",
+     "name": "Великі озера",
+     "en": "East North Central",
+     "regions": [
+      "US-IL",
+      "US-IN",
+      "US-MI",
+      "US-OH",
+      "US-WI"
+     ]
+    },
+    {
+     "id": "US:WestNorthCentral",
+     "name": "Великі рівнини",
+     "en": "West North Central",
+     "regions": [
+      "US-IA",
+      "US-KS",
+      "US-MN",
+      "US-MO",
+      "US-NE",
+      "US-ND",
+      "US-SD"
+     ]
+    },
+    {
+     "id": "US:SouthAtlantic",
+     "name": "Південна Атлантика",
+     "en": "South Atlantic",
+     "regions": [
+      "US-DE",
+      "US-DC",
+      "US-FL",
+      "US-GA",
+      "US-MD",
+      "US-NC",
+      "US-SC",
+      "US-VA",
+      "US-WV"
+     ]
+    },
+    {
+     "id": "US:EastSouthCentral",
+     "name": "Теннессі–Алабама",
+     "en": "East South Central",
+     "regions": [
+      "US-AL",
+      "US-KY",
+      "US-MS",
+      "US-TN"
+     ]
+    },
+    {
+     "id": "US:WestSouthCentral",
+     "name": "Техас і сусіди",
+     "en": "West South Central",
+     "regions": [
+      "US-AR",
+      "US-LA",
+      "US-OK",
+      "US-TX"
+     ]
+    },
+    {
+     "id": "US:Mountain",
+     "name": "Гірські штати",
+     "en": "Mountain",
+     "regions": [
+      "US-AZ",
+      "US-CO",
+      "US-ID",
+      "US-MT",
+      "US-NV",
+      "US-NM",
+      "US-UT",
+      "US-WY"
+     ]
+    },
+    {
+     "id": "US:Pacific",
+     "name": "Західне узбережжя",
+     "en": "Pacific",
+     "regions": [
+      "US-CA",
+      "US-OR",
+      "US-WA"
+     ]
+    },
+    {
+     "id": "US:Alaska",
+     "name": "Аляска",
+     "en": "Alaska",
+     "regions": [
+      "US-AK"
+     ]
+    },
+    {
+     "id": "US:Hawaii",
+     "name": "Гаваї",
+     "en": "Hawaii",
+     "regions": [
+      "US-HI"
+     ]
+    }
+   ]
+  },
+  "MX": {
+   "source": "Common five-way split of the 32 states (north / west-Bajio / centre / south-Gulf / Yucatan Peninsula), after the INEGI-style macro-regions used by GeoGuessr guides.",
+   "areas": [
+    {
+     "id": "MX:North",
+     "name": "Північ",
+     "en": "North",
+     "regions": [
+      "MX-BCN",
+      "MX-BCS",
+      "MX-SON",
+      "MX-CHH",
+      "MX-COA",
+      "MX-NLE",
+      "MX-TAM",
+      "MX-SIN",
+      "MX-DUR"
+     ]
+    },
+    {
+     "id": "MX:WestandBajio",
+     "name": "Захід і Бахіо",
+     "en": "West and Bajio",
+     "regions": [
+      "MX-JAL",
+      "MX-COL",
+      "MX-MIC",
+      "MX-NAY",
+      "MX-AGU",
+      "MX-ZAC",
+      "MX-SLP",
+      "MX-GUA",
+      "MX-QUE"
+     ]
+    },
+    {
+     "id": "MX:Centre",
+     "name": "Центр (Мехіко)",
+     "en": "Centre",
+     "regions": [
+      "MX-DIF",
+      "MX-MEX",
+      "MX-MOR",
+      "MX-PUE",
+      "MX-TLA",
+      "MX-HID"
+     ]
+    },
+    {
+     "id": "MX:SouthandGulf",
+     "name": "Південь і затока",
+     "en": "South and Gulf",
+     "regions": [
+      "MX-GRO",
+      "MX-OAX",
+      "MX-CHP",
+      "MX-VER",
+      "MX-TAB"
+     ]
+    },
+    {
+     "id": "MX:YucatanPeninsula",
+     "name": "Юкатан",
+     "en": "Yucatan Peninsula",
+     "regions": [
+      "MX-CAM",
+      "MX-YUC",
+      "MX-ROO",
+      "MX-MEX99"
+     ]
+    }
+   ]
+  },
+  "BR": {
+   "source": "IBGE macro-regions (Norte, Nordeste, Centro-Oeste, Sudeste, Sul).",
+   "areas": [
+    {
+     "id": "BR:North",
+     "name": "Північ (Норте)",
+     "en": "North",
+     "regions": [
+      "BR-AC",
+      "BR-AM",
+      "BR-AP",
+      "BR-PA",
+      "BR-RO",
+      "BR-RR",
+      "BR-TO"
+     ]
+    },
+    {
+     "id": "BR:Northeast",
+     "name": "Північний Схід (Нордесте)",
+     "en": "Northeast",
+     "regions": [
+      "BR-AL",
+      "BR-BA",
+      "BR-CE",
+      "BR-MA",
+      "BR-PB",
+      "BR-PE",
+      "BR-PI",
+      "BR-RN",
+      "BR-SE"
+     ]
+    },
+    {
+     "id": "BR:Centre-West",
+     "name": "Центр-Захід",
+     "en": "Centre-West",
+     "regions": [
+      "BR-DF",
+      "BR-GO",
+      "BR-MS",
+      "BR-MT"
+     ]
+    },
+    {
+     "id": "BR:Southeast",
+     "name": "Південний Схід",
+     "en": "Southeast",
+     "regions": [
+      "BR-ES",
+      "BR-MG",
+      "BR-RJ",
+      "BR-SP"
+     ]
+    },
+    {
+     "id": "BR:South",
+     "name": "Південь (Сул)",
+     "en": "South",
+     "regions": [
+      "BR-PR",
+      "BR-RS",
+      "BR-SC"
+     ]
+    }
+   ]
+  },
+  "AR": {
+   "source": "Geographic regions of Argentina (NOA, NEA, Cuyo, Pampas / Centro, Patagonia).",
+   "areas": [
+    {
+     "id": "AR:Northwest",
+     "name": "Північний Захід (NOA)",
+     "en": "Northwest",
+     "regions": [
+      "AR-Y",
+      "AR-A",
+      "AR-T",
+      "AR-K",
+      "AR-G",
+      "AR-F"
+     ]
+    },
+    {
+     "id": "AR:Northeast",
+     "name": "Північний Схід (NEA)",
+     "en": "Northeast",
+     "regions": [
+      "AR-P",
+      "AR-H",
+      "AR-N",
+      "AR-W"
+     ]
+    },
+    {
+     "id": "AR:Cuyo",
+     "name": "Куйо",
+     "en": "Cuyo",
+     "regions": [
+      "AR-M",
+      "AR-J",
+      "AR-D"
+     ]
+    },
+    {
+     "id": "AR:PampasandCentre",
+     "name": "Пампа і Центр",
+     "en": "Pampas and Centre",
+     "regions": [
+      "AR-B",
+      "AR-C",
+      "AR-X",
+      "AR-S",
+      "AR-E",
+      "AR-L"
+     ]
+    },
+    {
+     "id": "AR:Patagonia",
+     "name": "Патагонія",
+     "en": "Patagonia",
+     "regions": [
+      "AR-Q",
+      "AR-R",
+      "AR-U",
+      "AR-Z",
+      "AR-V"
+     ]
+    }
+   ]
+  },
+  "CL": {
+   "source": "Chile's natural macro-zones (Norte Grande, Norte Chico, Zona Central, Zona Sur, Zona Austral).",
+   "areas": [
+    {
+     "id": "CL:NorteGrande",
+     "name": "Крайня північ",
+     "en": "Norte Grande",
+     "regions": [
+      "CL-AP",
+      "CL-TA",
+      "CL-AN"
+     ]
+    },
+    {
+     "id": "CL:NorteChico",
+     "name": "Норте-Чіко",
+     "en": "Norte Chico",
+     "regions": [
+      "CL-AT",
+      "CL-CO"
+     ]
+    },
+    {
+     "id": "CL:ZonaCentral",
+     "name": "Центр",
+     "en": "Zona Central",
+     "regions": [
+      "CL-VS",
+      "CL-RM",
+      "CL-LI",
+      "CL-ML"
+     ]
+    },
+    {
+     "id": "CL:ZonaSur",
+     "name": "Південь",
+     "en": "Zona Sur",
+     "regions": [
+      "CL-NB",
+      "CL-BI",
+      "CL-AR",
+      "CL-LR",
+      "CL-LL"
+     ]
+    },
+    {
+     "id": "CL:ZonaAustral",
+     "name": "Крайній Південь",
+     "en": "Zona Austral",
+     "regions": [
+      "CL-AI",
+      "CL-MA"
+     ]
+    }
+   ]
+  },
+  "CO": {
+   "source": "Natural regions of Colombia (departments by their main region).",
+   "areas": [
+    {
+     "id": "CO:Caribbean",
+     "name": "Карибське узбережжя",
+     "en": "Caribbean",
+     "regions": [
+      "CO-ATL",
+      "CO-BOL",
+      "CO-CES",
+      "CO-COR",
+      "CO-LAG",
+      "CO-MAG",
+      "CO-SUC",
+      "CO-SAP"
+     ]
+    },
+    {
+     "id": "CO:Andes",
+     "name": "Анди",
+     "en": "Andes",
+     "regions": [
+      "CO-ANT",
+      "CO-CAL",
+      "CO-RIS",
+      "CO-QUI",
+      "CO-SAN",
+      "CO-NSA",
+      "CO-BOY",
+      "CO-CUN",
+      "CO-TOL",
+      "CO-HUI"
+     ]
+    },
+    {
+     "id": "CO:Pacificandsouthwest",
+     "name": "Тихоокеанський захід",
+     "en": "Pacific and southwest",
+     "regions": [
+      "CO-CHO",
+      "CO-VAC",
+      "CO-CAU",
+      "CO-NAR",
+      "CO-COL99"
+     ]
+    },
+    {
+     "id": "CO:Orinoquia",
+     "name": "Льянос (Орінокія)",
+     "en": "Orinoquia",
+     "regions": [
+      "CO-ARA",
+      "CO-CAS",
+      "CO-MET",
+      "CO-VID"
+     ]
+    },
+    {
+     "id": "CO:Amazon",
+     "name": "Амазонія",
+     "en": "Amazon",
+     "regions": [
+      "CO-AMA",
+      "CO-CAQ",
+      "CO-GUA",
+      "CO-GUV",
+      "CO-PUT",
+      "CO-VAU"
+     ]
+    }
+   ]
+  },
+  "PE": {
+   "source": "Macro-regions of Peru (north / centre incl. Lima / south / Amazon).",
+   "areas": [
+    {
+     "id": "PE:North",
+     "name": "Північ",
+     "en": "North",
+     "regions": [
+      "PE-TUM",
+      "PE-PIU",
+      "PE-LAM",
+      "PE-LAL",
+      "PE-CAJ",
+      "PE-AMA"
+     ]
+    },
+    {
+     "id": "PE:CentreandLima",
+     "name": "Центр і Ліма",
+     "en": "Centre and Lima",
+     "regions": [
+      "PE-LIM",
+      "PE-CAL",
+      "PE-ANC",
+      "PE-HUC",
+      "PE-PAS",
+      "PE-JUN",
+      "PE-HUV",
+      "PE-ICA"
+     ]
+    },
+    {
+     "id": "PE:South",
+     "name": "Південь",
+     "en": "South",
+     "regions": [
+      "PE-ARE",
+      "PE-MOQ",
+      "PE-TAC",
+      "PE-PUN",
+      "PE-CUS",
+      "PE-APU",
+      "PE-AYA"
+     ]
+    },
+    {
+     "id": "PE:Amazon",
+     "name": "Амазонія",
+     "en": "Amazon",
+     "regions": [
+      "PE-LOR",
+      "PE-UCA",
+      "PE-MDD",
+      "PE-SAM"
+     ]
+    }
+   ]
+  },
+  "EC": {
+   "source": "Natural regions of Ecuador (Costa, Sierra, Oriente, Galapagos).",
+   "areas": [
+    {
+     "id": "EC:Coast",
+     "name": "Узбережжя (Коста)",
+     "en": "Coast",
+     "regions": [
+      "EC-E",
+      "EC-M",
+      "EC-G",
+      "EC-SE",
+      "EC-O",
+      "EC-R",
+      "EC-SD"
+     ]
+    },
+    {
+     "id": "EC:Highlands",
+     "name": "Анди (Сьєрра)",
+     "en": "Highlands",
+     "regions": [
+      "EC-C",
+      "EC-I",
+      "EC-P",
+      "EC-X",
+      "EC-T",
+      "EC-B",
+      "EC-H",
+      "EC-F",
+      "EC-A",
+      "EC-L"
+     ]
+    },
+    {
+     "id": "EC:Amazon",
+     "name": "Амазонія (Оріенте)",
+     "en": "Amazon",
+     "regions": [
+      "EC-U",
+      "EC-N",
+      "EC-D",
+      "EC-Y",
+      "EC-S",
+      "EC-Z"
+     ]
+    },
+    {
+     "id": "EC:Galapagos",
+     "name": "Галапагоси",
+     "en": "Galapagos",
+     "regions": [
+      "EC-W"
+     ]
+    }
+   ]
+  },
+  "BO": {
+   "source": "Bolivia's three physiographic zones (Altiplano, valleys, lowlands).",
+   "areas": [
+    {
+     "id": "BO:Altiplano",
+     "name": "Альтіплано",
+     "en": "Altiplano",
+     "regions": [
+      "BO-L",
+      "BO-O",
+      "BO-P"
+     ]
+    },
+    {
+     "id": "BO:Valleys",
+     "name": "Долини",
+     "en": "Valleys",
+     "regions": [
+      "BO-C",
+      "BO-H",
+      "BO-T"
+     ]
+    },
+    {
+     "id": "BO:Lowlands",
+     "name": "Низовини (Льянос)",
+     "en": "Lowlands",
+     "regions": [
+      "BO-S",
+      "BO-B",
+      "BO-N"
+     ]
+    }
+   ]
+  },
+  "PY": {
+   "source": "Eastern (Oriental) and western (Chaco) Paraguay.",
+   "areas": [
+    {
+     "id": "PY:Eastern",
+     "name": "Схід (Орієнталь)",
+     "en": "Eastern",
+     "regions": [
+      "PY-ASU",
+      "PY-1",
+      "PY-2",
+      "PY-3",
+      "PY-4",
+      "PY-5",
+      "PY-6",
+      "PY-7",
+      "PY-8",
+      "PY-9",
+      "PY-10",
+      "PY-11",
+      "PY-12",
+      "PY-13",
+      "PY-14"
+     ]
+    },
+    {
+     "id": "PY:Chaco",
+     "name": "Чако",
+     "en": "Chaco",
+     "regions": [
+      "PY-15",
+      "PY-16",
+      "PY-19"
+     ]
+    }
+   ]
+  },
+  "UY": {
+   "source": "Montevideo metro / coast / interior split common in guides.",
+   "areas": [
+    {
+     "id": "UY:Montevideoandsouth",
+     "name": "Монтевідео і південь",
+     "en": "Montevideo and south",
+     "regions": [
+      "UY-MO",
+      "UY-CA",
+      "UY-SJ",
+      "UY-FD"
+     ]
+    },
+    {
+     "id": "UY:Eastcoast",
+     "name": "Узбережжя (схід)",
+     "en": "East coast",
+     "regions": [
+      "UY-MA",
+      "UY-RO",
+      "UY-LA",
+      "UY-TT"
+     ]
+    },
+    {
+     "id": "UY:West(UruguayRiver)",
+     "name": "Річка Уругвай (захід)",
+     "en": "West (Uruguay River)",
+     "regions": [
+      "UY-CO",
+      "UY-SO",
+      "UY-RN",
+      "UY-PA",
+      "UY-SA",
+      "UY-AR"
+     ]
+    },
+    {
+     "id": "UY:Interior",
+     "name": "Північ і центр",
+     "en": "Interior",
+     "regions": [
+      "UY-RV",
+      "UY-TA",
+      "UY-CL",
+      "UY-DU",
+      "UY-FS"
+     ]
+    }
+   ]
+  },
+  "GT": {
+   "source": "Regions of Guatemala grouped (centre / west highlands / north / east / Pacific coast).",
+   "areas": [
+    {
+     "id": "GT:Centre",
+     "name": "Центр",
+     "en": "Centre",
+     "regions": [
+      "GT-GU",
+      "GT-SA",
+      "GT-CM"
+     ]
+    },
+    {
+     "id": "GT:Westernhighlands",
+     "name": "Західне високогір'я",
+     "en": "Western highlands",
+     "regions": [
+      "GT-QZ",
+      "GT-TO",
+      "GT-SO",
+      "GT-SM",
+      "GT-HU",
+      "GT-QC"
+     ]
+    },
+    {
+     "id": "GT:North",
+     "name": "Північ (Петен і Верапаси)",
+     "en": "North",
+     "regions": [
+      "GT-PE",
+      "GT-AV",
+      "GT-BV"
+     ]
+    },
+    {
+     "id": "GT:East",
+     "name": "Схід",
+     "en": "East",
+     "regions": [
+      "GT-IZ",
+      "GT-ZA",
+      "GT-CQ",
+      "GT-PR",
+      "GT-JA",
+      "GT-JU",
+      "GT-SR"
+     ]
+    },
+    {
+     "id": "GT:Pacificcoast",
+     "name": "Тихоокеанське узбережжя",
+     "en": "Pacific coast",
+     "regions": [
+      "GT-ES",
+      "GT-SU",
+      "GT-RE"
+     ]
+    }
+   ]
+  },
+  "RU": {
+   "source": "Federal districts of Russia. RU-RUS99, an unnamed raster sliver at 68.8N 67.3E (Yamal), counts in the Ural district.  Hidden: Crimea (UA-43, UA-40) is Ukraine; the Natural Earth raster files it under Russia, so it appears in no area and in no region list of Russia.",
+   "areas": [
+    {
+     "id": "RU:Central",
+     "name": "Центральний ФО",
+     "en": "Central",
+     "regions": [
+      "RU-BEL",
+      "RU-BRY",
+      "RU-VLA",
+      "RU-VOR",
+      "RU-IVA",
+      "RU-KLU",
+      "RU-KOS",
+      "RU-KRS",
+      "RU-LIP",
+      "RU-MOS",
+      "RU-MOW",
+      "RU-ORL",
+      "RU-RYA",
+      "RU-SMO",
+      "RU-TAM",
+      "RU-TVE",
+      "RU-TUL",
+      "RU-YAR"
+     ]
+    },
+    {
+     "id": "RU:Northwestern",
+     "name": "Північно-Західний ФО",
+     "en": "Northwestern",
+     "regions": [
+      "RU-ARK",
+      "RU-VLG",
+      "RU-KGD",
+      "RU-KR",
+      "RU-KO",
+      "RU-LEN",
+      "RU-MUR",
+      "RU-NEN",
+      "RU-NGR",
+      "RU-PSK",
+      "RU-SPE"
+     ]
+    },
+    {
+     "id": "RU:Southern",
+     "name": "Південний ФО",
+     "en": "Southern",
+     "regions": [
+      "RU-AD",
+      "RU-KL",
+      "RU-KDA",
+      "RU-AST",
+      "RU-VGG",
+      "RU-ROS"
+     ]
+    },
+    {
+     "id": "RU:NorthCaucasian",
+     "name": "Північно-Кавказький ФО",
+     "en": "North Caucasian",
+     "regions": [
+      "RU-DA",
+      "RU-IN",
+      "RU-KB",
+      "RU-KC",
+      "RU-SE",
+      "RU-CE",
+      "RU-STA"
+     ]
+    },
+    {
+     "id": "RU:Volga",
+     "name": "Приволзький ФО",
+     "en": "Volga",
+     "regions": [
+      "RU-BA",
+      "RU-ME",
+      "RU-MO",
+      "RU-TA",
+      "RU-UD",
+      "RU-CU",
+      "RU-PER",
+      "RU-KIR",
+      "RU-NIZ",
+      "RU-ORE",
+      "RU-PNZ",
+      "RU-SAM",
+      "RU-SAR",
+      "RU-ULY"
+     ]
+    },
+    {
+     "id": "RU:Ural",
+     "name": "Уральський ФО",
+     "en": "Ural",
+     "regions": [
+      "RU-KGN",
+      "RU-SVE",
+      "RU-TYU",
+      "RU-CHE",
+      "RU-KHM",
+      "RU-YAN",
+      "RU-RUS99"
+     ]
+    },
+    {
+     "id": "RU:Siberian",
+     "name": "Сибірський ФО",
+     "en": "Siberian",
+     "regions": [
+      "RU-AL",
+      "RU-ALT",
+      "RU-TY",
+      "RU-KK",
+      "RU-KYA",
+      "RU-IRK",
+      "RU-KEM",
+      "RU-NVS",
+      "RU-OMS",
+      "RU-TOM"
+     ]
+    },
+    {
+     "id": "RU:FarEastern",
+     "name": "Далекосхідний ФО",
+     "en": "Far Eastern",
+     "regions": [
+      "RU-BU",
+      "RU-ZAB",
+      "RU-SA",
+      "RU-KAM",
+      "RU-PRI",
+      "RU-KHA",
+      "RU-AMU",
+      "RU-MAG",
+      "RU-SAK",
+      "RU-YEV",
+      "RU-CHU"
+     ]
+    }
+   ],
+   "hidden": [
+    "UA-40",
+    "UA-43"
+   ]
+  },
+  "UA": {
+   "source": "Common macro-regions of Ukraine (west / north / centre / east / south).",
+   "areas": [
+    {
+     "id": "UA:West",
+     "name": "Захід",
+     "en": "West",
+     "regions": [
+      "UA-07",
+      "UA-56",
+      "UA-46",
+      "UA-61",
+      "UA-26",
+      "UA-21",
+      "UA-77",
+      "UA-68"
+     ]
+    },
+    {
+     "id": "UA:NorthandKyiv",
+     "name": "Північ і Київ",
+     "en": "North and Kyiv",
+     "regions": [
+      "UA-30",
+      "UA-32",
+      "UA-18",
+      "UA-74",
+      "UA-59"
+     ]
+    },
+    {
+     "id": "UA:Centre",
+     "name": "Центр",
+     "en": "Centre",
+     "regions": [
+      "UA-05",
+      "UA-71",
+      "UA-35",
+      "UA-53"
+     ]
+    },
+    {
+     "id": "UA:East",
+     "name": "Схід",
+     "en": "East",
+     "regions": [
+      "UA-63",
+      "UA-12",
+      "UA-14",
+      "UA-09"
+     ]
+    },
+    {
+     "id": "UA:South",
+     "name": "Південь",
+     "en": "South",
+     "regions": [
+      "UA-51",
+      "UA-48",
+      "UA-65",
+      "UA-23"
+     ]
+    }
+   ]
+  },
+  "FR": {
+   "source": "The 13 metropolitan regions of 2016 (from the departments of the raster); overseas departments are their own GeoGuessr countries.",
+   "areas": [
+    {
+     "id": "FR:Ile-de-France",
+     "name": "Іль-де-Франс",
+     "en": "Ile-de-France",
+     "regions": [
+      "FR-75",
+      "FR-77",
+      "FR-78",
+      "FR-91",
+      "FR-92",
+      "FR-93",
+      "FR-94",
+      "FR-95"
+     ]
+    },
+    {
+     "id": "FR:Hauts-de-France",
+     "name": "О-де-Франс",
+     "en": "Hauts-de-France",
+     "regions": [
+      "FR-02",
+      "FR-59",
+      "FR-60",
+      "FR-62",
+      "FR-80"
+     ]
+    },
+    {
+     "id": "FR:GrandEst",
+     "name": "Гранд-Ест",
+     "en": "Grand Est",
+     "regions": [
+      "FR-08",
+      "FR-10",
+      "FR-51",
+      "FR-52",
+      "FR-54",
+      "FR-55",
+      "FR-57",
+      "FR-67",
+      "FR-68",
+      "FR-88"
+     ]
+    },
+    {
+     "id": "FR:Normandy",
+     "name": "Нормандія",
+     "en": "Normandy",
+     "regions": [
+      "FR-14",
+      "FR-27",
+      "FR-50",
+      "FR-61",
+      "FR-76"
+     ]
+    },
+    {
+     "id": "FR:Brittany",
+     "name": "Бретань",
+     "en": "Brittany",
+     "regions": [
+      "FR-22",
+      "FR-29",
+      "FR-35",
+      "FR-56"
+     ]
+    },
+    {
+     "id": "FR:PaysdelaLoire",
+     "name": "Луара",
+     "en": "Pays de la Loire",
+     "regions": [
+      "FR-44",
+      "FR-49",
+      "FR-53",
+      "FR-72",
+      "FR-85"
+     ]
+    },
+    {
+     "id": "FR:Centre-ValdeLoire",
+     "name": "Центр — Долина Луари",
+     "en": "Centre-Val de Loire",
+     "regions": [
+      "FR-18",
+      "FR-28",
+      "FR-36",
+      "FR-37",
+      "FR-41",
+      "FR-45"
+     ]
+    },
+    {
+     "id": "FR:Bourgogne-Franche-Comte",
+     "name": "Бургундія — Франш-Конте",
+     "en": "Bourgogne-Franche-Comte",
+     "regions": [
+      "FR-21",
+      "FR-25",
+      "FR-39",
+      "FR-58",
+      "FR-70",
+      "FR-71",
+      "FR-89",
+      "FR-90"
+     ]
+    },
+    {
+     "id": "FR:Nouvelle-Aquitaine",
+     "name": "Нова Аквітанія",
+     "en": "Nouvelle-Aquitaine",
+     "regions": [
+      "FR-16",
+      "FR-17",
+      "FR-19",
+      "FR-23",
+      "FR-24",
+      "FR-33",
+      "FR-40",
+      "FR-47",
+      "FR-64",
+      "FR-79",
+      "FR-86",
+      "FR-87"
+     ]
+    },
+    {
+     "id": "FR:Occitanie",
+     "name": "Окситанія",
+     "en": "Occitanie",
+     "regions": [
+      "FR-09",
+      "FR-11",
+      "FR-12",
+      "FR-30",
+      "FR-31",
+      "FR-32",
+      "FR-34",
+      "FR-46",
+      "FR-48",
+      "FR-65",
+      "FR-66",
+      "FR-81",
+      "FR-82"
+     ]
+    },
+    {
+     "id": "FR:Auvergne-Rhone-Alpes",
+     "name": "Овернь — Рона — Альпи",
+     "en": "Auvergne-Rhone-Alpes",
+     "regions": [
+      "FR-01",
+      "FR-03",
+      "FR-07",
+      "FR-15",
+      "FR-26",
+      "FR-38",
+      "FR-42",
+      "FR-43",
+      "FR-63",
+      "FR-69",
+      "FR-73",
+      "FR-74"
+     ]
+    },
+    {
+     "id": "FR:Provence-Alpes-Coted'Azur",
+     "name": "Прованс — Лазурний берег",
+     "en": "Provence-Alpes-Cote d'Azur",
+     "regions": [
+      "FR-04",
+      "FR-05",
+      "FR-06",
+      "FR-13",
+      "FR-83",
+      "FR-84"
+     ]
+    },
+    {
+     "id": "FR:Corsica",
+     "name": "Корсика",
+     "en": "Corsica",
+     "regions": [
+      "FR-2A",
+      "FR-2B"
+     ]
+    },
+    {
+     "id": "FR:Overseas",
+     "name": "Заморські території",
+     "en": "Overseas",
+     "regions": [
+      "FR-GF",
+      "FR-MQ",
+      "FR-GP",
+      "FR-RE",
+      "FR-YT",
+      "FR-CLP00"
+     ]
+    }
+   ]
+  },
+  "ES": {
+   "source": "Autonomous communities of Spain (from the provinces of the raster).",
+   "areas": [
+    {
+     "id": "ES:Galicia",
+     "name": "Галісія",
+     "en": "Galicia",
+     "regions": [
+      "ES-C",
+      "ES-LU",
+      "ES-OR",
+      "ES-PO"
+     ]
+    },
+    {
+     "id": "ES:Asturias",
+     "name": "Астурія",
+     "en": "Asturias",
+     "regions": [
+      "ES-O"
+     ]
+    },
+    {
+     "id": "ES:Cantabria",
+     "name": "Кантабрія",
+     "en": "Cantabria",
+     "regions": [
+      "ES-S"
+     ]
+    },
+    {
+     "id": "ES:BasqueCountry",
+     "name": "Країна Басків",
+     "en": "Basque Country",
+     "regions": [
+      "ES-BI",
+      "ES-SS",
+      "ES-VI"
+     ]
+    },
+    {
+     "id": "ES:Navarre",
+     "name": "Наварра",
+     "en": "Navarre",
+     "regions": [
+      "ES-NA"
+     ]
+    },
+    {
+     "id": "ES:LaRioja",
+     "name": "Ла-Ріоха",
+     "en": "La Rioja",
+     "regions": [
+      "ES-LO"
+     ]
+    },
+    {
+     "id": "ES:Aragon",
+     "name": "Арагон",
+     "en": "Aragon",
+     "regions": [
+      "ES-HU",
+      "ES-TE",
+      "ES-Z"
+     ]
+    },
+    {
+     "id": "ES:Catalonia",
+     "name": "Каталонія",
+     "en": "Catalonia",
+     "regions": [
+      "ES-B",
+      "ES-GI",
+      "ES-L",
+      "ES-T"
+     ]
+    },
+    {
+     "id": "ES:CastileandLeon",
+     "name": "Кастилія і Леон",
+     "en": "Castile and Leon",
+     "regions": [
+      "ES-AV",
+      "ES-BU",
+      "ES-LE",
+      "ES-P",
+      "ES-SA",
+      "ES-SG",
+      "ES-SO",
+      "ES-VA",
+      "ES-ZA"
+     ]
+    },
+    {
+     "id": "ES:Madrid",
+     "name": "Мадрид",
+     "en": "Madrid",
+     "regions": [
+      "ES-M"
+     ]
+    },
+    {
+     "id": "ES:Castile-LaMancha",
+     "name": "Кастилія — Ла-Манча",
+     "en": "Castile-La Mancha",
+     "regions": [
+      "ES-AB",
+      "ES-CR",
+      "ES-CU",
+      "ES-GU",
+      "ES-TO"
+     ]
+    },
+    {
+     "id": "ES:Valencia",
+     "name": "Валенсія",
+     "en": "Valencia",
+     "regions": [
+      "ES-A",
+      "ES-CS",
+      "ES-V"
+     ]
+    },
+    {
+     "id": "ES:Murcia",
+     "name": "Мурсія",
+     "en": "Murcia",
+     "regions": [
+      "ES-MU"
+     ]
+    },
+    {
+     "id": "ES:Extremadura",
+     "name": "Естремадура",
+     "en": "Extremadura",
+     "regions": [
+      "ES-BA",
+      "ES-CC"
+     ]
+    },
+    {
+     "id": "ES:Andalusia",
+     "name": "Андалусія",
+     "en": "Andalusia",
+     "regions": [
+      "ES-AL",
+      "ES-CA",
+      "ES-CO",
+      "ES-GR",
+      "ES-H",
+      "ES-J",
+      "ES-MA",
+      "ES-SE"
+     ]
+    },
+    {
+     "id": "ES:BalearicIslands",
+     "name": "Балеарські острови",
+     "en": "Balearic Islands",
+     "regions": [
+      "ES-PM"
+     ]
+    },
+    {
+     "id": "ES:CanaryIslands",
+     "name": "Канарські острови",
+     "en": "Canary Islands",
+     "regions": [
+      "ES-GC",
+      "ES-TF"
+     ]
+    },
+    {
+     "id": "ES:CeutaandMelilla",
+     "name": "Сеута і Мелілья",
+     "en": "Ceuta and Melilla",
+     "regions": [
+      "ES-CE",
+      "ES-ML"
+     ]
+    }
+   ]
+  },
+  "PT": {
+   "source": "NUTS-2 regions of Portugal approximated by districts (Santarem counted in the Centre).",
+   "areas": [
+    {
+     "id": "PT:North",
+     "name": "Північ",
+     "en": "North",
+     "regions": [
+      "PT-16",
+      "PT-03",
+      "PT-13",
+      "PT-17",
+      "PT-04"
+     ]
+    },
+    {
+     "id": "PT:Centre",
+     "name": "Центр",
+     "en": "Centre",
+     "regions": [
+      "PT-01",
+      "PT-18",
+      "PT-09",
+      "PT-06",
+      "PT-05",
+      "PT-10",
+      "PT-14"
+     ]
+    },
+    {
+     "id": "PT:Lisbon",
+     "name": "Лісабон",
+     "en": "Lisbon",
+     "regions": [
+      "PT-11",
+      "PT-15"
+     ]
+    },
+    {
+     "id": "PT:Alentejo",
+     "name": "Алентежу",
+     "en": "Alentejo",
+     "regions": [
+      "PT-12",
+      "PT-07",
+      "PT-02"
+     ]
+    },
+    {
+     "id": "PT:Algarve",
+     "name": "Алгарве",
+     "en": "Algarve",
+     "regions": [
+      "PT-08"
+     ]
+    },
+    {
+     "id": "PT:Azores",
+     "name": "Азори",
+     "en": "Azores",
+     "regions": [
+      "PT-20"
+     ]
+    },
+    {
+     "id": "PT:Madeira",
+     "name": "Мадейра",
+     "en": "Madeira",
+     "regions": [
+      "PT-30"
+     ]
+    }
+   ]
+  },
+  "IT": {
+   "source": "The 20 regions of Italy (from the provinces of the raster).",
+   "areas": [
+    {
+     "id": "IT:AostaValley",
+     "name": "Валле-д'Аоста",
+     "en": "Aosta Valley",
+     "regions": [
+      "IT-AO"
+     ]
+    },
+    {
+     "id": "IT:Piedmont",
+     "name": "П'ємонт",
+     "en": "Piedmont",
+     "regions": [
+      "IT-AL",
+      "IT-AT",
+      "IT-BI",
+      "IT-CN",
+      "IT-NO",
+      "IT-TO",
+      "IT-VB",
+      "IT-VC"
+     ]
+    },
+    {
+     "id": "IT:Liguria",
+     "name": "Лігурія",
+     "en": "Liguria",
+     "regions": [
+      "IT-GE",
+      "IT-IM",
+      "IT-SP",
+      "IT-SV"
+     ]
+    },
+    {
+     "id": "IT:Lombardy",
+     "name": "Ломбардія",
+     "en": "Lombardy",
+     "regions": [
+      "IT-BG",
+      "IT-BS",
+      "IT-CO",
+      "IT-CR",
+      "IT-LC",
+      "IT-LO",
+      "IT-MB",
+      "IT-MI",
+      "IT-MN",
+      "IT-PV",
+      "IT-SO",
+      "IT-VA"
+     ]
+    },
+    {
+     "id": "IT:Trentino-SouthTyrol",
+     "name": "Трентіно — Альто-Адідже",
+     "en": "Trentino-South Tyrol",
+     "regions": [
+      "IT-BZ",
+      "IT-TN"
+     ]
+    },
+    {
+     "id": "IT:Veneto",
+     "name": "Венето",
+     "en": "Veneto",
+     "regions": [
+      "IT-BL",
+      "IT-PD",
+      "IT-RO",
+      "IT-TV",
+      "IT-VE",
+      "IT-VI",
+      "IT-VR"
+     ]
+    },
+    {
+     "id": "IT:Friuli-VeneziaGiulia",
+     "name": "Фріулі — Венеція-Джулія",
+     "en": "Friuli-Venezia Giulia",
+     "regions": [
+      "IT-GO",
+      "IT-PN",
+      "IT-TS",
+      "IT-UD"
+     ]
+    },
+    {
+     "id": "IT:Emilia-Romagna",
+     "name": "Емілія-Романья",
+     "en": "Emilia-Romagna",
+     "regions": [
+      "IT-BO",
+      "IT-FC",
+      "IT-FE",
+      "IT-MO",
+      "IT-PC",
+      "IT-PR",
+      "IT-RA",
+      "IT-RE",
+      "IT-RN"
+     ]
+    },
+    {
+     "id": "IT:Tuscany",
+     "name": "Тоскана",
+     "en": "Tuscany",
+     "regions": [
+      "IT-AR",
+      "IT-FI",
+      "IT-GR",
+      "IT-LI",
+      "IT-LU",
+      "IT-MS",
+      "IT-PI",
+      "IT-PO",
+      "IT-PT",
+      "IT-SI"
+     ]
+    },
+    {
+     "id": "IT:Umbria",
+     "name": "Умбрія",
+     "en": "Umbria",
+     "regions": [
+      "IT-PG",
+      "IT-TR"
+     ]
+    },
+    {
+     "id": "IT:Marche",
+     "name": "Марке",
+     "en": "Marche",
+     "regions": [
+      "IT-AN",
+      "IT-AP",
+      "IT-FM",
+      "IT-MC",
+      "IT-PU"
+     ]
+    },
+    {
+     "id": "IT:Lazio",
+     "name": "Лаціо",
+     "en": "Lazio",
+     "regions": [
+      "IT-FR",
+      "IT-LT",
+      "IT-RI",
+      "IT-RM",
+      "IT-VT"
+     ]
+    },
+    {
+     "id": "IT:Abruzzo",
+     "name": "Абруццо",
+     "en": "Abruzzo",
+     "regions": [
+      "IT-AQ",
+      "IT-CH",
+      "IT-PE",
+      "IT-TE"
+     ]
+    },
+    {
+     "id": "IT:Molise",
+     "name": "Молізе",
+     "en": "Molise",
+     "regions": [
+      "IT-CB",
+      "IT-IS"
+     ]
+    },
+    {
+     "id": "IT:Campania",
+     "name": "Кампанія",
+     "en": "Campania",
+     "regions": [
+      "IT-AV",
+      "IT-BN",
+      "IT-CE",
+      "IT-NA",
+      "IT-SA"
+     ]
+    },
+    {
+     "id": "IT:Apulia",
+     "name": "Апулія",
+     "en": "Apulia",
+     "regions": [
+      "IT-BA",
+      "IT-BR",
+      "IT-BT",
+      "IT-FG",
+      "IT-LE",
+      "IT-TA"
+     ]
+    },
+    {
+     "id": "IT:Basilicata",
+     "name": "Базиліката",
+     "en": "Basilicata",
+     "regions": [
+      "IT-MT",
+      "IT-PZ"
+     ]
+    },
+    {
+     "id": "IT:Calabria",
+     "name": "Калабрія",
+     "en": "Calabria",
+     "regions": [
+      "IT-CS",
+      "IT-CZ",
+      "IT-KR",
+      "IT-RC",
+      "IT-VV"
+     ]
+    },
+    {
+     "id": "IT:Sicily",
+     "name": "Сицилія",
+     "en": "Sicily",
+     "regions": [
+      "IT-AG",
+      "IT-CL",
+      "IT-CT",
+      "IT-EN",
+      "IT-ME",
+      "IT-PA",
+      "IT-RG",
+      "IT-SR",
+      "IT-TP"
+     ]
+    },
+    {
+     "id": "IT:Sardinia",
+     "name": "Сардинія",
+     "en": "Sardinia",
+     "regions": [
+      "IT-CA",
+      "IT-CI",
+      "IT-NU",
+      "IT-OG",
+      "IT-OR",
+      "IT-OT",
+      "IT-SS",
+      "IT-VS"
+     ]
+    }
+   ]
+  },
+  "GB": {
+   "source": "The four nations; England in four groups of ONS regions (North East + North West + Yorkshire and the Humber, East + West Midlands, London + South East + East of England, South West).",
+   "areas": [
+    {
+     "id": "GB:Scotland",
+     "name": "Шотландія",
+     "en": "Scotland",
+     "regions": [
+      "GB-ABE",
+      "GB-ABD",
+      "GB-ANS",
+      "GB-AGB",
+      "GB-CLK",
+      "GB-DGY",
+      "GB-DND",
+      "GB-EAY",
+      "GB-EDU",
+      "GB-ELN",
+      "GB-ERW",
+      "GB-EDH",
+      "GB-ELS",
+      "GB-FAL",
+      "GB-FIF",
+      "GB-GLG",
+      "GB-HLD",
+      "GB-IVC",
+      "GB-MLN",
+      "GB-MRY",
+      "GB-NAY",
+      "GB-NLK",
+      "GB-ORK",
+      "GB-PKN",
+      "GB-RFW",
+      "GB-SCB",
+      "GB-ZET",
+      "GB-SAY",
+      "GB-SLK",
+      "GB-STG",
+      "GB-WDU",
+      "GB-WLN"
+     ]
+    },
+    {
+     "id": "GB:Wales",
+     "name": "Уельс",
+     "en": "Wales",
+     "regions": [
+      "GB-AGY",
+      "GB-BGW",
+      "GB-BGE",
+      "GB-CAY",
+      "GB-CRF",
+      "GB-CMN",
+      "GB-CGN",
+      "GB-CWY",
+      "GB-DEN",
+      "GB-FLN",
+      "GB-GWN",
+      "GB-MTY",
+      "GB-MON",
+      "GB-NTL",
+      "GB-NWP",
+      "GB-PEM",
+      "GB-POW",
+      "GB-RCT",
+      "GB-SWA",
+      "GB-TOF",
+      "GB-VGL",
+      "GB-WRX"
+     ]
+    },
+    {
+     "id": "GB:NorthernIreland",
+     "name": "Північна Ірландія",
+     "en": "Northern Ireland",
+     "regions": [
+      "GB-ANT",
+      "GB-ARD",
+      "GB-ARM",
+      "GB-BLA",
+      "GB-BLY",
+      "GB-BNB",
+      "GB-BFS",
+      "GB-CKF",
+      "GB-CSR",
+      "GB-CLR",
+      "GB-CKT",
+      "GB-CGV",
+      "GB-DRY",
+      "GB-DOW",
+      "GB-DGN",
+      "GB-FER",
+      "GB-LRN",
+      "GB-LMV",
+      "GB-LSB",
+      "GB-MFT",
+      "GB-MYL",
+      "GB-NYM",
+      "GB-NTA",
+      "GB-NDN",
+      "GB-OMH",
+      "GB-STB"
+     ]
+    },
+    {
+     "id": "GB:NorthernEngland",
+     "name": "Північ Англії",
+     "en": "Northern England",
+     "regions": [
+      "GB-NTY",
+      "GB-STY",
+      "GB-SND",
+      "GB-DUR",
+      "GB-HPL",
+      "GB-RCC",
+      "GB-STT",
+      "GB-DAL",
+      "GB-MDB",
+      "GB-NBL",
+      "GB-GAT",
+      "GB-NET",
+      "GB-CMA",
+      "GB-CHW",
+      "GB-CHE",
+      "GB-WRL",
+      "GB-HAL",
+      "GB-KWL",
+      "GB-LIV",
+      "GB-SFT",
+      "GB-LAN",
+      "GB-BPL",
+      "GB-BBD",
+      "GB-SHN",
+      "GB-WGN",
+      "GB-SKP",
+      "GB-WRT",
+      "GB-SLF",
+      "GB-BOL",
+      "GB-TRF",
+      "GB-MAN",
+      "GB-OLD",
+      "GB-RCH",
+      "GB-TAM",
+      "GB-BUR",
+      "GB-NYK",
+      "GB-ERY",
+      "GB-KHL",
+      "GB-NLN",
+      "GB-NEL",
+      "GB-YOR",
+      "GB-DNC",
+      "GB-ROT",
+      "GB-SHF",
+      "GB-CLD",
+      "GB-KIR",
+      "GB-LDS",
+      "GB-BRD",
+      "GB-WKF",
+      "GB-BNS"
+     ]
+    },
+    {
+     "id": "GB:Midlands",
+     "name": "Мідлендс",
+     "en": "Midlands",
+     "regions": [
+      "GB-LIN",
+      "GB-RUT",
+      "GB-NTT",
+      "GB-NTH",
+      "GB-LEC",
+      "GB-DBY",
+      "GB-NGM",
+      "GB-LCE",
+      "GB-DER",
+      "GB-SHR",
+      "GB-HEF",
+      "GB-STE",
+      "GB-TFW",
+      "GB-STS",
+      "GB-WOR",
+      "GB-WAR",
+      "GB-SOL",
+      "GB-COV",
+      "GB-BIR",
+      "GB-SAW",
+      "GB-DUD",
+      "GB-WLL",
+      "GB-WLV"
+     ]
+    },
+    {
+     "id": "GB:LondonandSouthEast",
+     "name": "Лондон і південний схід",
+     "en": "London and South East",
+     "regions": [
+      "GB-WND",
+      "GB-MRT",
+      "GB-WSM",
+      "GB-KEC",
+      "GB-HNS",
+      "GB-EAL",
+      "GB-HMF",
+      "GB-RIC",
+      "GB-LND",
+      "GB-TWH",
+      "GB-ENF",
+      "GB-BNE",
+      "GB-WFT",
+      "GB-RDB",
+      "GB-HAV",
+      "GB-BEX",
+      "GB-STN",
+      "GB-HIL",
+      "GB-BEN",
+      "GB-HRW",
+      "GB-CMD",
+      "GB-ISL",
+      "GB-LBH",
+      "GB-SWK",
+      "GB-CRY",
+      "GB-LEW",
+      "GB-HRY",
+      "GB-KTT",
+      "GB-NWM",
+      "GB-GRE",
+      "GB-HCK",
+      "GB-BDG",
+      "GB-BRY",
+      "GB-KEN",
+      "GB-MDW",
+      "GB-ESX",
+      "GB-BNH",
+      "GB-WSX",
+      "GB-HAM",
+      "GB-POR",
+      "GB-STH",
+      "GB-IOW",
+      "GB-MIK",
+      "GB-BKM",
+      "GB-OXF",
+      "GB-WBK",
+      "GB-WOK",
+      "GB-BRC",
+      "GB-WNM",
+      "GB-SLG",
+      "GB-RDG",
+      "GB-SRY",
+      "GB-NFK",
+      "GB-SFK",
+      "GB-ESS",
+      "GB-SOS",
+      "GB-THR",
+      "GB-HRT",
+      "GB-CAM",
+      "GB-LUT",
+      "GB-CBF",
+      "GB-BDF",
+      "GB-PTE"
+     ]
+    },
+    {
+     "id": "GB:SouthWestEngland",
+     "name": "Південний захід Англії",
+     "en": "South West England",
+     "regions": [
+      "GB-GLS",
+      "GB-DOR",
+      "GB-BMH",
+      "GB-POL",
+      "GB-DEV",
+      "GB-TOB",
+      "GB-PLY",
+      "GB-CON",
+      "GB-SOM",
+      "GB-NSM",
+      "GB-BST",
+      "GB-SGC",
+      "GB-IOS",
+      "GB-SWD",
+      "GB-BAS",
+      "GB-WIL"
+     ]
+    }
+   ]
+  },
+  "IE": {
+   "source": "The four provinces of Ireland.",
+   "areas": [
+    {
+     "id": "IE:Leinster",
+     "name": "Ленстер",
+     "en": "Leinster",
+     "regions": [
+      "IE-D",
+      "IE-WW",
+      "IE-WX",
+      "IE-KK",
+      "IE-MH",
+      "IE-KE",
+      "IE-CW",
+      "IE-LS",
+      "IE-OY",
+      "IE-WH",
+      "IE-LD",
+      "IE-LH"
+     ]
+    },
+    {
+     "id": "IE:Munster",
+     "name": "Манстер",
+     "en": "Munster",
+     "regions": [
+      "IE-WD",
+      "IE-CO",
+      "IE-KY",
+      "IE-LK",
+      "IE-CE",
+      "IE-TA"
+     ]
+    },
+    {
+     "id": "IE:Connacht",
+     "name": "Коннахт",
+     "en": "Connacht",
+     "regions": [
+      "IE-G",
+      "IE-MO",
+      "IE-SO",
+      "IE-LM",
+      "IE-RN"
+     ]
+    },
+    {
+     "id": "IE:Ulster(Republic)",
+     "name": "Ольстер (Ірландія)",
+     "en": "Ulster (Republic)",
+     "regions": [
+      "IE-DL",
+      "IE-CN",
+      "IE-MN"
+     ]
+    }
+   ]
+  },
+  "NO": {
+   "source": "The traditional regions (landsdeler) of Norway over the pre-2020 counties of the raster; Svalbard and Bouvet Island apart.",
+   "areas": [
+    {
+     "id": "NO:NorthernNorway",
+     "name": "Північна Норвегія",
+     "en": "Northern Norway",
+     "regions": [
+      "NO-18",
+      "NO-19",
+      "NO-20"
+     ]
+    },
+    {
+     "id": "NO:Trondelag",
+     "name": "Трьонделаг",
+     "en": "Trondelag",
+     "regions": [
+      "NO-16",
+      "NO-17"
+     ]
+    },
+    {
+     "id": "NO:WesternNorway",
+     "name": "Західна Норвегія (фіорди)",
+     "en": "Western Norway",
+     "regions": [
+      "NO-11",
+      "NO-12",
+      "NO-14",
+      "NO-15"
+     ]
+    },
+    {
+     "id": "NO:SouthernNorway",
+     "name": "Сьорланн (південь)",
+     "en": "Southern Norway",
+     "regions": [
+      "NO-09",
+      "NO-10"
+     ]
+    },
+    {
+     "id": "NO:EasternNorway",
+     "name": "Східна Норвегія",
+     "en": "Eastern Norway",
+     "regions": [
+      "NO-01",
+      "NO-02",
+      "NO-03",
+      "NO-04",
+      "NO-05",
+      "NO-06",
+      "NO-07",
+      "NO-08"
+     ]
+    },
+    {
+     "id": "NO:Svalbard",
+     "name": "Шпіцберген",
+     "en": "Svalbard",
+     "regions": [
+      "NO-21"
+     ]
+    },
+    {
+     "id": "NO:BouvetIsland",
+     "name": "Острів Буве",
+     "en": "Bouvet Island",
+     "regions": [
+      "NO-BVT00"
+     ]
+    }
+   ]
+  },
+  "SE": {
+   "source": "The three lands of Sweden (Norrland, Svealand, Gotaland) over the counties.",
+   "areas": [
+    {
+     "id": "SE:Norrland",
+     "name": "Норрланд",
+     "en": "Norrland",
+     "regions": [
+      "SE-BD",
+      "SE-AC",
+      "SE-Z",
+      "SE-Y",
+      "SE-X"
+     ]
+    },
+    {
+     "id": "SE:Svealand",
+     "name": "Свеаланд",
+     "en": "Svealand",
+     "regions": [
+      "SE-W",
+      "SE-S",
+      "SE-C",
+      "SE-AB",
+      "SE-D",
+      "SE-U",
+      "SE-T"
+     ]
+    },
+    {
+     "id": "SE:Gotaland",
+     "name": "Йоталанд",
+     "en": "Gotaland",
+     "regions": [
+      "SE-O",
+      "SE-E",
+      "SE-H",
+      "SE-K",
+      "SE-M",
+      "SE-N",
+      "SE-I",
+      "SE-F",
+      "SE-G"
+     ]
+    }
+   ]
+  },
+  "FI": {
+   "source": "The provinces of Finland 1997-2009 (Southern, Western, Eastern, Oulu, Lapland) over the regions.",
+   "areas": [
+    {
+     "id": "FI:SouthernFinland",
+     "name": "Південна Фінляндія",
+     "en": "Southern Finland",
+     "regions": [
+      "FI-18",
+      "FI-09",
+      "FI-02",
+      "FI-16",
+      "FI-06"
+     ]
+    },
+    {
+     "id": "FI:WesternFinland",
+     "name": "Західна Фінляндія",
+     "en": "Western Finland",
+     "regions": [
+      "FI-19",
+      "FI-17",
+      "FI-11",
+      "FI-08",
+      "FI-03",
+      "FI-12",
+      "FI-07"
+     ]
+    },
+    {
+     "id": "FI:EasternFinland",
+     "name": "Східна Фінляндія",
+     "en": "Eastern Finland",
+     "regions": [
+      "FI-04",
+      "FI-15",
+      "FI-13"
+     ]
+    },
+    {
+     "id": "FI:Oulu",
+     "name": "Оулу і Кайнуу",
+     "en": "Oulu",
+     "regions": [
+      "FI-14",
+      "FI-05"
+     ]
+    },
+    {
+     "id": "FI:Lapland",
+     "name": "Лапландія",
+     "en": "Lapland",
+     "regions": [
+      "FI-10"
+     ]
+    }
+   ]
+  },
+  "PL": {
+   "source": "Macro-regions of Poland (NUTS-1, 2018) over the voivodeships.",
+   "areas": [
+    {
+     "id": "PL:Masovia",
+     "name": "Мазовія",
+     "en": "Masovia",
+     "regions": [
+      "PL-MZ"
+     ]
+    },
+    {
+     "id": "PL:South",
+     "name": "Сілезія і Мала Польща",
+     "en": "South",
+     "regions": [
+      "PL-SL",
+      "PL-MA"
+     ]
+    },
+    {
+     "id": "PL:East",
+     "name": "Схід",
+     "en": "East",
+     "regions": [
+      "PL-LU",
+      "PL-PK",
+      "PL-PD",
+      "PL-SK"
+     ]
+    },
+    {
+     "id": "PL:Northwest",
+     "name": "Північний захід",
+     "en": "Northwest",
+     "regions": [
+      "PL-WP",
+      "PL-ZP",
+      "PL-LB"
+     ]
+    },
+    {
+     "id": "PL:Southwest",
+     "name": "Південний захід",
+     "en": "Southwest",
+     "regions": [
+      "PL-DS",
+      "PL-OP"
+     ]
+    },
+    {
+     "id": "PL:North",
+     "name": "Північ",
+     "en": "North",
+     "regions": [
+      "PL-KP",
+      "PL-PM",
+      "PL-WN"
+     ]
+    },
+    {
+     "id": "PL:Centre",
+     "name": "Центр (Лодзь)",
+     "en": "Centre",
+     "regions": [
+      "PL-LD"
+     ]
+    }
+   ]
+  },
+  "DE": {
+   "source": "German states grouped as north / east / west / south (common GeoGuessr split).",
+   "areas": [
+    {
+     "id": "DE:North",
+     "name": "Північ",
+     "en": "North",
+     "regions": [
+      "DE-SH",
+      "DE-HH",
+      "DE-HB",
+      "DE-NI",
+      "DE-MV"
+     ]
+    },
+    {
+     "id": "DE:East",
+     "name": "Схід",
+     "en": "East",
+     "regions": [
+      "DE-BE",
+      "DE-BB",
+      "DE-ST",
+      "DE-SN",
+      "DE-TH"
+     ]
+    },
+    {
+     "id": "DE:West",
+     "name": "Захід",
+     "en": "West",
+     "regions": [
+      "DE-NW",
+      "DE-HE",
+      "DE-RP",
+      "DE-SL"
+     ]
+    },
+    {
+     "id": "DE:South",
+     "name": "Південь",
+     "en": "South",
+     "regions": [
+      "DE-BY",
+      "DE-BW"
+     ]
+    }
+   ]
+  },
+  "RO": {
+   "source": "Development regions of Romania (NUTS-2).",
+   "areas": [
+    {
+     "id": "RO:North-West",
+     "name": "Північний захід",
+     "en": "North-West",
+     "regions": [
+      "RO-BH",
+      "RO-BN",
+      "RO-CJ",
+      "RO-MM",
+      "RO-SM",
+      "RO-SJ"
+     ]
+    },
+    {
+     "id": "RO:Centre",
+     "name": "Центр (Трансільванія)",
+     "en": "Centre",
+     "regions": [
+      "RO-AB",
+      "RO-BV",
+      "RO-CV",
+      "RO-HR",
+      "RO-MS",
+      "RO-SB"
+     ]
+    },
+    {
+     "id": "RO:North-East",
+     "name": "Північний схід (Молдова)",
+     "en": "North-East",
+     "regions": [
+      "RO-BC",
+      "RO-BT",
+      "RO-IS",
+      "RO-NT",
+      "RO-SV",
+      "RO-VS"
+     ]
+    },
+    {
+     "id": "RO:South-East",
+     "name": "Південний схід (Добруджа)",
+     "en": "South-East",
+     "regions": [
+      "RO-BR",
+      "RO-BZ",
+      "RO-CT",
+      "RO-GL",
+      "RO-TL",
+      "RO-VN"
+     ]
+    },
+    {
+     "id": "RO:South-Muntenia",
+     "name": "Південь (Мунтенія)",
+     "en": "South-Muntenia",
+     "regions": [
+      "RO-AG",
+      "RO-CL",
+      "RO-DB",
+      "RO-GR",
+      "RO-IL",
+      "RO-PH",
+      "RO-TR"
+     ]
+    },
+    {
+     "id": "RO:Bucharest-Ilfov",
+     "name": "Бухарест-Ілфов",
+     "en": "Bucharest-Ilfov",
+     "regions": [
+      "RO-B",
+      "RO-IF"
+     ]
+    },
+    {
+     "id": "RO:South-WestOltenia",
+     "name": "Південний захід (Олтенія)",
+     "en": "South-West Oltenia",
+     "regions": [
+      "RO-DJ",
+      "RO-GJ",
+      "RO-MH",
+      "RO-OT",
+      "RO-VL"
+     ]
+    },
+    {
+     "id": "RO:West",
+     "name": "Захід (Банат)",
+     "en": "West",
+     "regions": [
+      "RO-AR",
+      "RO-CS",
+      "RO-HD",
+      "RO-TM"
+     ]
+    }
+   ]
+  },
+  "HU": {
+   "source": "Regions of Hungary (NUTS-2) over the counties and the cities with county rights of the raster.",
+   "areas": [
+    {
+     "id": "HU:CentralHungary",
+     "name": "Будапешт і Пешт",
+     "en": "Central Hungary",
+     "regions": [
+      "HU-BU",
+      "HU-PE",
+      "HU-ED"
+     ]
+    },
+    {
+     "id": "HU:CentralTransdanubia",
+     "name": "Центральне Задунав'я",
+     "en": "Central Transdanubia",
+     "regions": [
+      "HU-FE",
+      "HU-KE",
+      "HU-VE",
+      "HU-SF",
+      "HU-TB",
+      "HU-VM",
+      "HU-DU"
+     ]
+    },
+    {
+     "id": "HU:WesternTransdanubia",
+     "name": "Західне Задунав'я",
+     "en": "Western Transdanubia",
+     "regions": [
+      "HU-GS",
+      "HU-VA",
+      "HU-ZA",
+      "HU-SN",
+      "HU-GY",
+      "HU-SH",
+      "HU-ZE",
+      "HU-NK"
+     ]
+    },
+    {
+     "id": "HU:SouthernTransdanubia",
+     "name": "Південне Задунав'я",
+     "en": "Southern Transdanubia",
+     "regions": [
+      "HU-BA",
+      "HU-SO",
+      "HU-TO",
+      "HU-PS",
+      "HU-KV",
+      "HU-SS"
+     ]
+    },
+    {
+     "id": "HU:NorthernHungary",
+     "name": "Північна Угорщина",
+     "en": "Northern Hungary",
+     "regions": [
+      "HU-BZ",
+      "HU-HE",
+      "HU-NO",
+      "HU-EG",
+      "HU-MI",
+      "HU-ST"
+     ]
+    },
+    {
+     "id": "HU:NorthernGreatPlain",
+     "name": "Північний Альфельд",
+     "en": "Northern Great Plain",
+     "regions": [
+      "HU-HB",
+      "HU-JN",
+      "HU-SZ",
+      "HU-DE",
+      "HU-NY",
+      "HU-SK"
+     ]
+    },
+    {
+     "id": "HU:SouthernGreatPlain",
+     "name": "Південний Альфельд",
+     "en": "Southern Great Plain",
+     "regions": [
+      "HU-BK",
+      "HU-BE",
+      "HU-CS",
+      "HU-SD",
+      "HU-HV",
+      "HU-KM",
+      "HU-BC"
+     ]
+    }
+   ]
+  },
+  "BG": {
+   "source": "Planning regions of Bulgaria (NUTS-2).",
+   "areas": [
+    {
+     "id": "BG:North-West",
+     "name": "Північний захід",
+     "en": "North-West",
+     "regions": [
+      "BG-05",
+      "BG-06",
+      "BG-12",
+      "BG-15",
+      "BG-11"
+     ]
+    },
+    {
+     "id": "BG:North-Central",
+     "name": "Північний центр",
+     "en": "North-Central",
+     "regions": [
+      "BG-04",
+      "BG-07",
+      "BG-17",
+      "BG-18",
+      "BG-19"
+     ]
+    },
+    {
+     "id": "BG:North-East",
+     "name": "Північний схід",
+     "en": "North-East",
+     "regions": [
+      "BG-03",
+      "BG-08",
+      "BG-27",
+      "BG-25"
+     ]
+    },
+    {
+     "id": "BG:South-East",
+     "name": "Південний схід",
+     "en": "South-East",
+     "regions": [
+      "BG-02",
+      "BG-20",
+      "BG-28",
+      "BG-24"
+     ]
+    },
+    {
+     "id": "BG:South-West",
+     "name": "Південний захід (Софія)",
+     "en": "South-West",
+     "regions": [
+      "BG-22",
+      "BG-23",
+      "BG-14",
+      "BG-10",
+      "BG-01"
+     ]
+    },
+    {
+     "id": "BG:South-Central",
+     "name": "Південний центр",
+     "en": "South-Central",
+     "regions": [
+      "BG-16",
+      "BG-13",
+      "BG-21",
+      "BG-09",
+      "BG-26"
+     ]
+    }
+   ]
+  },
+  "HR": {
+   "source": "Croatia: Adriatic, Zagreb and the north, Central Croatia, Slavonia. HR-11 (Pozega-Slavonia) may be missing from the raster.",
+   "areas": [
+    {
+     "id": "HR:Adriatic",
+     "name": "Адріатика",
+     "en": "Adriatic",
+     "regions": [
+      "HR-18",
+      "HR-08",
+      "HR-09",
+      "HR-13",
+      "HR-15",
+      "HR-17",
+      "HR-19"
+     ]
+    },
+    {
+     "id": "HR:Zagrebandnorth",
+     "name": "Загреб і північ",
+     "en": "Zagreb and north",
+     "regions": [
+      "HR-21",
+      "HR-01",
+      "HR-02",
+      "HR-05",
+      "HR-20",
+      "HR-06"
+     ]
+    },
+    {
+     "id": "HR:CentralCroatia",
+     "name": "Центральна Хорватія",
+     "en": "Central Croatia",
+     "regions": [
+      "HR-04",
+      "HR-03",
+      "HR-07"
+     ]
+    },
+    {
+     "id": "HR:Slavonia",
+     "name": "Славонія",
+     "en": "Slavonia",
+     "regions": [
+      "HR-10",
+      "HR-12",
+      "HR-14",
+      "HR-16"
+     ]
+    }
+   ]
+  },
+  "CH": {
+   "source": "The seven Grossregionen of Switzerland (NUTS-2).",
+   "areas": [
+    {
+     "id": "CH:LakeGenevaregion",
+     "name": "Регіон Женевського озера",
+     "en": "Lake Geneva region",
+     "regions": [
+      "CH-GE",
+      "CH-VD",
+      "CH-VS"
+     ]
+    },
+    {
+     "id": "CH:EspaceMittelland",
+     "name": "Еспас-Міттелланд",
+     "en": "Espace Mittelland",
+     "regions": [
+      "CH-BE",
+      "CH-FR",
+      "CH-SO",
+      "CH-NE",
+      "CH-JU"
+     ]
+    },
+    {
+     "id": "CH:NorthwesternSwitzerland",
+     "name": "Північний захід",
+     "en": "Northwestern Switzerland",
+     "regions": [
+      "CH-BS",
+      "CH-BL",
+      "CH-AG"
+     ]
+    },
+    {
+     "id": "CH:Zurich",
+     "name": "Цюрих",
+     "en": "Zurich",
+     "regions": [
+      "CH-ZH"
+     ]
+    },
+    {
+     "id": "CH:EasternSwitzerland",
+     "name": "Східна Швейцарія",
+     "en": "Eastern Switzerland",
+     "regions": [
+      "CH-GL",
+      "CH-SH",
+      "CH-AR",
+      "CH-AI",
+      "CH-SG",
+      "CH-GR",
+      "CH-TG"
+     ]
+    },
+    {
+     "id": "CH:CentralSwitzerland",
+     "name": "Центральна Швейцарія",
+     "en": "Central Switzerland",
+     "regions": [
+      "CH-LU",
+      "CH-UR",
+      "CH-SZ",
+      "CH-OW",
+      "CH-NW",
+      "CH-ZG"
+     ]
+    },
+    {
+     "id": "CH:Ticino",
+     "name": "Тічино",
+     "en": "Ticino",
+     "regions": [
+      "CH-TI"
+     ]
+    }
+   ]
+  },
+  "BE": {
+   "source": "Belgium's regions (Flanders, Wallonia, Brussels).",
+   "areas": [
+    {
+     "id": "BE:Flanders",
+     "name": "Фландрія",
+     "en": "Flanders",
+     "regions": [
+      "BE-VWV",
+      "BE-VOV",
+      "BE-VAN",
+      "BE-VLI",
+      "BE-VBR"
+     ]
+    },
+    {
+     "id": "BE:Wallonia",
+     "name": "Валлонія",
+     "en": "Wallonia",
+     "regions": [
+      "BE-WHT",
+      "BE-WNA",
+      "BE-WLX",
+      "BE-WLG",
+      "BE-WBR"
+     ]
+    },
+    {
+     "id": "BE:Brussels",
+     "name": "Брюссель",
+     "en": "Brussels",
+     "regions": [
+      "BE-BRU"
+     ]
+    }
+   ]
+  },
+  "RS": {
+   "source": "Statistical regions of Serbia.",
+   "areas": [
+    {
+     "id": "RS:Vojvodina",
+     "name": "Воєводина",
+     "en": "Vojvodina",
+     "regions": [
+      "RS-01",
+      "RS-02",
+      "RS-03",
+      "RS-04",
+      "RS-05",
+      "RS-06",
+      "RS-07"
+     ]
+    },
+    {
+     "id": "RS:Belgrade",
+     "name": "Белград",
+     "en": "Belgrade",
+     "regions": [
+      "RS-00"
+     ]
+    },
+    {
+     "id": "RS:SumadijaandWesternSerbia",
+     "name": "Шумадія і Західна Сербія",
+     "en": "Sumadija and Western Serbia",
+     "regions": [
+      "RS-08",
+      "RS-09",
+      "RS-12",
+      "RS-13",
+      "RS-16",
+      "RS-17",
+      "RS-18",
+      "RS-19"
+     ]
+    },
+    {
+     "id": "RS:SouthernandEasternSerbia",
+     "name": "Південна і Східна Сербія",
+     "en": "Southern and Eastern Serbia",
+     "regions": [
+      "RS-10",
+      "RS-11",
+      "RS-14",
+      "RS-15",
+      "RS-20",
+      "RS-21",
+      "RS-22",
+      "RS-23",
+      "RS-24"
+     ]
+    }
+   ]
+  },
+  "GR": {
+   "source": "Greece's 13 regions grouped as north (Macedonia, Thrace, Epirus) / centre (Thessaly, Central Greece, Attica) / Peloponnese and west / islands.",
+   "areas": [
+    {
+     "id": "GR:North",
+     "name": "Північна Греція",
+     "en": "North",
+     "regions": [
+      "GR-A",
+      "GR-B",
+      "GR-C",
+      "GR-D",
+      "GR-69"
+     ]
+    },
+    {
+     "id": "GR:CentreandAttica",
+     "name": "Центр і Аттика",
+     "en": "Centre and Attica",
+     "regions": [
+      "GR-E",
+      "GR-H",
+      "GR-A1"
+     ]
+    },
+    {
+     "id": "GR:PeloponneseandWest",
+     "name": "Пелопоннес і захід",
+     "en": "Peloponnese and West",
+     "regions": [
+      "GR-J",
+      "GR-G"
+     ]
+    },
+    {
+     "id": "GR:Islands",
+     "name": "Острови",
+     "en": "Islands",
+     "regions": [
+      "GR-M",
+      "GR-L",
+      "GR-K",
+      "GR-F"
+     ]
+    }
+   ]
+  },
+  "TR": {
+   "source": "The seven geographical regions of Turkey (1941 Geography Congress) over the provinces (plate codes).",
+   "areas": [
+    {
+     "id": "TR:Marmara",
+     "name": "Мармурове море",
+     "en": "Marmara",
+     "regions": [
+      "TR-10",
+      "TR-11",
+      "TR-16",
+      "TR-17",
+      "TR-22",
+      "TR-34",
+      "TR-39",
+      "TR-41",
+      "TR-54",
+      "TR-59",
+      "TR-77"
+     ]
+    },
+    {
+     "id": "TR:Aegean",
+     "name": "Егейське узбережжя",
+     "en": "Aegean",
+     "regions": [
+      "TR-03",
+      "TR-09",
+      "TR-20",
+      "TR-35",
+      "TR-43",
+      "TR-45",
+      "TR-48",
+      "TR-64"
+     ]
+    },
+    {
+     "id": "TR:Mediterranean",
+     "name": "Середземномор'я",
+     "en": "Mediterranean",
+     "regions": [
+      "TR-01",
+      "TR-07",
+      "TR-15",
+      "TR-31",
+      "TR-32",
+      "TR-33",
+      "TR-46",
+      "TR-80"
+     ]
+    },
+    {
+     "id": "TR:CentralAnatolia",
+     "name": "Центральна Анатолія",
+     "en": "Central Anatolia",
+     "regions": [
+      "TR-06",
+      "TR-18",
+      "TR-26",
+      "TR-38",
+      "TR-40",
+      "TR-42",
+      "TR-50",
+      "TR-51",
+      "TR-58",
+      "TR-66",
+      "TR-68",
+      "TR-70",
+      "TR-71"
+     ]
+    },
+    {
+     "id": "TR:BlackSea",
+     "name": "Чорноморське узбережжя",
+     "en": "Black Sea",
+     "regions": [
+      "TR-05",
+      "TR-08",
+      "TR-14",
+      "TR-19",
+      "TR-28",
+      "TR-29",
+      "TR-37",
+      "TR-52",
+      "TR-53",
+      "TR-55",
+      "TR-57",
+      "TR-60",
+      "TR-61",
+      "TR-67",
+      "TR-69",
+      "TR-74",
+      "TR-78",
+      "TR-81"
+     ]
+    },
+    {
+     "id": "TR:EasternAnatolia",
+     "name": "Східна Анатолія",
+     "en": "Eastern Anatolia",
+     "regions": [
+      "TR-04",
+      "TR-12",
+      "TR-13",
+      "TR-23",
+      "TR-24",
+      "TR-25",
+      "TR-30",
+      "TR-36",
+      "TR-44",
+      "TR-49",
+      "TR-62",
+      "TR-65",
+      "TR-75",
+      "TR-76"
+     ]
+    },
+    {
+     "id": "TR:SoutheasternAnatolia",
+     "name": "Південно-Східна Анатолія",
+     "en": "Southeastern Anatolia",
+     "regions": [
+      "TR-02",
+      "TR-21",
+      "TR-27",
+      "TR-47",
+      "TR-56",
+      "TR-63",
+      "TR-72",
+      "TR-73",
+      "TR-79"
+     ]
+    }
+   ]
+  },
+  "JP": {
+   "source": "The traditional regions of Japan (Okinawa apart from Kyushu).",
+   "areas": [
+    {
+     "id": "JP:Hokkaido",
+     "name": "Хоккайдо",
+     "en": "Hokkaido",
+     "regions": [
+      "JP-01"
+     ]
+    },
+    {
+     "id": "JP:Tohoku",
+     "name": "Тохоку",
+     "en": "Tohoku",
+     "regions": [
+      "JP-02",
+      "JP-03",
+      "JP-04",
+      "JP-05",
+      "JP-06",
+      "JP-07"
+     ]
+    },
+    {
+     "id": "JP:Kanto",
+     "name": "Канто",
+     "en": "Kanto",
+     "regions": [
+      "JP-08",
+      "JP-09",
+      "JP-10",
+      "JP-11",
+      "JP-12",
+      "JP-13",
+      "JP-14"
+     ]
+    },
+    {
+     "id": "JP:Chubu",
+     "name": "Тюбу",
+     "en": "Chubu",
+     "regions": [
+      "JP-15",
+      "JP-16",
+      "JP-17",
+      "JP-18",
+      "JP-19",
+      "JP-20",
+      "JP-21",
+      "JP-22",
+      "JP-23"
+     ]
+    },
+    {
+     "id": "JP:Kansai",
+     "name": "Кансай (Кінкі)",
+     "en": "Kansai",
+     "regions": [
+      "JP-24",
+      "JP-25",
+      "JP-26",
+      "JP-27",
+      "JP-28",
+      "JP-29",
+      "JP-30"
+     ]
+    },
+    {
+     "id": "JP:Chugoku",
+     "name": "Тюґоку",
+     "en": "Chugoku",
+     "regions": [
+      "JP-31",
+      "JP-32",
+      "JP-33",
+      "JP-34",
+      "JP-35"
+     ]
+    },
+    {
+     "id": "JP:Shikoku",
+     "name": "Сікоку",
+     "en": "Shikoku",
+     "regions": [
+      "JP-36",
+      "JP-37",
+      "JP-38",
+      "JP-39"
+     ]
+    },
+    {
+     "id": "JP:Kyushu",
+     "name": "Кюсю",
+     "en": "Kyushu",
+     "regions": [
+      "JP-40",
+      "JP-41",
+      "JP-42",
+      "JP-43",
+      "JP-44",
+      "JP-45",
+      "JP-46"
+     ]
+    },
+    {
+     "id": "JP:Okinawa",
+     "name": "Окінава",
+     "en": "Okinawa",
+     "regions": [
+      "JP-47"
+     ]
+    }
+   ]
+  },
+  "KR": {
+   "source": "Traditional provinces of South Korea with their metropolitan cities.",
+   "areas": [
+    {
+     "id": "KR:SeoulCapitalArea",
+     "name": "Сеул і столичний регіон",
+     "en": "Seoul Capital Area",
+     "regions": [
+      "KR-11",
+      "KR-28",
+      "KR-41"
+     ]
+    },
+    {
+     "id": "KR:Gangwon",
+     "name": "Канвон",
+     "en": "Gangwon",
+     "regions": [
+      "KR-42"
+     ]
+    },
+    {
+     "id": "KR:Chungcheong",
+     "name": "Чхунчхон",
+     "en": "Chungcheong",
+     "regions": [
+      "KR-43",
+      "KR-44",
+      "KR-30",
+      "KR-50"
+     ]
+    },
+    {
+     "id": "KR:Jeolla",
+     "name": "Чолла",
+     "en": "Jeolla",
+     "regions": [
+      "KR-45",
+      "KR-46",
+      "KR-29"
+     ]
+    },
+    {
+     "id": "KR:Gyeongsang",
+     "name": "Кьонсан",
+     "en": "Gyeongsang",
+     "regions": [
+      "KR-47",
+      "KR-48",
+      "KR-26",
+      "KR-27",
+      "KR-31"
+     ]
+    },
+    {
+     "id": "KR:Jeju",
+     "name": "Чеджу",
+     "en": "Jeju",
+     "regions": [
+      "KR-49"
+     ]
+    }
+   ]
+  },
+  "TW": {
+   "source": "Taiwan's north / centre / south / east and the outlying islands.",
+   "areas": [
+    {
+     "id": "TW:North",
+     "name": "Північ",
+     "en": "North",
+     "regions": [
+      "TW-TPE",
+      "TW-TPQ",
+      "TW-KEE",
+      "TW-TAO",
+      "TW-HSZ",
+      "TW-HSQ",
+      "TW-ILA"
+     ]
+    },
+    {
+     "id": "TW:Centre",
+     "name": "Центр",
+     "en": "Centre",
+     "regions": [
+      "TW-MIA",
+      "TW-TXG",
+      "TW-CHA",
+      "TW-NAN",
+      "TW-YUN"
+     ]
+    },
+    {
+     "id": "TW:South",
+     "name": "Південь",
+     "en": "South",
+     "regions": [
+      "TW-CYI",
+      "TW-CYQ",
+      "TW-TNN",
+      "TW-KHH",
+      "TW-PIF"
+     ]
+    },
+    {
+     "id": "TW:East",
+     "name": "Схід",
+     "en": "East",
+     "regions": [
+      "TW-HUA",
+      "TW-TTT"
+     ]
+    },
+    {
+     "id": "TW:Outlyingislands",
+     "name": "Острови",
+     "en": "Outlying islands",
+     "regions": [
+      "TW-KIN",
+      "TW-PEN"
+     ]
+    }
+   ]
+  },
+  "IN": {
+   "source": "Zonal councils of India (States Reorganisation Act 1956), Andaman, Nicobar and Lakshadweep with the south.",
+   "areas": [
+    {
+     "id": "IN:North",
+     "name": "Північ",
+     "en": "North",
+     "regions": [
+      "IN-JK",
+      "IN-KAS00",
+      "IN-LA",
+      "IN-HP",
+      "IN-PB",
+      "IN-CH",
+      "IN-HR",
+      "IN-DL",
+      "IN-RJ"
+     ]
+    },
+    {
+     "id": "IN:Central",
+     "name": "Центр",
+     "en": "Central",
+     "regions": [
+      "IN-UP",
+      "IN-UT",
+      "IN-MP",
+      "IN-CT"
+     ]
+    },
+    {
+     "id": "IN:East",
+     "name": "Схід",
+     "en": "East",
+     "regions": [
+      "IN-BR",
+      "IN-JH",
+      "IN-OR",
+      "IN-WB"
+     ]
+    },
+    {
+     "id": "IN:West",
+     "name": "Захід",
+     "en": "West",
+     "regions": [
+      "IN-GJ",
+      "IN-MH",
+      "IN-GA",
+      "IN-DH"
+     ]
+    },
+    {
+     "id": "IN:South",
+     "name": "Південь",
+     "en": "South",
+     "regions": [
+      "IN-AP",
+      "IN-TG",
+      "IN-KA",
+      "IN-KL",
+      "IN-TN",
+      "IN-PY",
+      "IN-LD",
+      "IN-AN"
+     ]
+    },
+    {
+     "id": "IN:Northeast",
+     "name": "Північний схід",
+     "en": "Northeast",
+     "regions": [
+      "IN-AS",
+      "IN-AR",
+      "IN-MN",
+      "IN-ML",
+      "IN-MZ",
+      "IN-NL",
+      "IN-TR",
+      "IN-SK"
+     ]
+    }
+   ]
+  },
+  "ID": {
+   "source": "Indonesia's main islands / island groups.",
+   "areas": [
+    {
+     "id": "ID:Sumatra",
+     "name": "Суматра",
+     "en": "Sumatra",
+     "regions": [
+      "ID-AC",
+      "ID-SU",
+      "ID-SB",
+      "ID-RI",
+      "ID-KR",
+      "ID-JA",
+      "ID-SS",
+      "ID-BE",
+      "ID-LA",
+      "ID-BB"
+     ]
+    },
+    {
+     "id": "ID:Java",
+     "name": "Ява",
+     "en": "Java",
+     "regions": [
+      "ID-BT",
+      "ID-JK",
+      "ID-JB",
+      "ID-JT",
+      "ID-YO",
+      "ID-JI"
+     ]
+    },
+    {
+     "id": "ID:BaliandNusaTenggara",
+     "name": "Балі і Нуса-Тенгара",
+     "en": "Bali and Nusa Tenggara",
+     "regions": [
+      "ID-BA",
+      "ID-NB",
+      "ID-NT"
+     ]
+    },
+    {
+     "id": "ID:Kalimantan",
+     "name": "Калімантан",
+     "en": "Kalimantan",
+     "regions": [
+      "ID-KB",
+      "ID-KT",
+      "ID-KS",
+      "ID-KI"
+     ]
+    },
+    {
+     "id": "ID:Sulawesi",
+     "name": "Сулавесі",
+     "en": "Sulawesi",
+     "regions": [
+      "ID-SA",
+      "ID-GO",
+      "ID-ST",
+      "ID-SR",
+      "ID-SN",
+      "ID-SG"
+     ]
+    },
+    {
+     "id": "ID:MalukuandPapua",
+     "name": "Молукки і Папуа",
+     "en": "Maluku and Papua",
+     "regions": [
+      "ID-MA",
+      "ID-MU",
+      "ID-PA",
+      "ID-PB"
+     ]
+    }
+   ]
+  },
+  "PH": {
+   "source": "The island groups of the Philippines, Luzon in north / centre-south, Bicol and MIMAROPA.",
+   "areas": [
+    {
+     "id": "PH:NorthernLuzon",
+     "name": "Північний Лусон",
+     "en": "Northern Luzon",
+     "regions": [
+      "PH-ILN",
+      "PH-ILS",
+      "PH-LUN",
+      "PH-PAN",
+      "PH-ABR",
+      "PH-APA",
+      "PH-KAL",
+      "PH-MOU",
+      "PH-IFU",
+      "PH-BEN",
+      "PH-CAG",
+      "PH-ISA",
+      "PH-QUI",
+      "PH-NUV",
+      "PH-BTN"
+     ]
+    },
+    {
+     "id": "PH:CentralandSouthernLuzon",
+     "name": "Центр. і Півд. Лусон",
+     "en": "Central and Southern Luzon",
+     "regions": [
+      "PH-AUR",
+      "PH-NUE",
+      "PH-TAR",
+      "PH-ZMB",
+      "PH-BAN",
+      "PH-PAM",
+      "PH-BUL",
+      "PH-MNL",
+      "PH-RIZ",
+      "PH-LAG",
+      "PH-CAV",
+      "PH-BTG",
+      "PH-QUE"
+     ]
+    },
+    {
+     "id": "PH:Bicol",
+     "name": "Бікол",
+     "en": "Bicol",
+     "regions": [
+      "PH-CAN",
+      "PH-CAS",
+      "PH-ALB",
+      "PH-SOR",
+      "PH-CAT",
+      "PH-MAS"
+     ]
+    },
+    {
+     "id": "PH:MIMAROPA",
+     "name": "Міндоро і Палаван",
+     "en": "MIMAROPA",
+     "regions": [
+      "PH-MDR",
+      "PH-MDC",
+      "PH-MAD",
+      "PH-ROM",
+      "PH-PLW"
+     ]
+    },
+    {
+     "id": "PH:Visayas",
+     "name": "Вісайї",
+     "en": "Visayas",
+     "regions": [
+      "PH-AKL",
+      "PH-ANT",
+      "PH-CAP",
+      "PH-ILI",
+      "PH-GUI",
+      "PH-NEC",
+      "PH-BCD",
+      "PH-NER",
+      "PH-CEB",
+      "PH-MDE",
+      "PH-LAP",
+      "PH-BOH",
+      "PH-SIG",
+      "PH-LEY",
+      "PH-SLE",
+      "PH-BIL",
+      "PH-WSA",
+      "PH-EAS",
+      "PH-NSA"
+     ]
+    },
+    {
+     "id": "PH:Mindanao",
+     "name": "Мінданао",
+     "en": "Mindanao",
+     "regions": [
+      "PH-ZAN",
+      "PH-ZAS",
+      "PH-ZSI",
+      "PH-MSC",
+      "PH-MSR",
+      "PH-LAN",
+      "PH-CAM",
+      "PH-BUK",
+      "PH-LAS",
+      "PH-AGN",
+      "PH-AGS",
+      "PH-SUN",
+      "PH-SUR",
+      "PH-DAV",
+      "PH-COM",
+      "PH-DAS",
+      "PH-DAO",
+      "PH-NCO",
+      "PH-SUK",
+      "PH-SAR",
+      "PH-SCO",
+      "PH-MAG",
+      "PH-BAS",
+      "PH-SLU",
+      "PH-TAW"
+     ]
+    }
+   ]
+  },
+  "TH": {
+   "source": "The six geographic regions of Thailand (National Research Council 1977).",
+   "areas": [
+    {
+     "id": "TH:North",
+     "name": "Північ",
+     "en": "North",
+     "regions": [
+      "TH-50",
+      "TH-51",
+      "TH-52",
+      "TH-53",
+      "TH-54",
+      "TH-55",
+      "TH-56",
+      "TH-57",
+      "TH-58"
+     ]
+    },
+    {
+     "id": "TH:Northeast(Isan)",
+     "name": "Північний схід (Ісан)",
+     "en": "Northeast (Isan)",
+     "regions": [
+      "TH-30",
+      "TH-31",
+      "TH-32",
+      "TH-33",
+      "TH-34",
+      "TH-35",
+      "TH-36",
+      "TH-37",
+      "TH-38",
+      "TH-39",
+      "TH-40",
+      "TH-41",
+      "TH-42",
+      "TH-43",
+      "TH-44",
+      "TH-45",
+      "TH-46",
+      "TH-47",
+      "TH-48",
+      "TH-49"
+     ]
+    },
+    {
+     "id": "TH:Central",
+     "name": "Центр і Бангкок",
+     "en": "Central",
+     "regions": [
+      "TH-10",
+      "TH-11",
+      "TH-12",
+      "TH-13",
+      "TH-14",
+      "TH-15",
+      "TH-16",
+      "TH-17",
+      "TH-18",
+      "TH-19",
+      "TH-26",
+      "TH-60",
+      "TH-61",
+      "TH-62",
+      "TH-64",
+      "TH-65",
+      "TH-66",
+      "TH-67",
+      "TH-72",
+      "TH-73",
+      "TH-74",
+      "TH-75"
+     ]
+    },
+    {
+     "id": "TH:East",
+     "name": "Схід",
+     "en": "East",
+     "regions": [
+      "TH-20",
+      "TH-21",
+      "TH-22",
+      "TH-23",
+      "TH-24",
+      "TH-25",
+      "TH-27"
+     ]
+    },
+    {
+     "id": "TH:West",
+     "name": "Захід",
+     "en": "West",
+     "regions": [
+      "TH-63",
+      "TH-70",
+      "TH-71",
+      "TH-76",
+      "TH-77"
+     ]
+    },
+    {
+     "id": "TH:South",
+     "name": "Південь",
+     "en": "South",
+     "regions": [
+      "TH-80",
+      "TH-81",
+      "TH-82",
+      "TH-83",
+      "TH-84",
+      "TH-85",
+      "TH-86",
+      "TH-90",
+      "TH-91",
+      "TH-92",
+      "TH-93",
+      "TH-94",
+      "TH-95",
+      "TH-96"
+     ]
+    }
+   ]
+  },
+  "VN": {
+   "source": "Vietnam's three parts (North, Centre incl. the Central Highlands, South).",
+   "areas": [
+    {
+     "id": "VN:North",
+     "name": "Північ",
+     "en": "North",
+     "regions": [
+      "VN-01",
+      "VN-02",
+      "VN-03",
+      "VN-04",
+      "VN-05",
+      "VN-06",
+      "VN-07",
+      "VN-09",
+      "VN-13",
+      "VN-14",
+      "VN-18",
+      "VN-20",
+      "VN-53",
+      "VN-54",
+      "VN-56",
+      "VN-61",
+      "VN-63",
+      "VN-66",
+      "VN-67",
+      "VN-68",
+      "VN-69",
+      "VN-70",
+      "VN-71",
+      "VN-HN",
+      "VN-HP"
+     ]
+    },
+    {
+     "id": "VN:Centre",
+     "name": "Центр",
+     "en": "Centre",
+     "regions": [
+      "VN-21",
+      "VN-22",
+      "VN-23",
+      "VN-24",
+      "VN-25",
+      "VN-26",
+      "VN-27",
+      "VN-29",
+      "VN-31",
+      "VN-32",
+      "VN-34",
+      "VN-36",
+      "VN-40",
+      "VN-DN",
+      "VN-28",
+      "VN-30",
+      "VN-33",
+      "VN-35",
+      "VN-72"
+     ]
+    },
+    {
+     "id": "VN:South",
+     "name": "Південь",
+     "en": "South",
+     "regions": [
+      "VN-37",
+      "VN-39",
+      "VN-41",
+      "VN-43",
+      "VN-44",
+      "VN-45",
+      "VN-46",
+      "VN-47",
+      "VN-49",
+      "VN-50",
+      "VN-51",
+      "VN-52",
+      "VN-55",
+      "VN-57",
+      "VN-58",
+      "VN-59",
+      "VN-73",
+      "VN-SG",
+      "VN-CT"
+     ]
+    }
+   ]
+  },
+  "KH": {
+   "source": "The four natural regions of Cambodia with Phnom Penh in the plain. KH-5 ('Kam') is Kampong Speu in the raster.",
+   "areas": [
+    {
+     "id": "KH:Centralplain",
+     "name": "Рівнина і Пномпень",
+     "en": "Central plain",
+     "regions": [
+      "KH-12",
+      "KH-8",
+      "KH-3",
+      "KH-14",
+      "KH-20",
+      "KH-21"
+     ]
+    },
+    {
+     "id": "KH:TonleSap",
+     "name": "Тонлесап",
+     "en": "Tonle Sap",
+     "regions": [
+      "KH-1",
+      "KH-2",
+      "KH-4",
+      "KH-6",
+      "KH-15",
+      "KH-17",
+      "KH-24"
+     ]
+    },
+    {
+     "id": "KH:Coast",
+     "name": "Узбережжя",
+     "en": "Coast",
+     "regions": [
+      "KH-7",
+      "KH-9",
+      "KH-18",
+      "KH-23"
+     ]
+    },
+    {
+     "id": "KH:Plateauandmountains",
+     "name": "Плато і гори",
+     "en": "Plateau and mountains",
+     "regions": [
+      "KH-5",
+      "KH-10",
+      "KH-11",
+      "KH-13",
+      "KH-16",
+      "KH-19",
+      "KH-22"
+     ]
+    }
+   ]
+  },
+  "MY": {
+   "source": "Peninsular Malaysia (north / east coast / centre-south) and East Malaysia.",
+   "areas": [
+    {
+     "id": "MY:NorthernPeninsula",
+     "name": "Північ півострова",
+     "en": "Northern Peninsula",
+     "regions": [
+      "MY-09",
+      "MY-02",
+      "MY-07",
+      "MY-08"
+     ]
+    },
+    {
+     "id": "MY:EastCoast",
+     "name": "Східне узбережжя",
+     "en": "East Coast",
+     "regions": [
+      "MY-03",
+      "MY-11",
+      "MY-06"
+     ]
+    },
+    {
+     "id": "MY:CentralandSouthernPeninsula",
+     "name": "Центр і південь",
+     "en": "Central and Southern Peninsula",
+     "regions": [
+      "MY-10",
+      "MY-14",
+      "MY-16",
+      "MY-05",
+      "MY-04",
+      "MY-01"
+     ]
+    },
+    {
+     "id": "MY:Sabah",
+     "name": "Сабах",
+     "en": "Sabah",
+     "regions": [
+      "MY-12",
+      "MY-15"
+     ]
+    },
+    {
+     "id": "MY:Sarawak",
+     "name": "Саравак",
+     "en": "Sarawak",
+     "regions": [
+      "MY-13"
+     ]
+    }
+   ]
+  },
+  "LK": {
+   "source": "Provinces of Sri Lanka over the districts.",
+   "areas": [
+    {
+     "id": "LK:Western",
+     "name": "Західна",
+     "en": "Western",
+     "regions": [
+      "LK-11",
+      "LK-12",
+      "LK-13"
+     ]
+    },
+    {
+     "id": "LK:Central",
+     "name": "Центральна",
+     "en": "Central",
+     "regions": [
+      "LK-21",
+      "LK-22",
+      "LK-23"
+     ]
+    },
+    {
+     "id": "LK:Southern",
+     "name": "Південна",
+     "en": "Southern",
+     "regions": [
+      "LK-31",
+      "LK-32",
+      "LK-33"
+     ]
+    },
+    {
+     "id": "LK:Northern",
+     "name": "Північна",
+     "en": "Northern",
+     "regions": [
+      "LK-41",
+      "LK-42",
+      "LK-43",
+      "LK-44",
+      "LK-45"
+     ]
+    },
+    {
+     "id": "LK:Eastern",
+     "name": "Східна",
+     "en": "Eastern",
+     "regions": [
+      "LK-51",
+      "LK-52",
+      "LK-53"
+     ]
+    },
+    {
+     "id": "LK:NorthWestern",
+     "name": "Північно-Західна",
+     "en": "North Western",
+     "regions": [
+      "LK-61",
+      "LK-62"
+     ]
+    },
+    {
+     "id": "LK:NorthCentral",
+     "name": "Північно-Центральна",
+     "en": "North Central",
+     "regions": [
+      "LK-71",
+      "LK-72"
+     ]
+    },
+    {
+     "id": "LK:Uva",
+     "name": "Ува",
+     "en": "Uva",
+     "regions": [
+      "LK-81",
+      "LK-82"
+     ]
+    },
+    {
+     "id": "LK:Sabaragamuwa",
+     "name": "Сабарагамува",
+     "en": "Sabaragamuwa",
+     "regions": [
+      "LK-91",
+      "LK-92"
+     ]
+    }
+   ]
+  },
+  "NP": {
+   "source": "Nepal's development regions over the former zones.",
+   "areas": [
+    {
+     "id": "NP:Far-Western",
+     "name": "Далекий захід",
+     "en": "Far-Western",
+     "regions": [
+      "NP-MA",
+      "NP-SE"
+     ]
+    },
+    {
+     "id": "NP:Mid-Western",
+     "name": "Середній захід",
+     "en": "Mid-Western",
+     "regions": [
+      "NP-KA",
+      "NP-BH",
+      "NP-RA"
+     ]
+    },
+    {
+     "id": "NP:Western",
+     "name": "Захід",
+     "en": "Western",
+     "regions": [
+      "NP-DH",
+      "NP-GA",
+      "NP-LU"
+     ]
+    },
+    {
+     "id": "NP:Central",
+     "name": "Центр (Катманду)",
+     "en": "Central",
+     "regions": [
+      "NP-BA",
+      "NP-JA",
+      "NP-NA"
+     ]
+    },
+    {
+     "id": "NP:Eastern",
+     "name": "Схід",
+     "en": "Eastern",
+     "regions": [
+      "NP-ME",
+      "NP-KO",
+      "NP-SA"
+     ]
+    }
+   ]
+  },
+  "MN": {
+   "source": "The regions of Mongolia (Western, Khangai, Central, Eastern, Ulaanbaatar).",
+   "areas": [
+    {
+     "id": "MN:Western",
+     "name": "Захід",
+     "en": "Western",
+     "regions": [
+      "MN-071",
+      "MN-065",
+      "MN-043",
+      "MN-046",
+      "MN-057"
+     ]
+    },
+    {
+     "id": "MN:Khangai",
+     "name": "Хангай",
+     "en": "Khangai",
+     "regions": [
+      "MN-073",
+      "MN-069",
+      "MN-067",
+      "MN-035",
+      "MN-055",
+      "MN-041"
+     ]
+    },
+    {
+     "id": "MN:Central",
+     "name": "Центр",
+     "en": "Central",
+     "regions": [
+      "MN-037",
+      "MN-063",
+      "MN-059",
+      "MN-064",
+      "MN-053",
+      "MN-049",
+      "MN-047"
+     ]
+    },
+    {
+     "id": "MN:Eastern",
+     "name": "Схід",
+     "en": "Eastern",
+     "regions": [
+      "MN-061",
+      "MN-039",
+      "MN-051"
+     ]
+    },
+    {
+     "id": "MN:Ulaanbaatar",
+     "name": "Улан-Батор",
+     "en": "Ulaanbaatar",
+     "regions": [
+      "MN-1"
+     ]
+    }
+   ]
+  },
+  "KZ": {
+   "source": "Kazakhstan's west / north / centre / east / south.",
+   "areas": [
+    {
+     "id": "KZ:West",
+     "name": "Захід",
+     "en": "West",
+     "regions": [
+      "KZ-ATY",
+      "KZ-MAN",
+      "KZ-ZAP",
+      "KZ-AKT"
+     ]
+    },
+    {
+     "id": "KZ:North",
+     "name": "Північ і Астана",
+     "en": "North",
+     "regions": [
+      "KZ-KUS",
+      "KZ-SEV",
+      "KZ-AKM",
+      "KZ-PAV",
+      "KZ-AST"
+     ]
+    },
+    {
+     "id": "KZ:Centre",
+     "name": "Центр",
+     "en": "Centre",
+     "regions": [
+      "KZ-KAR"
+     ]
+    },
+    {
+     "id": "KZ:East",
+     "name": "Схід",
+     "en": "East",
+     "regions": [
+      "KZ-VOS"
+     ]
+    },
+    {
+     "id": "KZ:South",
+     "name": "Південь",
+     "en": "South",
+     "regions": [
+      "KZ-ALA",
+      "KZ-ZHA",
+      "KZ-YUZ",
+      "KZ-KZY",
+      "KZ-KAB00"
+     ]
+    }
+   ]
+  },
+  "NZ": {
+   "source": "North Island / South Island; Chatham and the subantarctic islands apart.",
+   "areas": [
+    {
+     "id": "NZ:NorthIsland",
+     "name": "Північний острів",
+     "en": "North Island",
+     "regions": [
+      "NZ-NTL",
+      "NZ-AUK",
+      "NZ-WKO",
+      "NZ-BOP",
+      "NZ-GIS",
+      "NZ-HKB",
+      "NZ-TKI",
+      "NZ-MWT",
+      "NZ-WGN",
+      "NZ-ZL5476",
+      "NZ-ZL5471"
+     ]
+    },
+    {
+     "id": "NZ:SouthIsland",
+     "name": "Південний острів",
+     "en": "South Island",
+     "regions": [
+      "NZ-TAS",
+      "NZ-NSN",
+      "NZ-MBH",
+      "NZ-WTC",
+      "NZ-CAN",
+      "NZ-OTA",
+      "NZ-STL"
+     ]
+    },
+    {
+     "id": "NZ:Outlyingislands",
+     "name": "Віддалені острови",
+     "en": "Outlying islands",
+     "regions": [
+      "NZ-CIT",
+      "NZ-ZL5477",
+      "NZ-ZL5478",
+      "NZ-ZL5479",
+      "NZ-ZL5480"
+     ]
+    }
+   ]
+  },
+  "NG": {
+   "source": "The six geopolitical zones of Nigeria.",
+   "areas": [
+    {
+     "id": "NG:NorthWest",
+     "name": "Північний захід",
+     "en": "North West",
+     "regions": [
+      "NG-JI",
+      "NG-KD",
+      "NG-KN",
+      "NG-KT",
+      "NG-KE",
+      "NG-SO",
+      "NG-ZA"
+     ]
+    },
+    {
+     "id": "NG:NorthEast",
+     "name": "Північний схід",
+     "en": "North East",
+     "regions": [
+      "NG-AD",
+      "NG-BA",
+      "NG-BO",
+      "NG-GO",
+      "NG-TA",
+      "NG-YO"
+     ]
+    },
+    {
+     "id": "NG:NorthCentral",
+     "name": "Північний центр",
+     "en": "North Central",
+     "regions": [
+      "NG-BE",
+      "NG-KO",
+      "NG-KW",
+      "NG-NA",
+      "NG-NI",
+      "NG-PL",
+      "NG-FC"
+     ]
+    },
+    {
+     "id": "NG:SouthWest",
+     "name": "Південний захід",
+     "en": "South West",
+     "regions": [
+      "NG-EK",
+      "NG-LA",
+      "NG-OG",
+      "NG-ON",
+      "NG-OS",
+      "NG-OY"
+     ]
+    },
+    {
+     "id": "NG:SouthEast",
+     "name": "Південний схід",
+     "en": "South East",
+     "regions": [
+      "NG-AB",
+      "NG-AN",
+      "NG-EB",
+      "NG-EN",
+      "NG-IM"
+     ]
+    },
+    {
+     "id": "NG:SouthSouth",
+     "name": "Південь (дельта)",
+     "en": "South South",
+     "regions": [
+      "NG-AK",
+      "NG-BY",
+      "NG-CR",
+      "NG-DE",
+      "NG-ED",
+      "NG-RI"
+     ]
+    }
+   ]
+  },
+  "TN": {
+   "source": "Tunisia: north / centre (Sahel) / south.",
+   "areas": [
+    {
+     "id": "TN:North",
+     "name": "Північ",
+     "en": "North",
+     "regions": [
+      "TN-11",
+      "TN-13",
+      "TN-14",
+      "TN-21",
+      "TN-22",
+      "TN-23",
+      "TN-31",
+      "TN-32",
+      "TN-33",
+      "TN-34"
+     ]
+    },
+    {
+     "id": "TN:CentreandSahel",
+     "name": "Центр і Сахель",
+     "en": "Centre and Sahel",
+     "regions": [
+      "TN-41",
+      "TN-42",
+      "TN-43",
+      "TN-51",
+      "TN-52",
+      "TN-53",
+      "TN-61"
+     ]
+    },
+    {
+     "id": "TN:South",
+     "name": "Південь",
+     "en": "South",
+     "regions": [
+      "TN-71",
+      "TN-72",
+      "TN-73",
+      "TN-81",
+      "TN-82",
+      "TN-83"
+     ]
+    }
+   ]
+  },
+  "BW": {
+   "source": "Botswana's districts with their towns.",
+   "areas": [
+    {
+     "id": "BW:South-East",
+     "name": "Південний схід (Габороне)",
+     "en": "South-East",
+     "regions": [
+      "BW-SE",
+      "BW-GA",
+      "BW-KL",
+      "BW-KW",
+      "BW-LO",
+      "BW-JW",
+      "BW-SO"
+     ]
+    },
+    {
+     "id": "BW:CentralandNorth-East",
+     "name": "Центр і північний схід",
+     "en": "Central and North-East",
+     "regions": [
+      "BW-CE",
+      "BW-NE",
+      "BW-FR",
+      "BW-SP",
+      "BW-ST"
+     ]
+    },
+    {
+     "id": "BW:WestandNorth",
+     "name": "Калахарі і Окаванго",
+     "en": "West and North",
+     "regions": [
+      "BW-NW",
+      "BW-GH",
+      "BW-KG"
+     ]
+    }
+   ]
+  },
+  "MT": {
+   "source": "Malta and Gozo (with Comino).",
+   "areas": [
+    {
+     "id": "MT:Gozo",
+     "name": "Гозо",
+     "en": "Gozo",
+     "regions": [
+      "MT-10",
+      "MT-13",
+      "MT-14",
+      "MT-16",
+      "MT-22",
+      "MT-36",
+      "MT-37",
+      "MT-42",
+      "MT-45",
+      "MT-50",
+      "MT-52",
+      "MT-61",
+      "MT-62",
+      "MT-65",
+      "MT-66"
+     ]
+    },
+    {
+     "id": "MT:Malta",
+     "name": "Мальта",
+     "en": "Malta",
+     "regions": [
+      "MT-01",
+      "MT-02",
+      "MT-03",
+      "MT-04",
+      "MT-05",
+      "MT-06",
+      "MT-07",
+      "MT-08",
+      "MT-09",
+      "MT-11",
+      "MT-12",
+      "MT-15",
+      "MT-17",
+      "MT-18",
+      "MT-19",
+      "MT-20",
+      "MT-21",
+      "MT-23",
+      "MT-24",
+      "MT-25",
+      "MT-26",
+      "MT-27",
+      "MT-28",
+      "MT-29",
+      "MT-30",
+      "MT-31",
+      "MT-32",
+      "MT-33",
+      "MT-34",
+      "MT-35",
+      "MT-38",
+      "MT-39",
+      "MT-40",
+      "MT-41",
+      "MT-43",
+      "MT-44",
+      "MT-46",
+      "MT-47",
+      "MT-48",
+      "MT-49",
+      "MT-51",
+      "MT-53",
+      "MT-54",
+      "MT-55",
+      "MT-56",
+      "MT-57",
+      "MT-58",
+      "MT-59",
+      "MT-60",
+      "MT-63",
+      "MT-64",
+      "MT-67",
+      "MT-68"
+     ]
+    }
+   ]
+  },
+  "ME": {
+   "source": "Statistical regions of Montenegro (Monstat: Coastal, Central, Northern) over the 21 municipalities of the raster.",
+   "areas": [
+    {
+     "id": "ME:Coastal",
+     "name": "Узбережжя",
+     "en": "Coastal",
+     "regions": [
+      "ME-02",
+      "ME-05",
+      "ME-08",
+      "ME-10",
+      "ME-19",
+      "ME-20"
+     ]
+    },
+    {
+     "id": "ME:Central",
+     "name": "Центр (Подгориця)",
+     "en": "Central",
+     "regions": [
+      "ME-06",
+      "ME-07",
+      "ME-12",
+      "ME-16"
+     ]
+    },
+    {
+     "id": "ME:Northern",
+     "name": "Північ",
+     "en": "Northern",
+     "regions": [
+      "ME-01",
+      "ME-03",
+      "ME-04",
+      "ME-09",
+      "ME-11",
+      "ME-13",
+      "ME-14",
+      "ME-15",
+      "ME-17",
+      "ME-18",
+      "ME-21"
+     ]
+    }
+   ]
+  },
+  "DO": {
+   "source": "Development regions of the Dominican Republic (Decree 710-04) grouped by macro-region: Cibao (Norte, Sur, Nordeste, Noroeste); the south-west (Valdesia, El Valle, Enriquillo); Ozama (Santo Domingo with the Distrito Nacional) apart from the east (Higuamo, Yuma).",
+   "areas": [
+    {
+     "id": "DO:Cibao",
+     "name": "Сібао (північ)",
+     "en": "Cibao",
+     "regions": [
+      "DO-25",
+      "DO-18",
+      "DO-09",
+      "DO-13",
+      "DO-28",
+      "DO-24",
+      "DO-06",
+      "DO-14",
+      "DO-20",
+      "DO-19",
+      "DO-27",
+      "DO-15",
+      "DO-05",
+      "DO-26"
+     ]
+    },
+    {
+     "id": "DO:Southwest",
+     "name": "Південний захід",
+     "en": "Southwest",
+     "regions": [
+      "DO-17",
+      "DO-21",
+      "DO-31",
+      "DO-02",
+      "DO-22",
+      "DO-07",
+      "DO-04",
+      "DO-03",
+      "DO-10",
+      "DO-16"
+     ]
+    },
+    {
+     "id": "DO:SantoDomingo(Ozama)",
+     "name": "Санто-Домінго",
+     "en": "Santo Domingo (Ozama)",
+     "regions": [
+      "DO-01",
+      "DO-32"
+     ]
+    },
+    {
+     "id": "DO:East",
+     "name": "Схід",
+     "en": "East",
+     "regions": [
+      "DO-23",
+      "DO-30",
+      "DO-29",
+      "DO-12",
+      "DO-11",
+      "DO-08"
+     ]
+    }
+   ]
+  },
+  "VE": {
+   "source": "Administrative regions of Venezuela (CORDIPLAN regionalisation: Capital, Central, Centro-Occidental, Zulia, Andes, Llanos, Nor-Oriental, Insular, Guayana). VE-VEN99 is Isla de Aves (Federal Dependencies).",
+   "areas": [
+    {
+     "id": "VE:Capital",
+     "name": "Каракас і столичний",
+     "en": "Capital",
+     "regions": [
+      "VE-A",
+      "VE-M",
+      "VE-X"
+     ]
+    },
+    {
+     "id": "VE:Central",
+     "name": "Центр",
+     "en": "Central",
+     "regions": [
+      "VE-D",
+      "VE-G",
+      "VE-H"
+     ]
+    },
+    {
+     "id": "VE:Centro-Occidental",
+     "name": "Центр-Захід",
+     "en": "Centro-Occidental",
+     "regions": [
+      "VE-I",
+      "VE-K",
+      "VE-P",
+      "VE-U"
+     ]
+    },
+    {
+     "id": "VE:Zulia",
+     "name": "Сулія",
+     "en": "Zulia",
+     "regions": [
+      "VE-V"
+     ]
+    },
+    {
+     "id": "VE:Andes",
+     "name": "Анди",
+     "en": "Andes",
+     "regions": [
+      "VE-E",
+      "VE-L",
+      "VE-S",
+      "VE-T"
+     ]
+    },
+    {
+     "id": "VE:Llanos",
+     "name": "Льянос",
+     "en": "Llanos",
+     "regions": [
+      "VE-C",
+      "VE-J"
+     ]
+    },
+    {
+     "id": "VE:Nor-Oriental",
+     "name": "Північний схід",
+     "en": "Nor-Oriental",
+     "regions": [
+      "VE-B",
+      "VE-N",
+      "VE-R"
+     ]
+    },
+    {
+     "id": "VE:Insular",
+     "name": "Острови",
+     "en": "Insular",
+     "regions": [
+      "VE-O",
+      "VE-W",
+      "VE-VEN99"
+     ]
+    },
+    {
+     "id": "VE:Guayana",
+     "name": "Гвіана",
+     "en": "Guayana",
+     "regions": [
+      "VE-F",
+      "VE-Z",
+      "VE-Y"
+     ]
+    }
+   ]
+  },
+  "SI": {
+   "source": "The 12 statistical regions of Slovenia (Natural Earth admin-1 'region', pre-2015 names: Spodnjeposavska = Posavska, Notranjsko-kraska = Primorsko-notranjska) over the municipalities.",
+   "areas": [
+    {
+     "id": "SI:CentralSlovenia",
+     "name": "Любляна і центр",
+     "en": "Central Slovenia",
+     "regions": [
+      "SI-005",
+      "SI-008",
+      "SI-020",
+      "SI-021",
+      "SI-022",
+      "SI-023",
+      "SI-032",
+      "SI-037",
+      "SI-039",
+      "SI-043",
+      "SI-060",
+      "SI-061",
+      "SI-064",
+      "SI-068",
+      "SI-071",
+      "SI-072",
+      "SI-077",
+      "SI-123",
+      "SI-134",
+      "SI-138",
+      "SI-140",
+      "SI-162",
+      "SI-164",
+      "SI-186",
+      "SI-194"
+     ]
+    },
+    {
+     "id": "SI:UpperCarniola",
+     "name": "Гореньська",
+     "en": "Upper Carniola",
+     "regions": [
+      "SI-003",
+      "SI-004",
+      "SI-012",
+      "SI-027",
+      "SI-041",
+      "SI-052",
+      "SI-053",
+      "SI-082",
+      "SI-095",
+      "SI-102",
+      "SI-117",
+      "SI-122",
+      "SI-131",
+      "SI-146",
+      "SI-147",
+      "SI-163",
+      "SI-192"
+     ]
+    },
+    {
+     "id": "SI:Gorizia",
+     "name": "Горишка",
+     "en": "Gorizia",
+     "regions": [
+      "SI-001",
+      "SI-006",
+      "SI-007",
+      "SI-014",
+      "SI-036",
+      "SI-044",
+      "SI-046",
+      "SI-075",
+      "SI-084",
+      "SI-128",
+      "SI-136",
+      "SI-183"
+     ]
+    },
+    {
+     "id": "SI:Coastal-Karst",
+     "name": "Узбережжя і Карст",
+     "en": "Coastal-Karst",
+     "regions": [
+      "SI-019",
+      "SI-035",
+      "SI-040",
+      "SI-049",
+      "SI-050",
+      "SI-090",
+      "SI-111"
+     ]
+    },
+    {
+     "id": "SI:InnerCarniola",
+     "name": "Нотраньська",
+     "en": "Inner Carniola",
+     "regions": [
+      "SI-013",
+      "SI-038",
+      "SI-065",
+      "SI-091",
+      "SI-094",
+      "SI-150"
+     ]
+    },
+    {
+     "id": "SI:SoutheastSlovenia",
+     "name": "Південно-Східна Словенія",
+     "en": "Southeast Slovenia",
+     "regions": [
+      "SI-017",
+      "SI-048",
+      "SI-066",
+      "SI-073",
+      "SI-085",
+      "SI-104",
+      "SI-109",
+      "SI-119",
+      "SI-121",
+      "SI-130",
+      "SI-157",
+      "SI-165",
+      "SI-170",
+      "SI-179",
+      "SI-193"
+     ]
+    },
+    {
+     "id": "SI:LowerSava",
+     "name": "Посавська",
+     "en": "Lower Sava",
+     "regions": [
+      "SI-009",
+      "SI-054",
+      "SI-110"
+     ]
+    },
+    {
+     "id": "SI:CentralSava",
+     "name": "Засавська",
+     "en": "Central Sava",
+     "regions": [
+      "SI-034",
+      "SI-05",
+      "SI-129"
+     ]
+    },
+    {
+     "id": "SI:Savinja",
+     "name": "Савинська (Целє)",
+     "en": "Savinja",
+     "regions": [
+      "SI-011",
+      "SI-030",
+      "SI-051",
+      "SI-057",
+      "SI-062",
+      "SI-067",
+      "SI-079",
+      "SI-083",
+      "SI-092",
+      "SI-099",
+      "SI-106",
+      "SI-107",
+      "SI-114",
+      "SI-120",
+      "SI-124",
+      "SI-125",
+      "SI-126",
+      "SI-127",
+      "SI-133",
+      "SI-137",
+      "SI-139",
+      "SI-144",
+      "SI-149",
+      "SI-151",
+      "SI-154",
+      "SI-155",
+      "SI-173",
+      "SI-174",
+      "SI-180",
+      "SI-184",
+      "SI-189",
+      "SI-190"
+     ]
+    },
+    {
+     "id": "SI:Carinthia",
+     "name": "Корошка",
+     "en": "Carinthia",
+     "regions": [
+      "SI-016",
+      "SI-025",
+      "SI-074",
+      "SI-076",
+      "SI-081",
+      "SI-093",
+      "SI-101",
+      "SI-103",
+      "SI-112",
+      "SI-141",
+      "SI-175",
+      "SI-177"
+     ]
+    },
+    {
+     "id": "SI:Drava",
+     "name": "Подравська (Марибор)",
+     "en": "Drava",
+     "regions": [
+      "SI-018",
+      "SI-024",
+      "SI-026",
+      "SI-028",
+      "SI-042",
+      "SI-045",
+      "SI-055",
+      "SI-058",
+      "SI-069",
+      "SI-070",
+      "SI-089",
+      "SI-096",
+      "SI-098",
+      "SI-108",
+      "SI-113",
+      "SI-115",
+      "SI-118",
+      "SI-135",
+      "SI-143",
+      "SI-148",
+      "SI-153",
+      "SI-159",
+      "SI-160",
+      "SI-167",
+      "SI-168",
+      "SI-169",
+      "SI-171",
+      "SI-172",
+      "SI-178",
+      "SI-181",
+      "SI-182",
+      "SI-185",
+      "SI-191"
+     ]
+    },
+    {
+     "id": "SI:Mura",
+     "name": "Помур'я",
+     "en": "Mura",
+     "regions": [
+      "SI-002",
+      "SI-015",
+      "SI-029",
+      "SI-031",
+      "SI-033",
+      "SI-047",
+      "SI-056",
+      "SI-059",
+      "SI-063",
+      "SI-078",
+      "SI-080",
+      "SI-086",
+      "SI-087",
+      "SI-097",
+      "SI-100",
+      "SI-105",
+      "SI-116",
+      "SI-132",
+      "SI-152",
+      "SI-156",
+      "SI-158",
+      "SI-161",
+      "SI-166",
+      "SI-176",
+      "SI-187",
+      "SI-188",
+      "SI-195"
+     ]
+    }
+   ]
+  },
+  "LV": {
+   "source": "The five planning regions of Latvia (Natural Earth admin-1 'region') over the 2009-2021 municipalities and republican cities.",
+   "areas": [
+    {
+     "id": "LV:Rigaregion",
+     "name": "Рига і околиці",
+     "en": "Riga region",
+     "regions": [
+      "LV-005",
+      "LV-011",
+      "LV-012",
+      "LV-013",
+      "LV-020",
+      "LV-029",
+      "LV-031",
+      "LV-035",
+      "LV-037",
+      "LV-040",
+      "LV-043",
+      "LV-048",
+      "LV-051",
+      "LV-052",
+      "LV-053",
+      "LV-054",
+      "LV-061",
+      "LV-062",
+      "LV-067",
+      "LV-068",
+      "LV-080",
+      "LV-085",
+      "LV-087",
+      "LV-089",
+      "LV-090",
+      "LV-091",
+      "LV-095",
+      "LV-099",
+      "LV-JUR",
+      "LV-RIX"
+     ]
+    },
+    {
+     "id": "LV:Vidzeme",
+     "name": "Відземе",
+     "en": "Vidzeme",
+     "regions": [
+      "LV-007",
+      "LV-008",
+      "LV-009",
+      "LV-017",
+      "LV-019",
+      "LV-021",
+      "LV-022",
+      "LV-030",
+      "LV-033",
+      "LV-039",
+      "LV-045",
+      "LV-055",
+      "LV-057",
+      "LV-059",
+      "LV-060",
+      "LV-064",
+      "LV-070",
+      "LV-075",
+      "LV-076",
+      "LV-084",
+      "LV-094",
+      "LV-096",
+      "LV-101",
+      "LV-102",
+      "LV-104",
+      "LV-VMR"
+     ]
+    },
+    {
+     "id": "LV:Kurzeme",
+     "name": "Курземе",
+     "en": "Kurzeme",
+     "regions": [
+      "LV-003",
+      "LV-006",
+      "LV-018",
+      "LV-027",
+      "LV-028",
+      "LV-032",
+      "LV-050",
+      "LV-063",
+      "LV-066",
+      "LV-071",
+      "LV-074",
+      "LV-079",
+      "LV-081",
+      "LV-088",
+      "LV-093",
+      "LV-097",
+      "LV-100",
+      "LV-LPX",
+      "LV-VEN"
+     ]
+    },
+    {
+     "id": "LV:Zemgale",
+     "name": "Земгале",
+     "en": "Zemgale",
+     "regions": [
+      "LV-002",
+      "LV-004",
+      "LV-010",
+      "LV-016",
+      "LV-026",
+      "LV-034",
+      "LV-038",
+      "LV-046",
+      "LV-049",
+      "LV-065",
+      "LV-069",
+      "LV-072",
+      "LV-083",
+      "LV-086",
+      "LV-092",
+      "LV-098",
+      "LV-105",
+      "LV-107",
+      "LV-JEL",
+      "LV-JKB"
+     ]
+    },
+    {
+     "id": "LV:Latgale",
+     "name": "Латгале",
+     "en": "Latgale",
+     "regions": [
+      "LV-001",
+      "LV-014",
+      "LV-015",
+      "LV-023",
+      "LV-024",
+      "LV-036",
+      "LV-044",
+      "LV-047",
+      "LV-056",
+      "LV-058",
+      "LV-073",
+      "LV-078",
+      "LV-082",
+      "LV-103",
+      "LV-108",
+      "LV-109",
+      "LV-110",
+      "LV-DGV",
+      "LV-REZ"
+     ]
+    }
+   ]
+  },
+  "MK": {
+   "source": "The eight statistical regions of North Macedonia (Natural Earth admin-1 'region'; 'Greater Skopje' and 'Skopje' together are the Skopje region; units without the attribute assigned from the State Statistical Office list).",
+   "areas": [
+    {
+     "id": "MK:Skopje",
+     "name": "Скоп'є",
+     "en": "Skopje",
+     "regions": [
+      "MK-01",
+      "MK-02",
+      "MK-09",
+      "MK-17",
+      "MK-29",
+      "MK-32",
+      "MK-34",
+      "MK-38",
+      "MK-39",
+      "MK-48",
+      "MK-68",
+      "MK-70",
+      "MK-74",
+      "MK-77",
+      "MK-79",
+      "MK-82",
+      "MK-84",
+      "MK-85"
+     ]
+    },
+    {
+     "id": "MK:Polog",
+     "name": "Полог",
+     "en": "Polog",
+     "regions": [
+      "MK-06",
+      "MK-08",
+      "MK-16",
+      "MK-19",
+      "MK-30",
+      "MK-35",
+      "MK-50",
+      "MK-52",
+      "MK-75",
+      "MK-76"
+     ]
+    },
+    {
+     "id": "MK:Southwestern",
+     "name": "Південний захід",
+     "en": "Southwestern",
+     "regions": [
+      "MK-12",
+      "MK-15",
+      "MK-21",
+      "MK-22",
+      "MK-25",
+      "MK-28",
+      "MK-31",
+      "MK-40",
+      "MK-57",
+      "MK-58",
+      "MK-61",
+      "MK-66",
+      "MK-72",
+      "MK-78"
+     ]
+    },
+    {
+     "id": "MK:Pelagonia",
+     "name": "Пелагонія",
+     "en": "Pelagonia",
+     "regions": [
+      "MK-04",
+      "MK-27",
+      "MK-45",
+      "MK-46",
+      "MK-53",
+      "MK-55",
+      "MK-62"
+     ]
+    },
+    {
+     "id": "MK:Vardar",
+     "name": "Вардар",
+     "en": "Vardar",
+     "regions": [
+      "MK-13",
+      "MK-20",
+      "MK-36",
+      "MK-49",
+      "MK-54",
+      "MK-67",
+      "MK-80"
+     ]
+    },
+    {
+     "id": "MK:Southeastern",
+     "name": "Південний схід",
+     "en": "Southeastern",
+     "regions": [
+      "MK-03",
+      "MK-05",
+      "MK-07",
+      "MK-10",
+      "MK-11",
+      "MK-18",
+      "MK-24",
+      "MK-26",
+      "MK-41",
+      "MK-56",
+      "MK-73"
+     ]
+    },
+    {
+     "id": "MK:Eastern",
+     "name": "Схід",
+     "en": "Eastern",
+     "regions": [
+      "MK-14",
+      "MK-23",
+      "MK-33",
+      "MK-37",
+      "MK-42",
+      "MK-51",
+      "MK-60",
+      "MK-64",
+      "MK-81",
+      "MK-83"
+     ]
+    },
+    {
+     "id": "MK:Northeastern",
+     "name": "Північний схід",
+     "en": "Northeastern",
+     "regions": [
+      "MK-43",
+      "MK-44",
+      "MK-47",
+      "MK-63",
+      "MK-65",
+      "MK-69",
+      "MK-71"
+     ]
+    }
+   ]
+  },
+  "UG": {
+   "source": "The four regions of Uganda (Natural Earth admin-1 'region') over the districts.",
+   "areas": [
+    {
+     "id": "UG:Central",
+     "name": "Центр (Кампала)",
+     "en": "Central",
+     "regions": [
+      "UG-101",
+      "UG-102",
+      "UG-103",
+      "UG-104",
+      "UG-105",
+      "UG-106",
+      "UG-107",
+      "UG-108",
+      "UG-109",
+      "UG-110",
+      "UG-111",
+      "UG-112",
+      "UG-113",
+      "UG-114",
+      "UG-115",
+      "UG-116",
+      "UG-117",
+      "UG-118",
+      "UG-119",
+      "UG-120",
+      "UG-121",
+      "UG-122",
+      "UG-123",
+      "UG-124"
+     ]
+    },
+    {
+     "id": "UG:Eastern",
+     "name": "Схід",
+     "en": "Eastern",
+     "regions": [
+      "UG-201",
+      "UG-202",
+      "UG-203",
+      "UG-204",
+      "UG-205",
+      "UG-206",
+      "UG-207",
+      "UG-208",
+      "UG-209",
+      "UG-210",
+      "UG-211",
+      "UG-212",
+      "UG-213",
+      "UG-214",
+      "UG-215",
+      "UG-216",
+      "UG-217",
+      "UG-218",
+      "UG-219",
+      "UG-220",
+      "UG-221",
+      "UG-222",
+      "UG-223",
+      "UG-224",
+      "UG-225",
+      "UG-226",
+      "UG-227",
+      "UG-228",
+      "UG-229",
+      "UG-230",
+      "UG-231",
+      "UG-232"
+     ]
+    },
+    {
+     "id": "UG:Northern",
+     "name": "Північ",
+     "en": "Northern",
+     "regions": [
+      "UG-301",
+      "UG-302",
+      "UG-303",
+      "UG-304",
+      "UG-305",
+      "UG-306",
+      "UG-307",
+      "UG-308",
+      "UG-309",
+      "UG-310",
+      "UG-311",
+      "UG-312",
+      "UG-313",
+      "UG-314",
+      "UG-315",
+      "UG-316",
+      "UG-317",
+      "UG-318",
+      "UG-319",
+      "UG-320",
+      "UG-321",
+      "UG-322",
+      "UG-323",
+      "UG-324",
+      "UG-326",
+      "UG-327",
+      "UG-328",
+      "UG-329",
+      "UG-330",
+      "UG-331"
+     ]
+    },
+    {
+     "id": "UG:Western",
+     "name": "Захід",
+     "en": "Western",
+     "regions": [
+      "UG-325",
+      "UG-401",
+      "UG-402",
+      "UG-403",
+      "UG-404",
+      "UG-405",
+      "UG-406",
+      "UG-407",
+      "UG-408",
+      "UG-409",
+      "UG-410",
+      "UG-411",
+      "UG-412",
+      "UG-413",
+      "UG-414",
+      "UG-415",
+      "UG-416",
+      "UG-417",
+      "UG-419",
+      "UG-420",
+      "UG-421",
+      "UG-422",
+      "UG-423",
+      "UG-424",
+      "UG-425"
+     ]
+    }
+   ]
+  },
+  "BT": {
+   "source": "Western / Central / Eastern / Southern Bhutan (Natural Earth admin-1 'region') over the 20 dzongkhags.",
+   "areas": [
+    {
+     "id": "BT:Western",
+     "name": "Захід (Тхімпху)",
+     "en": "Western",
+     "regions": [
+      "BT-11",
+      "BT-12",
+      "BT-13",
+      "BT-14",
+      "BT-15"
+     ]
+    },
+    {
+     "id": "BT:Central",
+     "name": "Центр",
+     "en": "Central",
+     "regions": [
+      "BT-21",
+      "BT-22",
+      "BT-23",
+      "BT-24",
+      "BT-31",
+      "BT-GA"
+     ]
+    },
+    {
+     "id": "BT:Eastern",
+     "name": "Схід",
+     "en": "Eastern",
+     "regions": [
+      "BT-41",
+      "BT-42",
+      "BT-43",
+      "BT-44",
+      "BT-45",
+      "BT-TY"
+     ]
+    },
+    {
+     "id": "BT:Southern",
+     "name": "Південь",
+     "en": "Southern",
+     "regions": [
+      "BT-32",
+      "BT-33",
+      "BT-34"
+     ]
+    }
+   ]
+  },
+  "HK": {
+   "source": "Hong Kong Island, Kowloon and the New Territories (Natural Earth admin-1 'region') over the 18 districts.",
+   "areas": [
+    {
+     "id": "HK:HongKongIsland",
+     "name": "Острів Гонконг",
+     "en": "Hong Kong Island",
+     "regions": [
+      "HK-KG5153",
+      "HK-KG5154",
+      "HK-KG5155",
+      "HK-KG5156"
+     ]
+    },
+    {
+     "id": "HK:Kowloon",
+     "name": "Коулун",
+     "en": "Kowloon",
+     "regions": [
+      "HK-KG5157",
+      "HK-KG5158",
+      "HK-KG5159",
+      "HK-KG5160",
+      "HK-KG5161"
+     ]
+    },
+    {
+     "id": "HK:NewTerritories",
+     "name": "Нові Території",
+     "en": "New Territories",
+     "regions": [
+      "HK-KG5162",
+      "HK-KG5163",
+      "HK-KG5164",
+      "HK-KG5165",
+      "HK-KG5166",
+      "HK-KG5167",
+      "HK-KG5168",
+      "HK-KG5169",
+      "HK-KG5170"
+     ]
+    }
+   ]
+  },
+  "XK": {
+   "source": "The seven districts of Kosovo (Natural Earth admin-1 'region') over the municipalities.",
+   "areas": [
+    {
+     "id": "XK:Pristina",
+     "name": "Приштина",
+     "en": "Pristina",
+     "regions": [
+      "XK-OS5898",
+      "XK-OS5899",
+      "XK-OS5900",
+      "XK-OS5901",
+      "XK-OS5902",
+      "XK-OS5903",
+      "XK-OS5906"
+     ]
+    },
+    {
+     "id": "XK:Mitrovica",
+     "name": "Митровиця",
+     "en": "Mitrovica",
+     "regions": [
+      "XK-OS5892",
+      "XK-OS5893",
+      "XK-OS5894",
+      "XK-OS5895",
+      "XK-OS5896",
+      "XK-OS5897"
+     ]
+    },
+    {
+     "id": "XK:Peja(Pec)",
+     "name": "Печ (Пея)",
+     "en": "Peja (Pec)",
+     "regions": [
+      "XK-OS5886",
+      "XK-OS5887",
+      "XK-OS5888"
+     ]
+    },
+    {
+     "id": "XK:Gjakova(Dakovica)",
+     "name": "Джяковиця (Гякова)",
+     "en": "Gjakova (Dakovica)",
+     "regions": [
+      "XK-OS5889",
+      "XK-OS5890",
+      "XK-OS5891"
+     ]
+    },
+    {
+     "id": "XK:Prizren",
+     "name": "Призрен",
+     "en": "Prizren",
+     "regions": [
+      "XK-OS5908",
+      "XK-OS5909",
+      "XK-OS5910",
+      "XK-OS5911"
+     ]
+    },
+    {
+     "id": "XK:Ferizaj(Urosevac)",
+     "name": "Урошевац (Феризай)",
+     "en": "Ferizaj (Urosevac)",
+     "regions": [
+      "XK-OS5912",
+      "XK-OS5913",
+      "XK-OS5914",
+      "XK-OS5915"
+     ]
+    },
+    {
+     "id": "XK:Gjilan(Gnjilane)",
+     "name": "Гнилане (Гїлан)",
+     "en": "Gjilan (Gnjilane)",
+     "regions": [
+      "XK-OS5904",
+      "XK-OS5905",
+      "XK-OS5907"
+     ]
+    }
+   ]
+  },
+  "CN": {
+   "source": "The traditional six regions of China (Natural Earth admin-1 'region'; Fujian with East China, the Paracel Islands with South Central China as administered from Hainan).",
+   "areas": [
+    {
+     "id": "CN:NorthChina",
+     "name": "Північний Китай",
+     "en": "North China",
+     "regions": [
+      "CN-BJ",
+      "CN-HE",
+      "CN-NM",
+      "CN-SX",
+      "CN-TJ"
+     ]
+    },
+    {
+     "id": "CN:NortheastChina",
+     "name": "Північний схід",
+     "en": "Northeast China",
+     "regions": [
+      "CN-HL",
+      "CN-JL",
+      "CN-LN"
+     ]
+    },
+    {
+     "id": "CN:EastChina",
+     "name": "Східний Китай",
+     "en": "East China",
+     "regions": [
+      "CN-AH",
+      "CN-FJ",
+      "CN-JS",
+      "CN-JX",
+      "CN-SD",
+      "CN-SH",
+      "CN-ZJ"
+     ]
+    },
+    {
+     "id": "CN:SouthCentralChina",
+     "name": "Центр і південь",
+     "en": "South Central China",
+     "regions": [
+      "CN-GD",
+      "CN-GX",
+      "CN-HA",
+      "CN-HB",
+      "CN-HI",
+      "CN-HN",
+      "CN-PFA00"
+     ]
+    },
+    {
+     "id": "CN:SouthwestChina",
+     "name": "Південний захід",
+     "en": "Southwest China",
+     "regions": [
+      "CN-CQ",
+      "CN-GZ",
+      "CN-SC",
+      "CN-XZ",
+      "CN-YN"
+     ]
+    },
+    {
+     "id": "CN:NorthwestChina",
+     "name": "Північний захід",
+     "en": "Northwest China",
+     "regions": [
+      "CN-GS",
+      "CN-NX",
+      "CN-QH",
+      "CN-SN",
+      "CN-XJ"
+     ]
+    }
+   ]
+  }
+ },
+ "region_names": {
+  "US-DC": "District of Columbia",
+  "BR-DF": "Distrito Federal",
+  "RU-MOS": "Moscow Oblast",
+  "RU-MOW": "Moscow",
+  "RU-YEV": "Jewish Autonomous Oblast",
+  "RU-ALT": "Altai Krai",
+  "RU-RUS99": "Russia (other)",
+  "MX-DIF": "Mexico City",
+  "MX-MEX99": "Mexico (other)",
+  "AR-C": "Ciudad de Buenos Aires",
+  "CO-CUN": "Cundinamarca",
+  "CO-COL99": "Colombia (other)",
+  "IN-KAS00": "Kashmir (disputed)",
+  "KH-5": "Kampong Speu",
+  "KH-12": "Phnom Penh",
+  "UA-30": "Kyiv City",
+  "UA-32": "Kyiv Oblast",
+  "HR-21": "City of Zagreb",
+  "HR-01": "Zagreb County",
+  "TW-HSZ": "Hsinchu City",
+  "TW-HSQ": "Hsinchu County",
+  "TW-CYI": "Chiayi City",
+  "TW-CYQ": "Chiayi County",
+  "IT-GE": "Genoa",
+  "IT-BZ": "South Tyrol",
+  "IT-TN": "Trentino",
+  "GB-WRL": "Wirral",
+  "GB-SHN": "St Helens",
+  "GB-LND": "City of London",
+  "PH-MNL": "Metro Manila",
+  "PH-ZMB": "Zambales",
+  "PH-LAN": "Lanao del Norte",
+  "BG-22": "Sofia City",
+  "BG-23": "Sofia Province",
+  "VN-39": "Đồng Nai",
+  "VN-53": "Bắc Kạn",
+  "VN-66": "Hưng Yên",
+  "CZ-PL": "Plzeň",
+  "HU-VM": "Veszprém (city)",
+  "KE-110": "Nairobi",
+  "PE-CUS": "Cusco",
+  "NP-KO": "Kosi Zone",
+  "AE-ARE344": "Fujairah (other)",
+  "AE-ARE347": "Sayh Mudayrah",
+  "DK-84": "Capital Region",
+  "VE-VEN99": "Isla de Aves",
+  "RU-AL": "Altai Republic",
+  "UZ-TK": "Tashkent (city)",
+  "UZ-TO": "Tashkent Region",
+  "AZ-LA": "Lankaran (city)",
+  "BY-MI": "Minsk Region",
+  "HK-KG5155": "Eastern District",
+  "XK-OS5902": "Priština",
+  "XK-OS5907": "Kosovska Kamenica",
+  "XK-OS5908": "Prizren",
+  "LV-084": "Rujienas novads",
+  "LV-060": "Mazsalacas novads",
+  "LV-064": "Nauksenu novads",
+  "LV-009": "Apes novads",
+  "GY-ES": "Essequibo Islands-West Demerara",
+  "TT-ETO": "Eastern Tobago",
+  "TT-WTO": "Western Tobago",
+  "BM-HA": "City of Hamilton",
+  "SC-13": "Grand'Anse",
+  "YE-SN": "Sana'a",
+  "LV-094": "Smiltenes novads",
+  "LV-096": "Strencu novads",
+  "LV-017": "Beverinas novads",
+  "LV-019": "Burtnieku novads",
+  "LV-045": "Kocenu novads",
+  "LV-104": "Vecpiebalgas novads",
+  "LV-076": "Raunas novads",
+  "LV-075": "Priekulu novads",
+  "LV-070": "Pargaujas novads",
+  "LV-039": "Jaunpiebalgas novads",
+  "LV-057": "Lubanas novads",
+  "LV-102": "Varaklanu novads",
+  "LV-008": "Amatas novads",
+  "LV-030": "Erglu novads",
+  "LV-021": "Cesvaines novads",
+  "YE-SA": "Amanat Al Asimah",
+  "BY-HM": "City of Minsk",
+  "LV-055": "Ligatnes novads"
+ },
+ "unit_points": {
+  "AI-IA5114": [
+   18.1889,
+   -63.0943
+  ],
+  "AI-IA5116": [
+   18.2089,
+   -63.066
+  ],
+  "AI-IA5118": [
+   18.2243,
+   -63.074
+  ],
+  "AI-IA5121": [
+   18.2301,
+   -63.0151
+  ],
+  "AI-IA5123": [
+   18.2387,
+   -63.0368
+  ],
+  "AI-IA5126": [
+   18.2321,
+   -63.052
+  ],
+  "BB-02": [
+   13.2551,
+   -59.5759
+  ],
+  "BB-03": [
+   13.1489,
+   -59.5479
+  ],
+  "BB-04": [
+   13.192,
+   -59.6259
+  ],
+  "BM-DEV": [
+   32.3033,
+   -64.7566
+  ],
+  "BM-HA": [
+   32.2938,
+   -64.7884
+  ],
+  "BM-SMI": [
+   32.3141,
+   -64.7319
+  ],
+  "BM-WAR": [
+   32.2658,
+   -64.8042
+  ],
+  "GB-HMF": [
+   51.4894,
+   -0.2079
+  ],
+  "GB-RIC": [
+   51.4072,
+   -0.2985
+  ],
+  "GB-WND": [
+   51.4523,
+   -0.1842
+  ],
+  "GB-WSM": [
+   51.5115,
+   -0.1617
+  ],
+  "HK-KG5154": [
+   22.2699,
+   114.178
+  ],
+  "HK-KG5158": [
+   22.3268,
+   114.19
+  ],
+  "KN-06": [
+   17.382,
+   -62.7967
+  ],
+  "KN-07": [
+   17.1162,
+   -62.5949
+  ],
+  "KN-13": [
+   17.3279,
+   -62.7943
+  ],
+  "LC-05": [
+   13.9425,
+   -60.9052
+  ],
+  "LI-02": [
+   47.2058,
+   9.5338
+  ],
+  "LI-09": [
+   47.1001,
+   9.5266
+  ],
+  "MK-17": [
+   42.0259,
+   21.5136
+  ],
+  "MK-77": [
+   41.9752,
+   21.4226
+  ],
+  "MT-01": [
+   35.8878,
+   14.4318
+  ],
+  "MT-03": [
+   35.8871,
+   14.526
+  ],
+  "MT-04": [
+   35.8934,
+   14.4662
+  ],
+  "MT-05": [
+   35.8281,
+   14.5236
+  ],
+  "MT-06": [
+   35.88,
+   14.5207
+  ],
+  "MT-08": [
+   35.8694,
+   14.5196
+  ],
+  "MT-09": [
+   35.888,
+   14.503
+  ],
+  "MT-15": [
+   35.9188,
+   14.4553
+  ],
+  "MT-16": [
+   36.0625,
+   14.2247
+  ],
+  "MT-17": [
+   35.8418,
+   14.515
+  ],
+  "MT-18": [
+   35.8818,
+   14.4868
+  ],
+  "MT-19": [
+   35.9054,
+   14.4549
+  ],
+  "MT-20": [
+   35.8864,
+   14.5149
+  ],
+  "MT-21": [
+   35.8871,
+   14.5351
+  ],
+  "MT-22": [
+   36.0361,
+   14.2145
+  ],
+  "MT-24": [
+   35.8992,
+   14.4412
+  ],
+  "MT-25": [
+   35.8563,
+   14.4831
+  ],
+  "MT-26": [
+   35.8716,
+   14.4926
+  ],
+  "MT-27": [
+   35.8544,
+   14.5538
+  ],
+  "MT-33": [
+   35.8426,
+   14.4666
+  ],
+  "MT-34": [
+   35.8949,
+   14.4825
+  ],
+  "MT-36": [
+   36.0251,
+   14.2276
+  ],
+  "MT-39": [
+   35.8727,
+   14.505
+  ],
+  "MT-40": [
+   35.9279,
+   14.4756
+  ],
+  "MT-42": [
+   36.0332,
+   14.3163
+  ],
+  "MT-43": [
+   35.8753,
+   14.4684
+  ],
+  "MT-45": [
+   36.0407,
+   14.2444
+  ],
+  "MT-46": [
+   35.8833,
+   14.3774
+  ],
+  "MT-47": [
+   35.8323,
+   14.4902
+  ],
+  "MT-48": [
+   35.9126,
+   14.4897
+  ],
+  "MT-49": [
+   35.905,
+   14.4756
+  ],
+  "MT-52": [
+   36.0201,
+   14.2514
+  ],
+  "MT-53": [
+   35.8531,
+   14.5028
+  ],
+  "MT-54": [
+   35.8865,
+   14.4781
+  ],
+  "MT-55": [
+   35.8474,
+   14.4252
+  ],
+  "MT-56": [
+   35.9083,
+   14.4992
+  ],
+  "MT-57": [
+   35.917,
+   14.4698
+  ],
+  "MT-59": [
+   35.8616,
+   14.5088
+  ],
+  "MT-60": [
+   35.8948,
+   14.511
+  ],
+  "MT-61": [
+   36.0506,
+   14.272
+  ],
+  "MT-62": [
+   36.03,
+   14.2656
+  ],
+  "MT-64": [
+   35.8718,
+   14.5397
+  ],
+  "MT-66": [
+   35.8713,
+   14.4365
+  ],
+  "MT-67": [
+   35.8539,
+   14.5324
+  ],
+  "MT-68": [
+   35.823,
+   14.4822
+  ],
+  "MU-VP": [
+   -20.3024,
+   57.4908
+  ],
+  "NR-01": [
+   -0.5298,
+   166.913
+  ],
+  "NR-04": [
+   -0.52,
+   166.947
+  ],
+  "NR-05": [
+   -0.5007,
+   166.925
+  ],
+  "NR-07": [
+   -0.5279,
+   166.925
+  ],
+  "NR-08": [
+   -0.5203,
+   166.914
+  ],
+  "NR-09": [
+   -0.5021,
+   166.934
+  ],
+  "NR-11": [
+   -0.5396,
+   166.939
+  ],
+  "NR-12": [
+   -0.513,
+   166.921
+  ],
+  "NR-13": [
+   -0.507,
+   166.924
+  ],
+  "PW-227": [
+   7.5379,
+   134.575
+  ],
+  "SC-01": [
+   -4.683,
+   55.5208
+  ],
+  "SC-02": [
+   -4.7136,
+   55.4923
+  ],
+  "SC-03": [
+   -4.5879,
+   55.4543
+  ],
+  "SC-04": [
+   -4.7036,
+   55.5138
+  ],
+  "SC-09": [
+   -4.632,
+   55.4483
+  ],
+  "SC-11": [
+   -4.667,
+   55.4988
+  ],
+  "SC-12": [
+   -4.5694,
+   55.4433
+  ],
+  "SC-13": [
+   -4.6865,
+   55.4738
+  ],
+  "SC-16": [
+   -4.6075,
+   55.4533
+  ],
+  "SC-19": [
+   -4.6545,
+   55.4693
+  ],
+  "SC-22": [
+   -4.6225,
+   55.4388
+  ],
+  "SC-25": [
+   -4.6495,
+   55.4828
+  ],
+  "SI-015": [
+   46.5592,
+   16.2936
+  ],
+  "SI-018": [
+   46.4767,
+   15.8853
+  ],
+  "SI-042": [
+   46.4841,
+   15.9822
+  ],
+  "SI-045": [
+   46.3982,
+   15.7544
+  ],
+  "SI-070": [
+   46.556,
+   15.6414
+  ],
+  "SI-079": [
+   46.3593,
+   14.9377
+  ],
+  "SI-096": [
+   46.4273,
+   15.8673
+  ],
+  "SI-116": [
+   46.5629,
+   16.0294
+  ],
+  "SI-135": [
+   46.3704,
+   15.8973
+  ],
+  "SI-151": [
+   46.2889,
+   15.0327
+  ],
+  "SI-175": [
+   46.5675,
+   14.8823
+  ],
+  "SM-04": [
+   43.9312,
+   12.4761
+  ],
+  "SM-06": [
+   43.9337,
+   12.4389
+  ],
+  "SM-07": [
+   43.9215,
+   12.4243
+  ],
+  "SM-09": [
+   43.9676,
+   12.4721
+  ]
+ }
+}

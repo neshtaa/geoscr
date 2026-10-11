@@ -4,9 +4,17 @@ Fit, calibrate and evaluate the admin-1 region model (engine/regions.py).
 
   python3 tools/eval_regions.py --cv [--grid]   5-fold out-of-fold check on the ranked-duel train panoramas
                                                 (structural parameters: K, tau, geo shrinkage, own rotation)
-  python3 tools/eval_regions.py [--save]        fit on train, calibrate the exponents / prior / smoothing on
-                                                CALIB, report CALIB and TEST -> data/model/regions.npz,
-                                                data/model/eval_regions.json
+  python3 tools/eval_regions.py [--save]        fit on train (region prior: pool_counts of all ranked-duel rounds
+                                                not within 1 km of a held-out round), calibrate the exponents /
+                                                prior / smoothing on CALIB (full panoramas), the "views" set on the
+                                                CALIB rounds rendered into the live grid (tools/live_features.py),
+                                                report CALIB and TEST (incl. the player view below) ->
+                                                data/model/regions.npz, regions_params.json, eval_regions.json
+  python3 tools/eval_regions.py --player [--test] [--save]
+                                                saved model, the region output as the player sees it (live grid,
+                                                views parameters, given the true country): admin-1 region and
+                                                engine/areas.py area top-k, the best guess inside the true country
+                                                (km, points) -> eval_regions.json "player"
   python3 tools/eval_regions.py --eval-only     saved model: CALIB / TEST report
   python3 tools/eval_regions.py --live          saved model on CALIB under live capture (10 rendered views, car axis
                                                 unknown, as tools/eval_live.py; features cached in
@@ -23,6 +31,13 @@ Fit, calibrate and evaluate the admin-1 region model (engine/regions.py).
                                                 on --n main train panoramas and record the hash pair as equivalent if
                                                 the cached features are reproduced (scratch/regions/extra/features/
                                                 compat.json); load_extra drops all extras on an unverified mismatch
+  --freeze-pool                                 region prior from the pool recorded in eval_regions.json (the excluded
+                                                duel rounds and World-map round ids of that fit): the documented
+                                                rebuild gives the same prior while new games are being recorded
+  --pool-world-weight W                         also count the world_calib World-map rounds (tools/world_play.py) x W
+                                                in the region prior (default 0: world_calib stays fully held out;
+                                                with W > 0 it feeds the region prior, so a world_calib check of
+                                                region-dependent outputs is partly in-sample)
   --no-extra                                    fit without the extra references
   --refresh-cards                               rebuild the regional card snapshot (scratch/regions/card_sets.json)
                                                 from data/calibration/pano_clues.json
@@ -61,7 +76,6 @@ from engine.regions import (DEFAULT_PARAMS, REGIONS_FILE, RegionModel, location_
                             region_posterior, sun_mixture)
 
 FLOOR = 1e-4
-AREA_MIN_REFS = 25
 TOP_COUNTRIES = ["US", "BR", "RU", "CA", "AU", "ID", "MX", "IN", "ZA", "AR", "JP", "ES", "TR", "CL"]
 EXTRA_DIR = os.path.join(ROOT, "scratch", "regions", "extra")
 EXTRA_RATIO, EXTRA_CAP, EXTRA_MIN_EFF = 0.7, 500, 4.0  # extra refs per duel ref, cap per country, min eff. regions
@@ -196,8 +210,10 @@ def cross_fold_twins(D, km=FOLD_KM):
 def load_data(groups, extra=True):
     recs = load_records()
     mats, have = {}, np.ones(len(recs), bool)
-    for g in groups:
-        mats[g], h = group_matrix(g, recs)
+    for g in groups:  # float32 (the region model computes in float64 blocks): ~0.25 GB for 86k panoramas
+        m, h = group_matrix(g, recs)
+        mats[g] = m.astype(np.float32)
+        del m
         have &= h
     rows = np.flatnonzero(have)
     mats = {g: m[rows] for g, m in mats.items()}
@@ -206,7 +222,8 @@ def load_data(groups, extra=True):
     xr, xm, used = load_extra(groups) if extra else ([], {}, {})
     if xr:
         recs = recs + xr
-        mats = {g: np.concatenate([m, xm[g]]) for g, m in mats.items()}
+        mats = {g: np.concatenate([m, xm[g].astype(np.float32)]) for g, m in mats.items()}
+        del xm
     lat = np.array([r["lat"] for r in recs])
     lng = np.array([r["lng"] for r in recs])
     split = np.array([split_of(r) for r in recs[:n_main]] + ["train"] * len(xr))
@@ -459,6 +476,79 @@ def load_card_sets(D, exclude=("test",), refresh=False):
     return out
 
 
+def area_index(cc, regs):
+    """(labels (len(regs),) >= 0, has_areas): the engine/areas.py area of every raster region index of country cc
+    (units outside every area, and every unit of a country without areas, are areas of their own).  has_areas
+    (engine.areas.country_areas(cc) is not None) defines "rounds in countries with areas" in every report."""
+    from engine.areas import area_labels
+    lab = area_labels(cc, regs)
+    if lab is None:
+        return np.arange(len(regs)), False
+    lab = np.array(lab)
+    free = np.flatnonzero(lab < 0)
+    lab[free] = lab.max() + 1 + np.arange(len(free))
+    return np.unique(lab, return_inverse=True)[1], True
+
+
+POOL_EXCLUDE_KM = 1.0   # pool rounds this close to a held-out round (calib / test / World-map play) are left out
+POOL_SPLITS = ("world_calib",)  # World-map rounds the locator played (tools/world_play.py) that --pool-world-weight adds
+POOL_WORLD_WEIGHT = 0.0  # default: none (CALIB check: +0.0006 log P at weight 1; world_calib stays held out)
+
+
+def _ids_sha1(ids):
+    return hashlib.sha1("\n".join(sorted(str(x) for x in ids)).encode()).hexdigest()[:12]
+
+
+def pool_counts(D, exclude_km=POOL_EXCLUDE_KM, world_splits=POOL_SPLITS, world_weight=POOL_WORLD_WEIGHT, frozen=None):
+    """(n_regions,) GeoGuessr pool rounds per raster region for the region prior: every ranked-duel round of
+    data/calibration/duel_rounds.json with a position (76k, also those without a training panorama) plus, with
+    world_weight > 0, the World-map rounds of world_splits (records of D) x world_weight; rounds within exclude_km of a
+    held-out round (every record of D outside train: calib / test / world_* / other) are left out (as
+    tools/calibrate.load_records leaves out training panoramas near the user's rounds).
+    frozen: the "pool" info of an earlier fit (eval_regions.json): its excluded duel rounds and World-map round ids
+    are used again instead of the current records (a reproducible rebuild while games are being added).
+    Returns (counts, info); info records the excluded duel rounds (indices into duel_rounds.json) and the World-map
+    round ids, so the counts can be rebuilt."""
+    _, codes, _, _, _ = _regions()
+    path = os.path.join(ROOT, "data", "calibration", "duel_rounds.json")
+    rounds = json.load(open(path))["rounds"]
+    lat = np.array([r["lat"] for r in rounds], float)
+    lng = np.array([r["lng"] for r in rounds], float)
+    if frozen is not None:
+        if frozen.get("source_sha1") != file_hash(path):
+            raise ValueError("--freeze-pool: %s changed since the frozen fit" % path)
+        keep = np.ones(len(lat), bool)
+        keep[np.asarray(frozen["excluded_rounds"], int)] = False
+        world_weight = float(frozen.get("world_weight", 0.0))
+        pid = {r["pano_id"]: k for k, r in enumerate(D["recs"])}
+        missing = [x for x in frozen.get("world_round_ids", []) if x not in pid]
+        if missing:
+            raise ValueError("--freeze-pool: %d frozen World-map rounds are not in the records" % len(missing))
+        wr = np.array([pid[x] for x in frozen.get("world_round_ids", [])], int)
+        held_ids = None
+    else:
+        held = np.flatnonzero(np.array([sp != "train" for sp in D["split"]]))
+        keep = np.ones(len(lat), bool)
+        for i in held:
+            keep &= haversine_km(D["lat"][i], D["lng"][i], lat, lng) >= exclude_km
+        wr = np.flatnonzero(np.isin(D["split"], list(world_splits))) if world_weight > 0 else np.zeros(0, int)
+        held_ids = [D["recs"][i]["pano_id"] for i in held]
+    c = np.bincount(region_index(lat[keep], lng[keep]), minlength=len(codes)).astype(float)
+    if len(wr):
+        c += world_weight * np.bincount(D["region"][wr], minlength=len(codes))
+    c[0] = 0.0
+    excluded = [int(x) for x in np.flatnonzero(~keep)]
+    info = {"duel_rounds": int(keep.sum()), "duel_rounds_excluded": len(excluded), "exclude_km": exclude_km,
+            "world_rounds": int(len(wr)), "world_splits": list(world_splits) if len(wr) else [],
+            "world_weight": world_weight if len(wr) else 0.0,
+            "world_round_ids": sorted(str(D["recs"][i]["pano_id"]) for i in wr), "excluded_rounds": excluded,
+            "excluded_sha1": _ids_sha1(excluded), "source_sha1": file_hash(path),
+            "frozen": frozen is not None}
+    if held_ids is not None:
+        info.update(held_out_records=len(held_ids), held_out_sha1=_ids_sha1(held_ids))
+    return c, info
+
+
 def hash5(s, k=5):
     return int(hashlib.md5(s.encode()).hexdigest(), 16) % k
 
@@ -468,8 +558,10 @@ def sub(X, rows):
 
 
 def fit_model(D, rows, params=None):
+    """RegionModel fitted on rows of D; the region prior counts D["pool"] (pool_counts) when present."""
     return RegionModel(params).fit(sub(D["X"], rows), D["label"][rows], D["region"][rows], D["lat"][rows],
-                                   D["lng"][rows], D["duel"][rows], D.get("cards", ()), D["prior"][rows])
+                                   D["lng"][rows], D["duel"][rows], D.get("cards", ()), D["prior"][rows],
+                                   pool=D.get("pool"))
 
 
 def collect(model, D, rows):
@@ -482,8 +574,9 @@ def collect(model, D, rows):
         regs = model.regions_of(cc)
         pos = {r: i for i, r in enumerate(regs)}
         ti = np.array([pos.get(r, -1) for r in D["region"][q]])
-        e = model.embed(sub(D["X"], q), cc)
-        out[cc] = (q, ti, model.components(e, cc, None if D["sun"] is None else D["sun"][q]))
+        Eb = model.embed_all(sub(D["X"], q))
+        e = model.embed(None, cc, Eb)
+        out[cc] = (q, ti, model.components(e, cc, None if D["sun"] is None else D["sun"][q], Eb))
     return out
 
 
@@ -542,9 +635,10 @@ def fmt(s):
         if s["n"] else "n=0"
 
 
-def calibrate(model, items, iters=3):
+def calibrate(model, items, iters=3, extra_grids=None):
     """Coordinate ascent of the exponents, prior mix and smoothing on the mean log P(true region | true
-    country) of items = [(model, collected rows, rows)]."""
+    country) of items = [(model, collected rows, rows)]; extra_grids: {key: values} added to the search
+    ("w.<component>" for an exponent)."""
     p = json.loads(json.dumps(model.params))
 
     def obj(q):
@@ -555,6 +649,9 @@ def calibrate(model, items, iters=3):
              "beta": [0.0, 0.1, 0.3, 0.6, 1.0], "alpha": [0.1, 0.3, 0.5, 1.0, 2.0, 4.0],
              "knn_s": [0.5, 1.0, 2.0, 4.0], "smooth": [0.0, 0.05, 0.1, 0.2, 0.3, 0.5],
              "smooth_km": [100.0, 200.0, 400.0, 800.0], "smooth_card": [0.0, 0.05, 0.1, 0.2, 0.3]}
+    if getattr(model, "glm_off", None) is not None:
+        grids["w.glm"] = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
+    grids.update(extra_grids or {})
     best = start = obj(p)
     for _ in range(iters):
         for key, grid in grids.items():
@@ -575,6 +672,7 @@ def cmd_cv(args, D, groups):
     (true country) that have no training panorama within FOLD_KM; the exponents / prior / smoothing used for
     fold k are calibrated on the held-out rows of fold k+1 (cross-fitted, so the scores are out of sample)."""
     tr = np.flatnonzero(D["split"] == "train")
+    D = dict(D, pool=None)  # the pool rounds include the held-out duel rounds: prior from the training folds only
     twins = cross_fold_twins(D)
     held = D["duel"] & ~twins
     print("CV: %d held-out duel panoramas, %d not scored (training panorama of another fold within %.0f km)"
@@ -621,15 +719,15 @@ def evaluate(model, geo, D, rows, label, ev, setups_map, verbose=True):
     true_reg = D["region"][rows]
     lab = D["label"][rows]
     # given the true country: P(region | true country) of both models over the regions of the country,
-    # also summed over the areas of model.areas (tiny admin-1 units merged)
+    # also summed over the GeoGuessr-style areas of engine/areas.py (each unit its own area without areas)
     col = collect(model, D, rows)
     pos = {r: k for k, r in enumerate(rows)}
-    new, area_of = [None] * len(rows), {}
+    new, area_of, has_areas = [None] * len(rows), {}, {}
     for cc, (q, ti, comp) in col.items():
         P = model.combine(comp, cc)
         for k, r in enumerate(q):
             new[pos[r]] = P[k]
-        area_of[cc] = model.areas(cc, AREA_MIN_REFS)
+        area_of[cc], has_areas[cc] = area_index(cc, model.regions_of(cc))
     res = {"new": ([], [], [], []), "geomodel": ([], [], [], [])}
     for k in range(len(rows)):
         cc, t = lab[k], true_reg[k]
@@ -652,13 +750,14 @@ def evaluate(model, geo, D, rows, label, ev, setups_map, verbose=True):
                 res[key][b].append(float(rank_of(p_, pt)) if pt > 0 else 999)
     res = {key: [np.array(x) for x in v] for key, v in res.items()}
     (L, R, La, Ra), (bl, br, bla, bra) = res["new"], res["geomodel"]
-    multi = np.array([cc in area_of and len(area_of[cc]) > area_of[cc].max() + 1 for cc in lab])
+    # rounds in countries with areas: engine/areas.country_areas(cc) is not None (the same set as player_eval's)
+    has = np.array([bool(has_areas.get(cc)) for cc in lab])
     out = {"given_true_country": {"new": summary(L, R), "geomodel": summary(bl, br), "diff": paired(R, br),
                                   "by_country": {},
-                                  "areas": {"min_refs": AREA_MIN_REFS, "new": summary(La, Ra),
-                                            "geomodel": summary(bla, bra),
-                                            "merged_countries_only": {"new": summary(La, Ra, multi),
-                                                                      "geomodel": summary(bla, bra, multi)}}}}
+                                  "areas": {"kind": "engine/areas.py", "new": summary(La, Ra),
+                                            "geomodel": summary(bla, bra), "rounds_with_areas": int(has.sum()),
+                                            "with_areas": {"new": summary(La, Ra, has),
+                                                           "geomodel": summary(bla, bra, has)}}}}
     for cc in TOP_COUNTRIES:
         s_ = lab == cc
         if s_.sum():
@@ -704,9 +803,9 @@ def evaluate(model, geo, D, rows, label, ev, setups_map, verbose=True):
         print("    paired diff top1 %+.3f +- %.3f, top3 %+.3f +- %.3f" % (g["diff"]["top1"], g["diff"]["top1_se"],
                                                                      g["diff"]["top3"], g["diff"]["top3_se"]))
         a = g["areas"]
-        print("    areas (>= %d refs): new %s | GeoModel %s" % (AREA_MIN_REFS, fmt(a["new"]), fmt(a["geomodel"])))
-        print("    areas, rounds in countries with merged regions: new %s | GeoModel %s"
-              % (fmt(a["merged_countries_only"]["new"]), fmt(a["merged_countries_only"]["geomodel"])))
+        print("    areas (engine/areas.py): new %s | GeoModel %s" % (fmt(a["new"]), fmt(a["geomodel"])))
+        print("    areas, %d rounds in countries with areas: new %s | GeoModel %s"
+              % (a["rounds_with_areas"], fmt(a["with_areas"]["new"]), fmt(a["with_areas"]["geomodel"])))
         for cc, v in g["by_country"].items():
             print("    %s  new %s | GeoModel %s" % (cc, fmt(v["new"]), fmt(v["geomodel"])))
         for kind in ("no_map", "map"):
@@ -722,6 +821,114 @@ def evaluate(model, geo, D, rows, label, ev, setups_map, verbose=True):
             print("    points/round: region-weighted guess %.0f | GeoModel %.0f | diff %+.1f +- %.1f (country right %s)"
                   % (p["new"], p["geomodel"], p["diff"], p["diff_se"], p["diff_if_country_right"]))
     return out
+
+
+def player_eval(geo, model, D, rows, X, ev, params=None, label="", verbose=True):
+    """The region output as the player sees it in live play (the HUD's country details): for every round of rows,
+    with X / ev the live-grid features / GeoModel evidence of the rows (tools/live_features.py) and params the region
+    parameters of live captures (RegionModel.params_for("views")):
+      region   rank and log P(true region | true country) (the per-country posterior the HUD shows),
+      area     the same for the engine/areas.py areas (rounds in countries with areas: "with_areas"),
+      guess    the best point inside the true country placed on the region-weighted reference mass (the HUD's
+               "in the top country" point when the top country is right): distance and World-formula points,
+      country  rank of the true country under the live country posterior (no map), and both right.
+    Returns (summary, per-round arrays)."""
+    from engine.geo import geoguessr_score
+    _, codes, _, _, _ = _regions()
+    cidx = {c: i for i, c in enumerate(geo.classes)}
+    lp_all = geo.combine(ev)
+    out = {k: [] for k in ("rank", "logp", "arank", "alogp", "has_areas", "km", "pts", "crank")}
+    for k, i in enumerate(rows):
+        cc, t = D["label"][i], int(D["region"][i])
+        post = np.exp(lp_all[k])
+        yi = cidx.get(cc, -1)
+        out["crank"].append(int((post > post[yi]).sum()) if yi >= 0 else 999)
+        res = model.country_posterior({g: v[k:k + 1] for g, v in X.items()}, cc, params=params) \
+            if cc in model.cidx else None
+        if res is None:
+            for key, v in (("rank", 999), ("logp", np.log(FLOOR)), ("arank", 999), ("alogp", np.log(FLOOR)),
+                           ("has_areas", False), ("km", np.nan), ("pts", np.nan)):
+                out[key].append(v)
+            continue
+        regs, P = res[0], res[1][0]
+        ti = int(np.flatnonzero(regs == t)[0]) if t in regs else -1
+        pt = P[ti] if ti >= 0 else 0.0
+        out["rank"].append(float(rank_of(P, pt)) if pt > 0 else 999)
+        out["logp"].append(np.log(max(pt, FLOOR)))
+        lab, has = area_index(cc, regs)
+        pa = np.bincount(lab, weights=P)
+        pta = pa[lab[ti]] if ti >= 0 else 0.0
+        out["arank"].append(float(rank_of(pa, pta)) if pta > 0 else 999)
+        out["alogp"].append(np.log(max(pta, FLOOR)))
+        out["has_areas"].append(has)
+        if yi >= 0:
+            lp = np.full(len(geo.classes), -1e9)
+            lp[yi] = 0.0
+            d2 = ev["_d2"][k]
+            per = {cc: {codes[a]: float(b) for a, b in zip(regs, P)}}
+            g = geo.locate(lp, d2, w=location_weights(geo, lp, d2, per))
+            d = float(haversine_km(D["lat"][i], D["lng"][i], g["lat"], g["lng"]))
+            out["km"].append(d)
+            out["pts"].append(float(geoguessr_score(d)))
+        else:
+            out["km"].append(np.nan)
+            out["pts"].append(np.nan)
+    r = {k: np.array(v) for k, v in out.items()}
+    ok = np.isfinite(r["km"])
+    has = r["has_areas"].astype(bool)
+    right = r["crank"] == 0
+    summ = {"n": int(len(rows)), "region": summary(r["logp"], r["rank"]), "area": summary(r["alogp"], r["arank"]),
+            "area_with_areas": summary(r["alogp"], r["arank"], has),
+            "region_with_areas": summary(r["logp"], r["rank"], has),
+            "rounds_with_areas": int(has.sum()),
+            "guess_in_true_country": {"n": int(ok.sum()), "median_km": round(float(np.median(r["km"][ok])), 1),
+                                      "mean_km": round(float(r["km"][ok].mean()), 1),
+                                      "points": round(float(r["pts"][ok].mean()), 1)},
+            "country_top1": round(float(right.mean()), 4),
+            "country_and_region_top1": round(float((right & (r["rank"] == 0)).mean()), 4),
+            "country_and_area_top1": round(float((right & (r["arank"] == 0)).mean()), 4),
+            "region_if_country_right": summary(r["logp"], r["rank"], right),
+            "area_if_country_right": summary(r["alogp"], r["arank"], right)}
+    if verbose:
+        g = summ["guess_in_true_country"]
+        print("[%s] player view (live grid), given the true country: region %s" % (label, fmt(summ["region"])))
+        print("    areas: %s | %d rounds in countries with areas: area %s, region %s"
+              % (fmt(summ["area"]), summ["rounds_with_areas"], fmt(summ["area_with_areas"]),
+                 fmt(summ["region_with_areas"])))
+        print("    guess inside the true country: median %.0f km, mean %.0f km, %.0f pts (World formula)"
+              % (g["median_km"], g["mean_km"], g["points"]))
+        print("    live country top1 %.3f; country & region top1 %.3f; country & area top1 %.3f"
+              % (summ["country_top1"], summ["country_and_region_top1"], summ["country_and_area_top1"]), flush=True)
+    return summ, r
+
+
+def region_frame_of(X, D, rows):
+    """collect / score layout of rows with features X (live captures): label, region and sun mixture of the rows."""
+    return {"X": X, "label": D["label"][rows], "region": D["region"][rows],
+            "sun": sun_mixture(X) if "solar" in X else None}
+
+
+def save_views(model, n_calib):
+    """regions_params.json: the views parameter set tied to the saved regions.npz (removed when there is none)."""
+    from engine.regions import PARAMS_FILE, file_hash as rhash
+    f = os.path.join(MODEL_DIR, PARAMS_FILE)
+    pv = (model.param_sets or {}).get("views")
+    if not pv:
+        if os.path.exists(f):
+            os.remove(f)
+        return
+    json.dump({"views": {"params": pv, "regions_npz": rhash(os.path.join(MODEL_DIR, REGIONS_FILE)),
+                         "calib_rounds": int(n_calib),
+                         "features": "live grid renderings (tools/live_features.py), tools/eval_regions.py"}},
+              open(f, "w"), indent=1)
+
+
+def live_rows(geo, D, rows, cards=True):
+    """Live-grid features and GeoModel evidence (with the card evidence) of rows (tools/live_features.py cache)."""
+    from train_model import live_inputs
+    recs = D["recs"]
+    ev, X = live_inputs(geo, recs, list(rows), cards=cards)
+    return X, ev
 
 
 def geo_evidence(geo, D, rows):
@@ -838,7 +1045,12 @@ def provenance(D, groups):
     return {"geomodel": {f: file_hash(os.path.join(MODEL_DIR, f)) for f in ("model.json", "priors.json", "model.npz")},
             "features_main": {g: main_hash(g) for g in groups}, "features_extra": D.get("extra_hashes", {}),
             "extra_references": int((~D["prior"]).sum()), "card_sets": file_hash(CARDS_SNAPSHOT),
-            "regions_npz": file_hash(os.path.join(MODEL_DIR, REGIONS_FILE)), "cv_fold_km": FOLD_KM}
+            "regions_npz": file_hash(os.path.join(MODEL_DIR, REGIONS_FILE)), "cv_fold_km": FOLD_KM,
+            "pool": {k: (D.get("pool_info") or {}).get(k) for k in ("excluded_sha1", "held_out_sha1", "world_rounds",
+                                                                    "world_weight", "frozen")},
+            # the train set follows tools/calibrate.load_records (training panoramas near held-out rounds left out)
+            "train": {"n": int((D["split"] == "train").sum()),
+                      "sha1": _ids_sha1(r["pano_id"] for r, sp in zip(D["recs"], D["split"]) if sp == "train")}}
 
 
 def main():
@@ -860,6 +1072,15 @@ def main():
     ap.add_argument("--batch", type=int, default=1500, help="--fetch-extra: panoramas per download batch")
     ap.add_argument("--threads", type=int, default=4, help="--fetch-extra: download threads (<= 4)")
     ap.add_argument("--workers", type=int, default=4, help="feature processes (<= 4)")
+    ap.add_argument("--player", action="store_true", help="saved model: the region output as the player sees it "
+                    "(live grid, CALIB; --test also TEST); with --save into eval_regions.json 'player'")
+    ap.add_argument("--test", action="store_true", help="with --player: also the TEST rounds")
+    ap.add_argument("--no-views", action="store_true", help="no views parameter set / player-view report")
+    ap.add_argument("--no-pool", action="store_true", help="region prior from the duel reference panoramas only")
+    ap.add_argument("--pool-world-weight", type=float, default=POOL_WORLD_WEIGHT,
+                    help="add the world_calib World-map rounds to the region prior with this weight (default 0: none)")
+    ap.add_argument("--freeze-pool", action="store_true", help="region prior from the excluded duel rounds and "
+                    "World-map round ids recorded in data/model/eval_regions.json 'pool' (reproducible rebuild)")
     args = ap.parse_args()
     geo = GeoModel.load()
     if args.check_extra_compat:
@@ -870,6 +1091,19 @@ def main():
         cmd_fetch_extra(args, D, geo.groups)
         return
     D["cards"] = load_card_sets(D, refresh=args.refresh_cards)
+    if args.eval_only or args.player or args.live:   # no fit: the saved model's pool (eval_regions.json)
+        prev = json.load(open(os.path.join(MODEL_DIR, "eval_regions.json"))) \
+            if os.path.exists(os.path.join(MODEL_DIR, "eval_regions.json")) else {}
+        D["pool_info"] = prev.get("pool")
+    elif not args.no_pool:
+        frozen = None
+        if args.freeze_pool:
+            frozen = (json.load(open(os.path.join(MODEL_DIR, "eval_regions.json"))).get("pool") or {})
+            if "excluded_rounds" not in frozen:
+                sys.exit("--freeze-pool: data/model/eval_regions.json has no recorded pool")
+        D["pool"], D["pool_info"] = pool_counts(D, world_weight=args.pool_world_weight, frozen=frozen)
+        print("region prior: %s" % json.dumps({k: v for k, v in D["pool_info"].items()
+                                               if k not in ("excluded_rounds", "world_round_ids")}), flush=True)
     print("panoramas", {s: int((D["split"] == s).sum()) for s in ("train", "calib", "test")},
           "of them extra references", int((~D["prior"]).sum()),
           "regional cards", len(D["cards"]), "placements", sum(n for _, _, n in D["cards"]), flush=True)
@@ -900,6 +1134,17 @@ def main():
         json.dump(out, open(out_path, "w"), indent=1)
         print("saved eval_regions.json calib_live")
         return
+    if args.player:
+        model = RegionModel.load()
+        out = json.load(open(out_path)) if os.path.exists(out_path) else {}
+        for rows, label in ((ca, "calib"), (te, "test"))[:2 if args.test else 1]:
+            X, ev = live_rows(geo, D, rows)
+            out.setdefault("player", {})[label] = player_eval(geo, model, D, rows, X, ev,
+                                                               model.params_for("views"), label)[0]
+        if args.save:
+            json.dump(out, open(out_path, "w"), indent=1)
+            print("saved eval_regions.json player")
+        return
     if args.eval_only:
         model = RegionModel.load()
     else:
@@ -910,17 +1155,48 @@ def main():
         model.params = p
         print("calibrated on CALIB: mean log P(true region | true country) %.3f (start %.3f)" % (best, start))
         print("params", json.dumps({k: v for k, v in p.items()}))
-    out = {"params": model.params}
+    live = {}
+    if not args.eval_only and not args.no_views:
+        # the parameter set of live captures: the same coordinate ascent on the CALIB rounds rendered into the live
+        # grid (tools/live_features.py), as the locator analyses them (Locator.analyze: input kind "views")
+        try:
+            live["calib"] = live_rows(geo, D, ca)
+        except (ValueError, FileNotFoundError) as e:
+            print("no views parameter set (%s)" % e, flush=True)
+        if "calib" in live:
+            Dl = dict(region_frame_of(live["calib"][0], D, ca), cards=D.get("cards"))
+            idx = np.arange(len(ca))
+            pv, best, start = calibrate(model, [(model, collect(model, Dl, idx), idx)])
+            model.param_sets = {"views": pv}
+            print("views parameters (CALIB live grid): mean log P(true region | true country) %.3f (panorama "
+                  "parameters %.3f)" % (best, start))
+            print("views params", json.dumps(pv))
+    out = {"params": model.params, "params_views": model.param_sets.get("views"), "pool": D.get("pool_info")}
     for rows, label in ((ca, "calib"), (te, "TEST"))[:1 if args.calib_only else 2]:
         ev, setups = geo_evidence(geo, D, rows)
         out[label.lower()] = evaluate(model, geo, D, rows, label, ev, setups)
+        if not args.no_views:
+            try:
+                X, evl = live[label.lower()] if label.lower() in live else live_rows(geo, D, rows)
+            except (ValueError, FileNotFoundError) as e:
+                print("no player-view report for %s (%s)" % (label, e))
+                continue
+            out.setdefault("player", {})[label.lower()] = player_eval(geo, model, D, rows, X, evl,
+                                                                       model.params_for("views"), label)[0]
     out["calib"]["note"] = "in-sample: exponents / prior / smoothing calibrated on these rounds"
     if args.save:
-        model.save()
+        if not args.eval_only:   # --eval-only --save: the report only (rewriting the same model would change the
+            model.save()         # file hash the views parameter set is tied to)
+            save_views(model, len(ca))
+        if args.calib_only:
+            out["note"] = "CALIB only (--calib-only): TEST not evaluated"
         out["provenance"] = provenance(D, geo.groups)
+        if args.eval_only:   # the inputs of the fit that made the saved model
+            prev = json.load(open(out_path)) if os.path.exists(out_path) else {}
+            out["provenance"]["fit"] = (prev.get("provenance") or {}).get("fit") or prev.get("provenance")
         json.dump(out, open(out_path, "w"), indent=1)
-        print("saved data/model/%s (%.1f MB), eval_regions.json"
-              % (REGIONS_FILE, os.path.getsize(os.path.join(MODEL_DIR, REGIONS_FILE)) / 1e6))
+        print("saved %seval_regions.json" % ("" if args.eval_only else "data/model/%s (%.1f MB), " % (
+            REGIONS_FILE, os.path.getsize(os.path.join(MODEL_DIR, REGIONS_FILE)) / 1e6)))
     else:
         print("provenance", json.dumps(provenance(D, geo.groups)))
 

@@ -11,6 +11,9 @@ Modes
   postmatch panoramas listed in data/geoguessr_postmatch_clues.json
   duels     rounds of public ranked duels (tools/crawl_duels.py); images kept - for many rounds use
             tools/stream_duels.py (features only, images deleted)
+  world_play rounds of the classic games the locator played on the official World map
+            (tools/world_play.py -> data/calibration/world_games.json, finished games only); split by game
+            into world_calib / world_test (tools/calibrate.py split_of); history skips these games
 
 Output: <out>/panos/<pano_id>.jpg (2048x1024 equirectangular, centre = car heading)
         <out>/index.jsonl (one metadata record per panorama)
@@ -286,11 +289,29 @@ def merge_own_rounds(rounds, path=OWN_FILE):
     return len(out) - len(old)
 
 
+WORLD_GAMES = os.path.join(ROOT, "data", "calibration", "world_games.json")
+
+
+def world_play_tokens(path=WORLD_GAMES):
+    """Game tokens of the World-map calibration games (tools/world_play.py): they are the world_play mode's
+    rounds (world_calib / world_test), not part of the user's own history (calib / test)."""
+    try:
+        with open(path) as f:
+            return {g["token"] for g in json.load(f).get("games", []) if g.get("token")}
+    except (OSError, ValueError):
+        return set()
+
+
 def run_history(args, seen):
     if args.rounds_file:  # offline copy (e.g. in environments where geoguessr.com is blocked)
         rounds = json.load(open(args.rounds_file))
     else:
         rounds = history_rounds()
+    played = world_play_tokens()
+    n0 = len(rounds)
+    rounds = [r for r in rounds if r.get("game") not in played]
+    if len(rounds) < n0:
+        print(f"[history] {n0 - len(rounds)} rounds of World-map calibration games (world_play mode) left out")
     print(f"[history] {len(rounds)} rounds in game history")
     json.dump(rounds, open(os.path.join(args.out, "history_rounds.json"), "w"))
     print(f"[history] {merge_own_rounds(rounds)} new rounds in {os.path.relpath(OWN_FILE, ROOT)}")
@@ -399,6 +420,71 @@ def run_duels(args, seen):
     print(f"[duels] stored {done} panoramas")
 
 
+def world_play_rounds(path=WORLD_GAMES):
+    """Rounds of the finished World-map calibration games (data/calibration/world_games.json), one per
+    panorama id, with the index fields of the world_play mode."""
+    try:
+        with open(path) as f:
+            games = json.load(f).get("games", [])
+    except (OSError, ValueError):
+        return []
+    out, dup = [], set()
+    for g in games:
+        if g.get("status") != "finished":
+            continue
+        for r in g.get("rounds") or []:
+            if r.get("lat") is None or r.get("lng") is None:
+                continue
+            key = r.get("pano_id") or "%s/%s" % (g["token"], r.get("round"))
+            if key in dup:
+                continue
+            dup.add(key)
+            out.append(dict(r, game=g["token"], walk=g.get("walk", 0)))
+    return out
+
+
+def world_play_extra(r):
+    """Index fields of a World-map calibration round (added to the Street View metadata)."""
+    return {"game": r["game"], "kind": "standard", "map": "World", "map_id": "52d15ff6850ffb3b847cb3b4",
+            "round": r.get("round"), "gg_country": (r.get("gg_country") or "").upper(), "gg_heading": r.get("heading"),
+            "round_lat": r["lat"], "round_lng": r["lng"], "walk": r.get("walk", 0)}
+
+
+def run_world_play(args, seen):
+    """Panoramas of the finished World-map calibration games (tools/world_play.py); images kept (~0.4 MB each,
+    World-map references).  The round's own panorama (pano id), else the nearest one within 100 m."""
+    rounds = world_play_rounds()
+    have = {r.get("game"): set() for r in seen.values() if isinstance(r, dict)}
+    for r in seen.values():
+        if isinstance(r, dict) and r.get("mode") == "world_play":
+            have.setdefault(r.get("game"), set()).add(r.get("round"))
+    todo = [r for r in rounds if r.get("round") not in have.get(r["game"], ())]
+    print(f"[world_play] {len(rounds)} rounds of finished games, {len(todo)} without a panorama yet")
+    if args.n and args.n < len(todo):
+        todo = todo[: args.n]
+
+    def work(r):
+        try:
+            meta = retry(get_metadata, r["pano_id"]) if r.get("pano_id") else None
+            if not meta:
+                meta = retry(search_pano, r["lat"], r["lng"], 100)
+            if not meta:
+                return None
+            prev = seen.get(meta["pano_id"])
+            if isinstance(prev, dict) and prev.get("mode") not in ("world", "balanced", "duel", None):
+                print(f"[world_play] {meta['pano_id']} is already a {prev.get('mode')} record (kept)")
+                return None
+            seen[meta["pano_id"]] = True
+            return retry(fetch_and_store, args.out, meta, "world_play", world_play_extra(r))
+        except Exception as e:
+            print(f"[world_play] {r['game']} round {r.get('round')}: {e!r}")
+            return None
+
+    with ThreadPoolExecutor(min(args.threads, 8)) as ex:
+        n = sum(1 for x in ex.map(work, todo) if x)
+    print(f"[world_play] stored {n} panoramas")
+
+
 def run_postmatch(args, seen):
     pm = json.load(open(os.path.join(ROOT, "data/geoguessr_postmatch_clues.json"), encoding="utf-8"))
     panos = {}
@@ -427,9 +513,10 @@ def run_postmatch(args, seen):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["world", "balanced", "history", "postmatch", "duels"])
+    ap.add_argument("mode", choices=["world", "balanced", "history", "postmatch", "duels", "world_play"])
     ap.add_argument("--out", default=os.path.join(ROOT, "scratch/dataset"))
-    ap.add_argument("-n", type=int, default=2000, help="world: number of random land points; duels: rounds (0 = all)")
+    ap.add_argument("-n", type=int, default=2000, help="world: number of random land points; duels: rounds (0 = all); "
+                    "world_play: at most n new rounds (0 = all)")
     ap.add_argument("--quota", type=int, default=40, help="balanced: panoramas per country")
     ap.add_argument("--max-misses", type=int, default=60)
     ap.add_argument("--countries", default="", help="balanced: comma separated ISO codes")
@@ -442,7 +529,7 @@ def main():
     os.makedirs(os.path.join(args.out, "panos"), exist_ok=True)
     seen = load_index(args.out)
     {"world": run_world, "balanced": run_balanced, "history": run_history,
-     "postmatch": run_postmatch, "duels": run_duels}[args.mode](args, seen)
+     "postmatch": run_postmatch, "duels": run_duels, "world_play": run_world_play}[args.mode](args, seen)
 
 
 if __name__ == "__main__":

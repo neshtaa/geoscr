@@ -1,0 +1,138 @@
+{
+ "note": "locator (working tree) re-run on the saved captures of the world_test games; old = /tmp/claude-1000/-home-yurka-projects-geoscr/dd4e793e-da84-4cb6-bad7-a6315ee514fb/scratchpad/country/head_model, new = data/model; ci95 bootstrap over games",
+ "n": 300,
+ "games": 60,
+ "moving_rounds_without_move_images": 45,
+ "No Move answer (start capture), all rounds": {
+  "n": 300,
+  "games": 60,
+  "points_played": 2143.5,
+  "new": {
+   "points": 1971.2,
+   "top1": 0.4233,
+   "top3": 0.67,
+   "top5": 0.7467,
+   "loglik": -2.1919,
+   "median_km": 1406.5
+  },
+  "old": {
+   "points": 1898.2,
+   "top1": 0.3567,
+   "top3": 0.5867,
+   "top5": 0.6833,
+   "loglik": -2.504,
+   "median_km": 1571.2
+  },
+  "new_minus_old_points": {
+   "diff": 73.0367,
+   "ci95_rounds": [
+    -73.0443,
+    217.626
+   ],
+   "ci95": [
+    -80.6075,
+    218.5177
+   ],
+   "clusters": 60
+  }
+ },
+ "No Move games": {
+  "n": 165,
+  "games": 33,
+  "points_played": 1926.0,
+  "new": {
+   "points": 1921.8,
+   "top1": 0.4485,
+   "top3": 0.6788,
+   "top5": 0.7576,
+   "loglik": -2.0889,
+   "median_km": 1392.8
+  },
+  "old": {
+   "points": 1929.6,
+   "top1": 0.4242,
+   "top3": 0.5939,
+   "top5": 0.6848,
+   "loglik": -2.4408,
+   "median_km": 1416.3
+  },
+  "new_minus_old_points": {
+   "diff": -7.8121,
+   "ci95_rounds": [
+    -185.8968,
+    175.7415
+   ],
+   "ci95": [
+    -192.8211,
+    174.0606
+   ],
+   "clusters": 33
+  }
+ },
+ "Moving games, start capture": {
+  "n": 135,
+  "games": 27,
+  "points_played": 2409.4,
+  "new": {
+   "points": 2031.6,
+   "top1": 0.3926,
+   "top3": 0.6593,
+   "top5": 0.7333,
+   "loglik": -2.3177,
+   "median_km": 1415.8
+  },
+  "old": {
+   "points": 1859.7,
+   "top1": 0.2741,
+   "top3": 0.5778,
+   "top5": 0.6815,
+   "loglik": -2.5812,
+   "median_km": 1577.3
+  },
+  "new_minus_old_points": {
+   "diff": 171.8519,
+   "ci95_rounds": [
+    -52.1144,
+    410.7054
+   ],
+   "ci95": [
+    -55.8735,
+    409.6776
+   ],
+   "clusters": 27
+  }
+ },
+ "Moving games (fused)": {
+  "n": 90,
+  "games": 18,
+  "points_played": 2457.1,
+  "new": {
+   "points": 2354.8,
+   "top1": 0.4778,
+   "top3": 0.7,
+   "top5": 0.8222,
+   "loglik": -1.7984,
+   "median_km": 1024.5
+  },
+  "old": {
+   "points": 2353.1,
+   "top1": 0.4111,
+   "top3": 0.6444,
+   "top5": 0.7444,
+   "loglik": -2.0173,
+   "median_km": 1093.4
+  },
+  "new_minus_old_points": {
+   "diff": 1.7111,
+   "ci95_rounds": [
+    -250.6928,
+    256.4128
+   ],
+   "ci95": [
+    -251.3361,
+    244.8439
+   ],
+   "clusters": 18
+  }
+ }
+}

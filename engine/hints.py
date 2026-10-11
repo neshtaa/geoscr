@@ -639,6 +639,9 @@ class ClueBase:
             res["plonkit"].append({"text": re.sub(r"\*\*", "", (t.get("text") or "")).strip()[:400],
                                    "section": t.get("section"), "image_url": t.get("image_url"),
                                    "matched": [TAGS[w][0] for w in why]})
+        areas = area_hint(cc, region_probs)
+        if areas:
+            res["areas"] = areas
         return res
 
 
@@ -656,11 +659,32 @@ def clue_base():
     return _BASE
 
 
+def area_hint(cc, region_probs, n_areas=4, n_regions=3, min_prob=0.005):
+    """GeoGuessr-style areas of country cc (engine/areas.py) under the admin-1 posterior region_probs
+    ({code: P(region | cc)}): [{id, name, en, probability, size (units in the area), regions: [{code, name,
+    probability}]}], the n_areas most probable (>= min_prob) with their n_regions most probable units; None when cc
+    has no areas or no regions."""
+    if not region_probs:
+        return None
+    from .areas import group_regions
+    g = group_regions(region_probs, cc, top_regions=n_regions)
+    if not g:
+        return None
+    return [{"id": a["id"], "name": a["name"], "en": a["en"], "probability": round(a["probability"], 3),
+             "size": a["size"], "regions": [dict(r, probability=round(r["probability"], 3)) for r in a["regions"]]}
+            for a in g[:n_areas] if a["probability"] >= min_prob] or None
+
+
 def region_probs_for(regions, cc):
     """Admin-1 posterior restricted to country cc and renormalised: {code: probability}."""
     rp = {r["code"]: r["probability"] for r in (regions or []) if r["country"] == cc}
     tot = sum(rp.values())
     return {k: v / tot for k, v in rp.items()} if tot > 0 else {}
+
+
+def hidden_units(cc):
+    from .areas import hidden_units as hu
+    return hu(cc)
 
 
 def build_hints(F, top_countries, n_countries=3, regions=None, n_cards=3, kb=None, detected=None):
@@ -678,8 +702,9 @@ def build_hints(F, top_countries, n_countries=3, regions=None, n_cards=3, kb=Non
     for cc, p in top_countries[:n_countries]:
         rp = region_probs_for(regions, cc)
         c = kb.for_country(cc, tags, n_gg=n_cards, region_probs=rp, emb=emb, detected=(detected or {}).get(cc))
+        hidden = hidden_units(cc)   # e.g. Crimea, filed under RU by the raster, is never listed as Russia
         c["regions"] = [{"code": k, "name": names[k], "probability": round(v, 3)}
-                        for k, v in sorted(rp.items(), key=lambda kv: -kv[1])[:3]]
+                        for k, v in sorted(rp.items(), key=lambda kv: -kv[1]) if k not in hidden][:3]
         c["probability"] = round(float(p), 3)
         if side_tag and c["driving_side"]:
             c["driving_side_consistent"] = (c["driving_side"] == side_tag.split("_")[1])
